@@ -7,6 +7,7 @@ import Leave from "../../models/adsResearchGlobal/adsResearchGlobal_leave.js";
 import Salary from "../../models/adsResearchGlobal/adsResearchGlobal_salary.js";
 import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
+import { getEmployeeApiError, validateEmployeePayload } from "../../utils/employeeApiErrors.js";
 import bcrypt from "bcryptjs";
 
 // Create a new employee
@@ -15,6 +16,10 @@ export const createEmployee = async (req, res) => {
     const { payload, password } = normalizeEmployeePayload(req.body);
     if (!password || password.length < 6) {
       return res.status(400).json({ message: "Password is required and must be at least 6 characters" });
+    }
+    const missing = validateEmployeePayload(payload);
+    if (missing.length) {
+      return res.status(400).json({ message: `Missing required fields: ${missing.join(', ')}` });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
     const newEmployee = new Employee({
@@ -27,7 +32,8 @@ export const createEmployee = async (req, res) => {
       employee: newEmployee,
     });
   } catch (error) {
-    res.status(500).json({ message: "Error creating employee", error: error?.message || error });
+    const { status, message } = getEmployeeApiError(error, "Error creating employee");
+    res.status(status).json({ message });
   }
 };
 
@@ -68,7 +74,8 @@ export const updateEmployee = async (req, res) => {
     if (!updated) return res.status(404).json({ message: 'Employee not found' });
     res.status(200).json({ message: 'Employee updated', employee: updated });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating employee', error: error?.message || error });
+    const { status, message } = getEmployeeApiError(error, "Error updating employee");
+    res.status(status).json({ message });
   }
 };
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/axios'
+import { getDashboardPathForUser } from '../config/dashboardRoutes'
 
 const AUTH_KEY = 'crm_user'
 
@@ -106,8 +107,12 @@ export const AuthProvider = ({ children }) => {
     ].includes(title)
   }
 
+  const getSidebarSections = () => user?.access?.sidebarSections || []
+
+  const getDashboardPath = () => getDashboardPathForUser(user)
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isHRManager, hasFullAccess, canAddProject, canManageSocialCalendar, canViewProjects, canAssignTask, canApproveLeave }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isHRManager, hasFullAccess, canAddProject, canManageSocialCalendar, canViewProjects, canAssignTask, canApproveLeave, getSidebarSections, getDashboardPath, isAdmin }}>
       {children}
     </AuthContext.Provider>
   )

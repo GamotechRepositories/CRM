@@ -16,6 +16,15 @@ const splitList = (value) => {
   return value.split(',').map((v) => v.trim()).filter(Boolean);
 };
 
+const ALWAYS_VISIBLE_SIDEBAR_SECTIONS = ['dashboard', 'workspace'];
+
+const normalizeSidebarSections = (body) => {
+  const raw = body.access?.sidebarSections ?? body.sidebarSections;
+  if (!Array.isArray(raw)) return [...ALWAYS_VISIBLE_SIDEBAR_SECTIONS];
+  const cleaned = raw.map((id) => String(id).trim()).filter(Boolean);
+  return [...new Set([...ALWAYS_VISIBLE_SIDEBAR_SECTIONS, ...cleaned])];
+};
+
 export const normalizeEmployeePayload = (body = {}) => {
   const {
     password,
@@ -32,10 +41,12 @@ export const normalizeEmployeePayload = (body = {}) => {
 
   const payload = {
     ...rest,
-    salary: toNumber(rest.salary) ?? rest.salary,
+    department: typeof rest.department === 'string' ? rest.department.trim() : rest.department,
+    salary: toNumber(rest.salary) ?? rest.salary ?? 0,
     dateOfJoining: toDate(rest.dateOfJoining),
     dateOfBirth: toDate(rest.dateOfBirth),
     probationEndDate: toDate(rest.probationEndDate),
+    workingHours: (typeof rest.workingHours === 'string' ? rest.workingHours.trim() : rest.workingHours) || '9 AM - 6 PM',
     reportingManager: rest.reportingManager || null,
     employmentStatus: rest.employmentStatus || rest.status || 'Active',
     status: rest.status || 'Active',
@@ -87,6 +98,7 @@ export const normalizeEmployeePayload = (body = {}) => {
     access: {
       crmRole: rest.access?.crmRole ?? rest.crmRole ?? '',
       permissions: splitList(permissionsList ?? rest.access?.permissions),
+      sidebarSections: normalizeSidebarSections(rest),
       accountStatus: rest.access?.accountStatus ?? rest.accountStatus ?? 'Active',
       loginHistory: rest.access?.loginHistory ?? [],
       lastLogin: toDate(rest.access?.lastLogin),
@@ -144,6 +156,7 @@ export const normalizeEmployeePayload = (body = {}) => {
   delete payload.otherAssets;
   delete payload.crmRole;
   delete payload.accountStatus;
+  delete payload.sidebarSections;
   delete payload.hrNotes;
   delete payload.employeeRemarks;
 

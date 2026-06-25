@@ -1,10 +1,13 @@
-import dotenv from 'dotenv'
-import connectDB from '../config/db.js'
-import Designation from '../models/designation.js'
+import dotenv from 'dotenv';
+import connectDB from '../config/db.js';
+import { getDefaultDesignationMeta } from '../utils/designationFields.js';
 
-dotenv.config()
+dotenv.config();
 
-const designations = [
+const companies = ['adsResearchGlobal', 'bangarProperties', 'mahaProperties', 'salesTechReality'];
+
+const DESIGNATION_TITLES = [
+  'Admin',
   'Chief Executive Officer',
   'Chief Technology Officer',
   'Chief Operating Officer',
@@ -15,6 +18,7 @@ const designations = [
   'Program Manager',
   'Engineering Manager',
   'Technical Lead',
+  'HR Manager',
   'Software Engineer',
   'Senior Software Engineer',
   'Frontend Engineer',
@@ -51,31 +55,40 @@ const designations = [
   'Account Manager',
   'Customer Success Manager',
   'Support Engineer',
-  'HR Manager',
   'Recruiter',
   'Office Manager',
   'Intern',
-]
+];
+
+const seedCompanyDesignations = async (company) => {
+  const { default: Designation } = await import(`../models/${company}/${company}_designation.js`);
+
+  for (const title of DESIGNATION_TITLES) {
+    const meta = getDefaultDesignationMeta(title);
+    await Designation.findOneAndUpdate(
+      { title },
+      { title, ...meta },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  console.log(`[${company}] Seeded ${DESIGNATION_TITLES.length} designations`);
+};
 
 const seed = async () => {
   try {
-    await connectDB()
-    console.log('Seeding designations...')
+    await connectDB();
 
-    for (const title of designations) {
-      await Designation.findOneAndUpdate(
-        { title },
-        { title, description: '' },
-        { upsert: true, new: true }
-      )
+    for (const company of companies) {
+      await seedCompanyDesignations(company);
     }
 
-    console.log('Designations seeded successfully')
-    process.exit(0)
+    console.log('All company designations seeded successfully');
+    process.exit(0);
   } catch (error) {
-    console.error('Seeding error:', error)
-    process.exit(1)
+    console.error('Designation seeding error:', error);
+    process.exit(1);
   }
-}
+};
 
-seed()
+seed();

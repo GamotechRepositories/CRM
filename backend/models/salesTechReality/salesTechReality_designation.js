@@ -1,14 +1,14 @@
 import mongoose from 'mongoose';
-const designationSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    unique: true,
+import { getDesignationFields } from '../../utils/designationFields.js';
+
+const designationSchema = new mongoose.Schema(
+  {
+    ...getDesignationFields(),
   },
-  description: {
-    type: String,
-  },
-});
+  { timestamps: true }
+);
+
+designationSchema.index({ isActive: 1, sortOrder: 1 });
 
 const Designation = mongoose.model('salesTechReality_Designation', designationSchema);
 export default Designation;

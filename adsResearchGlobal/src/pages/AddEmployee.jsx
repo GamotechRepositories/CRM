@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams } from 'react-router-dom'
+import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
 
 const emptyForm = {
   name: '',
@@ -10,7 +11,7 @@ const emptyForm = {
   department: '',
   dateOfJoining: '',
   salary: '',
-  workingHours: '',
+  workingHours: '9 AM - 6 PM',
   status: 'Active',
   employeeCode: '',
   profilePhoto: '',
@@ -68,6 +69,7 @@ const emptyForm = {
   crmRole: '',
   permissionsList: '',
   accountStatus: 'Active',
+  sidebarSections: DEFAULT_SIDEBAR_SECTIONS,
   hrNotes: '',
   employeeRemarks: '',
 }
@@ -140,6 +142,7 @@ const mapEmployeeToForm = (emp) => ({
   crmRole: emp.access?.crmRole ?? '',
   permissionsList: (emp.access?.permissions || []).join(', '),
   accountStatus: emp.access?.accountStatus ?? 'Active',
+  sidebarSections: emp.access?.sidebarSections?.length ? emp.access.sidebarSections : DEFAULT_SIDEBAR_SECTIONS,
   hrNotes: emp.notes?.hrNotes ?? '',
   employeeRemarks: emp.notes?.employeeRemarks ?? '',
 })
@@ -238,10 +241,29 @@ const AddEmployee = () => {
     setDesignationOpen(false)
   }
 
+  const toggleSidebarSection = (sectionId) => {
+    if (isAlwaysOnSidebarSection(sectionId)) return
+    setForm((f) => {
+      const current = f.sidebarSections || []
+      const next = current.includes(sectionId)
+        ? current.filter((id) => id !== sectionId)
+        : [...current, sectionId]
+      return { ...f, sidebarSections: next }
+    })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.designation) {
       setError('Please select a designation')
+      return
+    }
+    if (!form.department?.trim()) {
+      setError('Department is required')
+      return
+    }
+    if (!form.dateOfJoining) {
+      setError('Joining date is required')
       return
     }
     if (!isEdit && (!form.password || form.password.length < 6)) {
@@ -290,7 +312,9 @@ const AddEmployee = () => {
         access: {
           crmRole: form.crmRole,
           accountStatus: form.accountStatus,
+          sidebarSections: form.sidebarSections,
         },
+        sidebarSections: form.sidebarSections,
         notes: {
           hrNotes: form.hrNotes,
           employeeRemarks: form.employeeRemarks,
@@ -305,7 +329,7 @@ const AddEmployee = () => {
         navigate('/employees')
       }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || (isEdit ? 'Error updating employee' : 'Error creating employee'))
+      setError(err.response?.data?.message || err.response?.data?.error || err.message || (isEdit ? 'Error updating employee' : 'Error creating employee'))
     } finally {
       setLoading(false)
     }
@@ -367,7 +391,7 @@ const AddEmployee = () => {
               <option value='Intern'>Intern</option>
             </select>
           </Field>
-          <Field label='Joining Date'><input name='dateOfJoining' type='date' value={form.dateOfJoining} onChange={handleChange} className={inputClass} /></Field>
+          <Field label='Joining Date *'><input name='dateOfJoining' type='date' value={form.dateOfJoining} onChange={handleChange} required className={inputClass} /></Field>
           <Field label='Probation End Date'><input name='probationEndDate' type='date' value={form.probationEndDate} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Employment Status'>
             <select name='employmentStatus' value={form.employmentStatus} onChange={handleChange} className={inputClass}>
@@ -400,7 +424,7 @@ const AddEmployee = () => {
           <Field label='Official Mobile'><input name='officialMobile' value={form.officialMobile} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Company ID Card Number'><input name='companyIdCardNumber' value={form.companyIdCardNumber} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Work Shift'><input name='workShift' value={form.workShift} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Working Hours'><input name='workingHours' value={form.workingHours} onChange={handleChange} className={inputClass} /></Field>
+          <Field label='Working Hours *'><input name='workingHours' value={form.workingHours} onChange={handleChange} required className={inputClass} placeholder='9 AM - 6 PM' /></Field>
           <Field label='Attendance Policy'><input name='attendancePolicy' value={form.attendancePolicy} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Account Status'>
             <select name='status' value={form.status} onChange={handleChange} className={inputClass}>
@@ -464,6 +488,35 @@ const AddEmployee = () => {
               <option value='Locked'>Locked</option>
             </select>
           </Field>
+          <div className='md:col-span-2'>
+            <label className='block text-sm font-medium text-gray-700 mb-1'>Sidebar Menu Access</label>
+            <p className='text-xs text-gray-500 mb-3'>Select which main sidebar sections this employee will see on their dashboard after login.</p>
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2'>
+              {SIDEBAR_PARENT_SECTIONS.map((section) => {
+                const checked = (form.sidebarSections || []).includes(section.id)
+                const disabled = isAlwaysOnSidebarSection(section.id)
+                return (
+                  <label
+                    key={section.id}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm ${
+                      disabled ? 'bg-gray-50 border-gray-200 text-gray-600' : 'border-gray-300 hover:border-blue-400 cursor-pointer'
+                    }`}
+                  >
+                    <input
+                      type='checkbox'
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => toggleSidebarSection(section.id)}
+                      className='rounded border-gray-300 text-blue-600 focus:ring-blue-500'
+                    />
+                    <span className='text-base'>{section.icon}</span>
+                    <span className='truncate flex-1'>{section.label}</span>
+                    {disabled && <span className='text-[10px] text-gray-400 shrink-0'>Always on</span>}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
         </Section>
 
         <Section title='12. Notes'>

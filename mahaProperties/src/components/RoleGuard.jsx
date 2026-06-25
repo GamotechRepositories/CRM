@@ -35,8 +35,9 @@ const isAssignTaskPath = (pathname) => pathname === '/assign-task'
 const isTasksListPath = (pathname) => pathname === '/tasks'
 
 const RoleGuard = ({ children }) => {
-  const { hasFullAccess, canAddProject, canViewProjects, canAssignTask } = useAuth()
+  const { hasFullAccess, canAddProject, canViewProjects, canAssignTask, getDashboardPath } = useAuth()
   const location = useLocation()
+  const dashboardPath = getDashboardPath()
 
   if (hasFullAccess()) return children
 
@@ -45,16 +46,16 @@ const RoleGuard = ({ children }) => {
     return <Navigate to={`/my-tasks/${tasksDetailMatch[1]}`} replace />
   }
   if (isHROnlyPath(location.pathname)) {
-    return <Navigate to='/dashboard' replace />
+    return <Navigate to={dashboardPath} replace />
   }
   if (isProjectsOnlyPath(location.pathname) && !canViewProjects()) {
-    return <Navigate to='/dashboard' replace />
+    return <Navigate to={dashboardPath} replace />
   }
   if (isAddProjectPath(location.pathname) && !canAddProject()) {
-    return <Navigate to='/dashboard' replace />
+    return <Navigate to={dashboardPath} replace />
   }
   if (isAssignTaskPath(location.pathname) && !canAssignTask()) {
-    return <Navigate to='/dashboard' replace />
+    return <Navigate to={dashboardPath} replace />
   }
   if (isTasksListPath(location.pathname) && !hasFullAccess()) {
     return <Navigate to='/my-tasks' replace />

@@ -75,6 +75,7 @@ export const getEmployeeProfileFields = (employeeRef) => ({
   access: {
     crmRole: { type: String, default: '' },
     permissions: [{ type: String }],
+    sidebarSections: [{ type: String }],
     loginHistory: [{ date: Date, ip: String }],
     lastLogin: { type: Date },
     accountStatus: { type: String, enum: ['Active', 'Inactive', 'Locked'], default: 'Active' },

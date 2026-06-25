@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import connectDB from '../config/db.js';
+import { getDefaultDesignationMeta } from '../utils/designationFields.js';
 
 dotenv.config();
 
@@ -21,10 +22,11 @@ const seedCompanyAdmin = async (company) => {
   const { default: Designation } = await import(`../models/${company}/${company}_designation.js`);
   const { default: Employee } = await import(`../models/${company}/${company}_employee.js`);
 
+  const adminMeta = getDefaultDesignationMeta(ADMIN.designationTitle);
   const designation = await Designation.findOneAndUpdate(
     { title: ADMIN.designationTitle },
-    { title: ADMIN.designationTitle, description: 'Full system access' },
-    { upsert: true, new: true }
+    { title: ADMIN.designationTitle, ...adminMeta },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
   const hashedPassword = await bcrypt.hash(ADMIN.password, 10);

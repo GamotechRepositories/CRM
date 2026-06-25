@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import App from '../App'
 import Login from '../pages/Login'
 import RequireAuth from '../components/RequireAuth'
-import DashboardView from '../components/views/DashboardView'
+import DashboardView, { RoleDashboardRedirect } from '../components/views/DashboardView'
 import ClientsView from '../components/views/ClientsView'
 import CampaignsView from '../components/views/CampaignsView'
 import LeadsView from '../components/views/LeadsView'
@@ -17,7 +17,8 @@ import EmployeeProfileView from '../components/views/EmployeeProfileView'
 import AddEmployee from '../pages/AddEmployee'
 import AddClient from '../pages/AddClient'
 import AddProject from '../pages/AddProject'
-import Placeholder from '../pages/Placeholder'
+import ModulePage from '../pages/ModulePage'
+import MyProfilePage from '../pages/MyProfilePage'
 import SalariesView from '../components/views/SalariesView'
 import AddSalary from '../pages/AddSalary'
 import AttendanceView from '../components/views/AttendanceView'
@@ -51,9 +52,10 @@ const router = createBrowserRouter([
             </RequireAuth>
         ),
         children: [
-            { index: true, element: <Navigate to='/dashboard' replace /> },
+            { index: true, element: <RoleDashboardRedirect /> },
             { path: 'dashboard', element: <DashboardView /> },
             { path: 'admin-dashboard', element: <DashboardView /> },
+            { path: 'hr-dashboard', element: <DashboardView /> },
             { path: 'clients', element: <ClientsView /> },
             { path: 'clients/:clientId/dashboard', element: <ClientDashboardView /> },
             { path: 'client-profiles', element: <ClientProfilesView /> },
@@ -104,6 +106,8 @@ const router = createBrowserRouter([
             { path: 'attendance', element: <AttendanceView /> },
             { path: 'leave', element: <LeaveView /> },
             { path: 'lead-management', element: <LeadsView /> },
+            { path: 'my-profile', element: <MyProfilePage /> },
+            { path: 'module/:slug', element: <ModulePage /> },
             { path: 'settings', element: <Settings /> },
         ],
     },
