@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Logo from '../assets/Asset.png'
+import Logo from '../assets/log.png'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getSidebarNav } from '../config/sidebarNav'
@@ -101,7 +101,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
               title='Dashboard'
             >
               <div className='h-10 rounded-lg flex-shrink-0 overflow-hidden'>
-                <img src={Logo} alt='CRM' className='w-full h-full object-cover' />
+                <img src={Logo} alt='CRM' className='w-full h-full object-contain' />
               </div>
             </button>
             <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-colors flex-shrink-0' title='Collapse menu'>

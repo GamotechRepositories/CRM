@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getDashboardPathForUser } from '../config/dashboardRoutes'
-import Logo from '../assets/Asset.png'
+import Logo from '../assets/log.png'
 
 const MailIcon = () => (
   <svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' strokeWidth={1.5} stroke='currentColor' className='w-5 h-5 text-gray-400'>
@@ -25,12 +25,6 @@ const EyeIcon = ({ open }) => (
     )}
   </svg>
 )
-
-const FEATURES = [
-  { icon: '🗂️', bg: 'bg-indigo-100', title: 'Centralized Workspace', desc: 'All your customers, projects and tasks in one place.' },
-  { icon: '📈', bg: 'bg-green-100', title: 'Boost Productivity', desc: 'Streamline your workflow and achieve more every day.' },
-  { icon: '🛡️', bg: 'bg-orange-100', title: 'Secure & Reliable', desc: 'Your data is protected with enterprise grade security.' },
-]
 
 const REMEMBER_KEY = 'crm_remember_email'
 
@@ -92,84 +86,19 @@ const Login = () => {
   }
 
   return (
-    <div className='min-h-screen flex flex-col lg:flex-row bg-white'>
-      {/* Left panel */}
-      <div className='relative hidden lg:flex lg:w-[42%] xl:w-[40%] flex-col justify-between overflow-hidden bg-gradient-to-br from-indigo-50 via-violet-50 to-blue-50 p-10 xl:p-12'>
-        <div className='absolute -top-20 -left-20 w-64 h-64 rounded-full bg-indigo-200/40 blur-3xl' />
-        <div className='absolute bottom-20 right-0 w-72 h-72 rounded-full bg-violet-200/30 blur-3xl' />
-
-        <div className='relative z-10'>
-          <div className='flex items-center gap-3 mb-12'>
-            <div className='w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200 overflow-hidden'>
-              <img src={Logo} alt='' className='w-full h-full object-cover' />
-            </div>
-            <span className='text-xl font-bold text-slate-900'>
-              <span className='text-indigo-600'>{appName.split(' ')[0]}</span>
-              {appName.includes(' ') ? ` ${appName.split(' ').slice(1).join(' ')}` : ' CRM'}
-            </span>
-          </div>
-
-          <h1 className='text-4xl font-bold text-slate-900 leading-tight'>Welcome back!</h1>
-          <p className='text-slate-600 mt-4 text-base leading-relaxed max-w-md'>
-            Sign in to access your CRM dashboard and manage your business efficiently.
-          </p>
-
-          <ul className='mt-10 space-y-6'>
-            {FEATURES.map((f) => (
-              <li key={f.title} className='flex gap-4'>
-                <div className={`w-11 h-11 rounded-xl ${f.bg} flex items-center justify-center text-xl shrink-0`}>{f.icon}</div>
-                <div>
-                  <p className='font-semibold text-slate-900'>{f.title}</p>
-                  <p className='text-sm text-slate-600 mt-0.5'>{f.desc}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Dashboard preview mock */}
-        <div className='relative z-10 mt-10'>
-          <div className='rounded-2xl border border-white/80 bg-white/70 backdrop-blur-sm shadow-xl p-4 max-w-sm'>
-            <div className='flex gap-2 mb-3'>
-              <div className='w-16 h-24 rounded-lg bg-slate-800 shrink-0' />
-              <div className='flex-1 space-y-2'>
-                <div className='h-3 rounded bg-slate-200 w-3/4' />
-                <div className='h-16 rounded-lg bg-indigo-100' />
-                <div className='grid grid-cols-2 gap-2'>
-                  <div className='h-10 rounded-lg bg-violet-100' />
-                  <div className='h-10 rounded-lg bg-green-100' />
-                </div>
-              </div>
-            </div>
-            <div className='h-2 rounded-full bg-slate-100 overflow-hidden'>
-              <div className='h-full w-2/3 bg-indigo-500 rounded-full' />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className='flex-1 flex flex-col min-h-screen'>
-        <div className='flex-1 flex items-center justify-center p-6 sm:p-10'>
-          <div className='w-full max-w-md'>
-            <div className='lg:hidden flex items-center justify-center gap-3 mb-8'>
-              <div className='w-10 h-10 rounded-xl overflow-hidden shadow'>
-                <img src={Logo} alt='' className='w-full h-full object-cover' />
-              </div>
-              <span className='text-lg font-bold text-slate-900'>{appName} CRM</span>
+    <div className='min-h-screen flex flex-col bg-gradient-to-br from-indigo-50 via-white to-violet-50'>
+      <div className='flex-1 flex items-center justify-center p-6 sm:p-10'>
+        <div className='w-full max-w-md'>
+          <div className='bg-white rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50 p-8 sm:p-10'>
+            <div className='flex justify-center mb-8'>
+              <img
+                src={Logo}
+                alt={`${appName} logo`}
+                className='max-w-[280px] w-full h-auto object-contain'
+              />
             </div>
 
-            <div className='bg-white rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50 p-8 sm:p-10'>
-              <div className='flex justify-center mb-6'>
-                <div className='w-14 h-14 rounded-full border-2 border-indigo-100 bg-indigo-50 flex items-center justify-center'>
-                  <LockIcon />
-                </div>
-              </div>
-
-              <h2 className='text-xl font-bold text-slate-900 text-center'>Sign in to your account</h2>
-              <p className='text-sm text-gray-500 text-center mt-1 mb-8'>Enter your credentials to continue.</p>
-
-              <form onSubmit={handleSubmit} className='space-y-5'>
+            <form onSubmit={handleSubmit} className='space-y-5'>
                 <div>
                   <label htmlFor='email' className='block text-sm font-semibold text-slate-800 mb-1.5'>Email Address</label>
                   <div className='relative'>
@@ -277,14 +206,13 @@ const Login = () => {
                   Contact Administrator
                 </button>
               </p>
-            </div>
           </div>
         </div>
-
-        <p className='text-center text-xs text-gray-400 pb-6'>
-          © {year} {appName} CRM. All rights reserved.
-        </p>
       </div>
+
+      <p className='text-center text-xs text-gray-400 pb-6'>
+        © {year} {appName} CRM. All rights reserved.
+      </p>
     </div>
   )
 }

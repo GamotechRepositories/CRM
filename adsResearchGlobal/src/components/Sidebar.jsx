@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Logo from '../assets/Asset.png'
+import Logo from '../assets/logo.jpg'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getSidebarNav } from '../config/sidebarNav'
