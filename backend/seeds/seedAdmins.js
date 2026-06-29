@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import connectDB from '../config/db.js';
 import { getDefaultDesignationMeta } from '../utils/designationFields.js';
+import { backfillEmployeeCodes, buildEmployeeCode } from '../utils/employeeCode.js';
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ const seedCompanyAdmin = async (company) => {
       salary: ADMIN.salary,
       workingHours: ADMIN.workingHours,
       status: ADMIN.status,
+      employeeCode: buildEmployeeCode(company, 1),
     },
     { upsert: true, new: true }
   );
@@ -56,6 +58,8 @@ const seed = async () => {
 
     for (const company of companies) {
       await seedCompanyAdmin(company);
+      const { default: Employee } = await import(`../models/${company}/${company}_employee.js`);
+      await backfillEmployeeCodes(Employee, company);
     }
 
     console.log('All company admins seeded successfully');

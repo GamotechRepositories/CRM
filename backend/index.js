@@ -112,6 +112,7 @@ const routeFiles = [
   'expenseRoute',
   'clientProfileRoute',
   'locationRoute',
+  'chatRoute',
 ];
 
 for (const company of companies) {

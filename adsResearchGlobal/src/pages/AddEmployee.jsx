@@ -344,7 +344,7 @@ const AddEmployee = () => {
 
       <form onSubmit={handleSubmit} className='space-y-6'>
         <Section title='1. Basic Information'>
-          <Field label='Employee Code'><input name='employeeCode' value={form.employeeCode} onChange={handleChange} className={inputClass} placeholder='Auto-generated if empty' /></Field>
+          <Field label='Employee ID'><input name='employeeCode' value={form.employeeCode} onChange={handleChange} className={inputClass} placeholder='Auto-assigned (e.g. EMP10001)' /></Field>
           <Field label='Full Name *'><input name='name' value={form.name} onChange={handleChange} required className={inputClass} /></Field>
           <Field label='Profile Photo URL'><input name='profilePhoto' value={form.profilePhoto} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Gender'>

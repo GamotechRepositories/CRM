@@ -2,6 +2,7 @@ import React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MODULE_META } from '../config/moduleMeta'
 import PerformanceModuleView from '../components/views/PerformanceModuleView'
+import ChatPortalView from '../components/views/ChatPortalView'
 
 const ModulePage = () => {
   const { slug } = useParams()
@@ -9,6 +10,10 @@ const ModulePage = () => {
 
   if (slug === 'performance') {
     return <PerformanceModuleView />
+  }
+
+  if (slug === 'chat') {
+    return <ChatPortalView />
   }
 
   const meta = MODULE_META[slug] || {

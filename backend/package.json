@@ -10,6 +10,7 @@
     "start": "nodemon index.js",
     "seed:designations": "node seeds/seedDesignations.js",
     "seed:admins": "node seeds/seedAdmins.js",
+    "seed:employee-codes": "node seeds/seedEmployeeCodes.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

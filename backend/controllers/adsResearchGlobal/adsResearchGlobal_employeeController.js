@@ -9,7 +9,10 @@ import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
 import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployeeAvailability.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
 import { getEmployeeApiError, validateEmployeePayload } from "../../utils/employeeApiErrors.js";
+import { assignEmployeeCodeOnCreate, validateEmployeeCodeOnUpdate } from "../../utils/employeeCode.js";
 import bcrypt from "bcryptjs";
+
+const COMPANY_KEY = 'adsResearchGlobal';
 
 // Create a new employee
 export const createEmployee = async (req, res) => {
@@ -22,6 +25,7 @@ export const createEmployee = async (req, res) => {
     if (missing.length) {
       return res.status(400).json({ message: `Missing required fields: ${missing.join(', ')}` });
     }
+    await assignEmployeeCodeOnCreate(Employee, COMPANY_KEY, payload);
     const hashedPassword = await bcrypt.hash(password, 10);
     const newEmployee = new Employee({
       ...payload,
@@ -34,7 +38,7 @@ export const createEmployee = async (req, res) => {
     });
   } catch (error) {
     const { status, message } = getEmployeeApiError(error, "Error creating employee");
-    res.status(status).json({ message });
+    res.status(error.status || status).json({ message: error.message || message });
   }
 };
 
@@ -65,6 +69,7 @@ export const getEmployeeById = async (req, res) => {
 export const updateEmployee = async (req, res) => {
   try {
     const { payload, password } = normalizeEmployeePayload(req.body);
+    await validateEmployeeCodeOnUpdate(Employee, COMPANY_KEY, req.params.id, payload);
     const updates = { ...payload };
     if (password && password.length >= 6) {
       updates.password = await bcrypt.hash(password, 10);
@@ -76,7 +81,7 @@ export const updateEmployee = async (req, res) => {
     res.status(200).json({ message: 'Employee updated', employee: updated });
   } catch (error) {
     const { status, message } = getEmployeeApiError(error, "Error updating employee");
-    res.status(status).json({ message });
+    res.status(error.status || status).json({ message: error.message || message });
   }
 };
 

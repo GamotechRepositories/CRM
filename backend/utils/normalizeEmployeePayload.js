@@ -119,8 +119,8 @@ export const normalizeEmployeePayload = (body = {}) => {
     },
   };
 
-  if (!payload.employeeCode) {
-    payload.employeeCode = `EMP-${Date.now().toString().slice(-6)}`;
+  if (typeof payload.employeeCode === 'string') {
+    payload.employeeCode = payload.employeeCode.trim();
   }
 
   if (!payload.salaryPayroll.ctc && payload.salary) {

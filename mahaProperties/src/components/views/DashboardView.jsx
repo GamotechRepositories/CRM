@@ -6,6 +6,7 @@ import EmployeeDashboardView from './EmployeeDashboardView'
 import HRDashboardView from './HRDashboardView'
 import ManagerDashboardView from './ManagerDashboardView'
 import AssignedTasksTab from './AssignedTasksTab'
+import ChatFloatingButton from '../ChatFloatingButton'
 import { getDashboardKind, getDashboardPathForUser, isDashboardRoute } from '../../config/dashboardRoutes'
 
 const DashboardTabs = ({ children }) => {
@@ -63,7 +64,12 @@ const DashboardView = () => {
   else if (kind === 'manager') content = <ManagerDashboardView />
   else content = <EmployeeDashboardView />
 
-  return <DashboardTabs>{content}</DashboardTabs>
+  return (
+    <>
+      <DashboardTabs>{content}</DashboardTabs>
+      <ChatFloatingButton />
+    </>
+  )
 }
 
 export const RoleDashboardRedirect = () => {
