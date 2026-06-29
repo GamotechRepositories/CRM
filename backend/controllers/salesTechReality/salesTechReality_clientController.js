@@ -24,6 +24,7 @@ export const createClient = async (req, res) => {
       services,
       date,
       clientType,
+      clientCategory,
       projectEndDate,
       address,
       city,
@@ -44,6 +45,7 @@ export const createClient = async (req, res) => {
       services: services || [],
       date,
       clientType,
+      clientCategory: clientCategory || 'Marketing',
       projectEndDate: clientType === 'Non Recurring' ? projectEndDate : undefined,
       address,
       city: city || '',
@@ -70,7 +72,11 @@ export const createClient = async (req, res) => {
 // Get all clients
 export const getClients = async (req, res) => {
   try {
-    const clients = await Client.find().populate('onboardBy');
+    const filter = {}
+    if (req.query.clientCategory) {
+      filter.clientCategory = req.query.clientCategory
+    }
+    const clients = await Client.find(filter).populate('onboardBy');
     res.status(200).json(clients);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching clients', error });

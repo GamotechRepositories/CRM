@@ -3,6 +3,7 @@ import Task from '../../models/bangarProperties/bangarProperties_task.js';
 import SocialMediaCalendar from '../../models/bangarProperties/bangarProperties_socialMediaCalendar.js';
 import { syncClientProfileByProjectId } from '../../utils/bangarProperties/bangarProperties_clientProfileSync.js';
 import { getNextRecurringDate } from '../../utils/bangarProperties/bangarProperties_recurringTaskScheduler.js';
+import { normalizeTaskPayload } from '../../utils/normalizeTaskPayload.js';
 
 const normalizeDateStart = (value) => {
   const d = new Date(value);
@@ -15,6 +16,7 @@ const shouldCreateRecurringTemplate = (payload) =>
 
 export const createTask = async (req, res) => {
   try {
+    const body = normalizeTaskPayload(req.body);
     const {
       project,
       title,
@@ -24,13 +26,14 @@ export const createTask = async (req, res) => {
       status,
       priority,
       dueDate,
+      estimatedDurationMinutes,
       recurrenceEnabled,
       recurrenceType,
       recurrenceInterval,
       recurrenceStartDate,
       recurrenceEndDate,
       isRecurring,
-    } = req.body;
+    } = body;
 
     if (!project || !title || !assignedTo || !assignedBy) {
       return res.status(400).json({ message: 'Project, title, assignedTo, and assignedBy are required' });
@@ -58,6 +61,7 @@ export const createTask = async (req, res) => {
         status: 'Pending',
         priority: priority || 'Medium',
         dueDate: firstRunDate,
+        estimatedDurationMinutes: estimatedDurationMinutes || null,
         isRecurringTemplate: false,
         recurrenceEnabled: false,
         recurringScheduledFor: firstRunDate,
@@ -73,6 +77,7 @@ export const createTask = async (req, res) => {
         status: status || 'Pending',
         priority: priority || 'Medium',
         dueDate: firstRunDate,
+        estimatedDurationMinutes: estimatedDurationMinutes || null,
         isRecurringTemplate: true,
         recurrenceEnabled: true,
         recurrenceType,
@@ -108,6 +113,7 @@ export const createTask = async (req, res) => {
       status: initialStatus,
       priority: priority || 'Medium',
       dueDate: dueDate ? new Date(dueDate) : undefined,
+      estimatedDurationMinutes: estimatedDurationMinutes || null,
       completedAt: initialStatus === 'Completed' ? new Date() : null,
       isRecurringTemplate: false,
       recurrenceEnabled: false,
@@ -132,19 +138,21 @@ const socialStatusToTaskStatus = (status) => {
 
 export const getTasks = async (req, res) => {
   try {
-    const { projectId, employeeId } = req.query;
+    const { projectId, employeeId, assignedBy } = req.query;
     const filter = { isRecurringTemplate: { $ne: true } };
     if (projectId) filter.project = projectId;
     if (employeeId) filter.assignedTo = employeeId;
+    if (assignedBy) filter.assignedBy = assignedBy;
 
     const tasks = await Task.find(filter)
       .populate('project')
       .populate('assignedTo')
       .populate('assignedBy')
+      .populate('rating.ratedBy', 'name designation')
       .sort({ createdAt: -1 });
 
     let result = [...tasks];
-    const includeSocialMedia = !projectId || projectId === 'social-media';
+    const includeSocialMedia = !assignedBy && (!projectId || projectId === 'social-media');
 
     if (includeSocialMedia) {
       const socialQuery = employeeId ? { 'posts.assignedTo': employeeId } : {};
@@ -214,7 +222,8 @@ export const getTaskById = async (req, res) => {
         populate: { path: 'client', select: 'clientName clientNumber mailId businessType' },
       })
       .populate('assignedTo')
-      .populate('assignedBy');
+      .populate('assignedBy')
+      .populate('rating.ratedBy', 'name designation');
     if (!task) return res.status(404).json({ message: 'Task not found' });
     res.status(200).json(task);
   } catch (error) {
@@ -228,17 +237,18 @@ export const updateTask = async (req, res) => {
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
     const nextStatus = req.body.status !== undefined ? req.body.status : existing.status;
-    const payload = { ...req.body };
+    const payload = normalizeTaskPayload(req.body);
     if (nextStatus === 'Completed' && existing.status !== 'Completed') {
       payload.completedAt = payload.completedAt || new Date();
     } else if (nextStatus !== 'Completed' && existing.status === 'Completed') {
       payload.completedAt = null;
     }
 
-    const updated = await Task.findByIdAndUpdate(req.params.id, payload, { new: true })
+    const updated = await Task.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
       .populate('project')
       .populate('assignedTo')
-      .populate('assignedBy');
+      .populate('assignedBy')
+      .populate('rating.ratedBy', 'name designation');
     await syncClientProfileByProjectId(existing.project);
     await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
     res.status(200).json({ message: 'Task updated', task: updated });

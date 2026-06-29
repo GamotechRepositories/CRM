@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
+import { useAuth } from '../../context/AuthContext'
 import { DashboardIcon, EditIcon } from '../Icons'
 
 const thead = 'text-left border-b bg-blue-600 text-white font-bold text-sm'
@@ -37,6 +38,7 @@ const ProjectDashboardView = () => {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const { canEditProject } = useAuth()
   const projectsListPath = location.pathname.startsWith('/my-projects') ? '/my-projects' : '/projects'
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -151,14 +153,16 @@ const ProjectDashboardView = () => {
               Client dashboard
             </button>
           )}
-          <button
-            type='button'
-            onClick={() => navigate(`/projects/edit/${projectId}`)}
-            className='inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700'
-          >
-            <EditIcon />
-            Edit project
-          </button>
+          {canEditProject() && (
+            <button
+              type='button'
+              onClick={() => navigate(`/projects/edit/${projectId}`)}
+              className='inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700'
+            >
+              <EditIcon />
+              Edit project
+            </button>
+          )}
         </div>
       </div>
 

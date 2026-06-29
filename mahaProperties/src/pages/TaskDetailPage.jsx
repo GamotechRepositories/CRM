@@ -6,11 +6,67 @@ import { useAuth } from '../context/AuthContext'
 const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
 const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
 
+const formatDuration = (minutes) => {
+  const mins = Number(minutes)
+  if (!Number.isFinite(mins) || mins <= 0) return '—'
+  if (mins >= 1440) {
+    const days = Math.floor(mins / 1440)
+    const rem = mins % 1440
+    const hours = Math.floor(rem / 60)
+    const m = rem % 60
+    if (hours && m) return `${days}d ${hours}h ${m}m`
+    if (hours) return `${days}d ${hours}h`
+    if (m) return `${days}d ${m}m`
+    return `${days}d`
+  }
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h && m) return `${h}h ${m}m`
+  if (h) return `${h}h`
+  return `${m}m`
+}
+
+const getCompletionDurationMinutes = (task) => {
+  if (task?.status !== 'Completed' || !task?.completedAt || !task?.createdAt) return null
+  const diffMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime()
+  if (!Number.isFinite(diffMs) || diffMs < 0) return null
+  return Math.round(diffMs / 60000)
+}
+
+const getDurationVarianceLabel = (estimatedMinutes, actualMinutes) => {
+  const estimated = Number(estimatedMinutes)
+  const actual = Number(actualMinutes)
+  if (!Number.isFinite(estimated) || estimated <= 0 || !Number.isFinite(actual) || actual <= 0) return null
+  const diff = actual - estimated
+  if (Math.abs(diff) < 5) return { text: 'On estimate', className: 'text-green-600' }
+  if (diff > 0) return { text: `${formatDuration(diff)} over estimate`, className: 'text-orange-600' }
+  return { text: `${formatDuration(Math.abs(diff))} under estimate`, className: 'text-green-600' }
+}
+
+const StarRating = ({ value, onChange, disabled }) => (
+  <div className='flex items-center gap-1'>
+    {[1, 2, 3, 4, 5].map((star) => (
+      <button
+        key={star}
+        type='button'
+        disabled={disabled}
+        onClick={() => onChange?.(star)}
+        className={`text-2xl leading-none transition-colors disabled:cursor-default ${
+          star <= value ? 'text-amber-400' : 'text-gray-300 hover:text-amber-200'
+        }`}
+        aria-label={`${star} star`}
+      >
+        ★
+      </button>
+    ))}
+  </div>
+)
+
 const TaskDetailPage = ({ isMyTasks = false }) => {
   const { taskId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, canAssignTask } = useAuth()
+  const { user, canAssignTask, canRateTask } = useAuth()
 
   const [task, setTask] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -18,6 +74,10 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [uploadingPostLink, setUploadingPostLink] = useState(false)
   const [socialUpload, setSocialUpload] = useState({ platform: '', url: '' })
+  const [ratingForm, setRatingForm] = useState({ score: 0, comments: '' })
+  const [savingRating, setSavingRating] = useState(false)
+  const [ratingError, setRatingError] = useState(null)
+  const [ratingSaved, setRatingSaved] = useState(false)
 
   const listPath = isMyTasks ? '/my-tasks' : '/tasks'
 
@@ -137,6 +197,17 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
     }
   }, [taskId, location.state, isMyTasks, user?._id, canAssignTask])
 
+  useEffect(() => {
+    if (!task?.rating) {
+      setRatingForm({ score: 0, comments: '' })
+      return
+    }
+    setRatingForm({
+      score: task.rating.score || 0,
+      comments: task.rating.comments || '',
+    })
+  }, [task?._id, task?.rating?.score, task?.rating?.comments])
+
   const handleStatusChange = async (t, newStatus) => {
     const tid = t._id
     if (!tid || !newStatus) return
@@ -156,6 +227,33 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
       console.error('Failed to update task status:', err)
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  const handleSaveRating = async () => {
+    if (!task?._id || task.source === 'social_media') return
+    if (!ratingForm.score) {
+      setRatingError('Please select a rating from 1 to 5 stars')
+      return
+    }
+    setSavingRating(true)
+    setRatingError(null)
+    setRatingSaved(false)
+    try {
+      const res = await api.put(`/tasks/${task._id}`, {
+        rating: {
+          score: ratingForm.score,
+          comments: ratingForm.comments,
+          ratedBy: user?._id,
+        },
+      })
+      const updated = res.data?.task || res.data
+      setTask(updated)
+      setRatingSaved(true)
+    } catch (err) {
+      setRatingError(err.response?.data?.message || err.message || 'Failed to save rating')
+    } finally {
+      setSavingRating(false)
     }
   }
 
@@ -417,6 +515,41 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                 {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
               </span>
             </div>
+            {task.source !== 'social_media' && (
+              <>
+                <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
+                  <span className='text-sm text-gray-500'>Estimated Duration</span>
+                  <span className='text-sm font-medium text-gray-900'>
+                    {formatDuration(task.estimatedDurationMinutes)}
+                  </span>
+                </div>
+                <div className='flex justify-between items-start py-2 border-b border-gray-100 gap-4'>
+                  <span className='text-sm text-gray-500 shrink-0'>Completion Duration</span>
+                  <div className='text-right'>
+                    <span className='text-sm font-medium text-gray-900'>
+                      {task.status === 'Completed'
+                        ? formatDuration(getCompletionDurationMinutes(task))
+                        : '—'}
+                    </span>
+                    {task.status === 'Completed' && (() => {
+                      const variance = getDurationVarianceLabel(
+                        task.estimatedDurationMinutes,
+                        getCompletionDurationMinutes(task),
+                      )
+                      return variance ? (
+                        <p className={`text-xs font-medium mt-0.5 ${variance.className}`}>{variance.text}</p>
+                      ) : null
+                    })()}
+                  </div>
+                </div>
+                {task.status === 'Completed' && task.completedAt && (
+                  <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
+                    <span className='text-sm text-gray-500'>Completed (date & time)</span>
+                    <span className='text-sm text-gray-700'>{fmtDateTime(task.completedAt)}</span>
+                  </div>
+                )}
+              </>
+            )}
             <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
               <span className='text-sm text-gray-500'>Assigned (date & time)</span>
               <span className='text-sm text-gray-700'>{task.createdAt ? fmtDateTime(task.createdAt) : '—'}</span>
@@ -425,6 +558,85 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
               <span className='text-sm text-gray-500'>Updated (date & time)</span>
               <span className='text-sm text-gray-700'>{task.updatedAt ? fmtDateTime(task.updatedAt) : '—'}</span>
             </div>
+
+            {task.source !== 'social_media' && !canRateTask() && task.rating?.score > 0 && (
+              <div className='mt-6 pt-6 border-t border-gray-200'>
+                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Your performance rating</h3>
+                <p className='text-xs text-gray-500 mb-3'>Feedback from your manager on this task.</p>
+                <div className='rounded-lg bg-amber-50 border border-amber-100 p-4'>
+                  <StarRating value={task.rating.score} disabled />
+                  {task.rating.comments && (
+                    <p className='text-sm text-gray-700 mt-3 whitespace-pre-wrap'>{task.rating.comments}</p>
+                  )}
+                  <p className='text-xs text-gray-500 mt-3'>
+                    Rated by {task.rating.ratedBy?.name || task.assignedBy?.name || 'Manager'}
+                    {task.rating.ratedAt ? ` · ${fmtDateTime(task.rating.ratedAt)}` : ''}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {task.source !== 'social_media' && canRateTask() && (
+              <div className='mt-6 pt-6 border-t border-gray-200'>
+                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Employee performance rating</h3>
+                <p className='text-xs text-gray-500 mb-4'>
+                  Project managers and team leads can rate the assignee on this task.
+                </p>
+
+                {task.rating?.score > 0 && (
+                  <div className='mb-4 rounded-lg bg-amber-50 border border-amber-100 p-4'>
+                    <p className='text-xs font-medium text-amber-800 mb-2'>Current rating</p>
+                    <StarRating value={task.rating.score} disabled />
+                    {task.rating.comments && (
+                      <p className='text-sm text-gray-700 mt-2 whitespace-pre-wrap'>{task.rating.comments}</p>
+                    )}
+                    {task.rating.ratedBy && (
+                      <p className='text-xs text-gray-500 mt-2'>
+                        Rated by {task.rating.ratedBy?.name || 'Manager'}
+                        {task.rating.ratedAt ? ` · ${fmtDateTime(task.rating.ratedAt)}` : ''}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className='mb-4'>
+                  <p className='text-xs font-medium text-gray-500 mb-2'>
+                    {task.rating?.score ? 'Update rating' : 'Rating'}
+                  </p>
+                  <StarRating
+                    value={ratingForm.score}
+                    onChange={(score) => {
+                      setRatingForm((prev) => ({ ...prev, score }))
+                      setRatingSaved(false)
+                    }}
+                    disabled={savingRating}
+                  />
+                </div>
+                <div className='mb-4'>
+                  <label className='block text-xs font-medium text-gray-500 mb-2'>Comments</label>
+                  <textarea
+                    value={ratingForm.comments}
+                    onChange={(e) => {
+                      setRatingForm((prev) => ({ ...prev, comments: e.target.value }))
+                      setRatingSaved(false)
+                    }}
+                    rows={3}
+                    placeholder='Feedback on quality, timeliness, communication…'
+                    className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                  />
+                </div>
+                {ratingError && <p className='text-red-600 text-sm mb-2'>{ratingError}</p>}
+                {ratingSaved && <p className='text-green-600 text-sm mb-2'>Rating saved successfully.</p>}
+                <button
+                  type='button'
+                  onClick={handleSaveRating}
+                  disabled={savingRating || !ratingForm.score}
+                  className='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50'
+                >
+                  {savingRating ? 'Saving…' : task.rating?.score ? 'Update Rating' : 'Save Rating'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

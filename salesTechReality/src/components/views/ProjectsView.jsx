@@ -6,7 +6,7 @@ import { ProjectDetailModal } from '../ProjectDetailModal'
 import ProjectsDashboardLayout from './projects/ProjectsDashboardLayout'
 
 const ProjectsView = () => {
-  const { canAddProject, canAssignTask } = useAuth()
+  const { canAddProject, canEditProject, canAssignTask } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = (searchParams.get('focus') || '').trim()
   const detailParam = (searchParams.get('detail') || '').trim()
@@ -89,7 +89,7 @@ const ProjectsView = () => {
         focusId={focusId}
         canAddProject={canAddProject()}
         canAssignTask={canAssignTask()}
-        canEditProject={canAddProject()}
+        canEditProject={canEditProject()}
         onAddProject={() => navigate('/add-project')}
         onOpenProject={setDetailProject}
         onEditProject={(p) => navigate(`/projects/edit/${p._id}`)}

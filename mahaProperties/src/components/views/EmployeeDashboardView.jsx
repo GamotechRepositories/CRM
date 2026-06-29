@@ -95,6 +95,22 @@ const getProjectName = (task) => {
   return 'Project'
 }
 
+const isRealTask = (task) => task?._id && !String(task._id).startsWith('social-media-')
+
+const StarDisplay = ({ score, size = 'sm' }) => {
+  const s = Number(score) || 0
+  if (!s) return null
+  const textSize = size === 'lg' ? 'text-xl' : 'text-sm'
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-amber-500 font-semibold ${textSize}`} title={`${s}/5`}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span key={star} className={star <= s ? 'text-amber-400' : 'text-gray-300'}>★</span>
+      ))}
+      <span className='text-gray-600 font-medium ml-1'>{s}/5</span>
+    </span>
+  )
+}
+
 const formatINR = (amount) => `₹ ${Math.round(amount).toLocaleString('en-IN')}`
 
 const PIPELINE_STAGE_CONFIG = [
@@ -288,6 +304,15 @@ const EmployeeDashboardView = () => {
       ? pendingTasks.sort((a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0))
       : completedTasks.sort((a, b) => new Date(b.completedAt || b.updatedAt) - new Date(a.completedAt || a.updatedAt))
 
+    const ratedTasks = tasks
+      .filter((t) => isRealTask(t) && t.rating?.score)
+      .sort((a, b) => new Date(b.rating?.ratedAt || b.updatedAt) - new Date(a.rating?.ratedAt || a.updatedAt))
+
+    const ratingScores = ratedTasks.map((t) => Number(t.rating.score)).filter((s) => s > 0)
+    const avgRating = ratingScores.length
+      ? Math.round((ratingScores.reduce((a, b) => a + b, 0) / ratingScores.length) * 10) / 10
+      : null
+
     return {
       pendingTasks,
       completedTasks,
@@ -299,6 +324,8 @@ const EmployeeDashboardView = () => {
       recentLeads,
       performancePct,
       tabTasks,
+      ratedTasks,
+      avgRating,
       followUps: myLeads.reduce((sum, l) => sum + (Array.isArray(l.followUps) ? l.followUps.length : 0), 0),
       dealsClosed: myLeads.filter((l) => l.meetingInfoSent === true).length,
     }
@@ -365,6 +392,11 @@ const EmployeeDashboardView = () => {
                 <div className='min-w-0 flex-1'>
                   <p className='text-sm font-medium text-gray-900 truncate'>{task.title}</p>
                   <p className='text-xs text-gray-500 truncate'>{getProjectName(task)}</p>
+                  {task.rating?.score > 0 && (
+                    <div className='mt-1'>
+                      <StarDisplay score={task.rating.score} />
+                    </div>
+                  )}
                 </div>
                 <div className='flex flex-col items-end gap-1 shrink-0'>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${priorityClass(task.priority)}`}>
@@ -414,7 +446,7 @@ const EmployeeDashboardView = () => {
         </Panel>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+      <div className='grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6'>
         <Panel title='My Performance'>
           <PerformanceRing percent={stats.performancePct} />
           <div className='mt-5 space-y-2'>
@@ -423,6 +455,8 @@ const EmployeeDashboardView = () => {
               ['Deals Closed', stats.dealsClosed],
               ['Tasks Done (Month)', stats.completedThisMonth.length],
               ['Pending Tasks', stats.pendingTasks.length],
+              ['Avg Task Rating', stats.avgRating != null ? `${stats.avgRating}/5` : '—'],
+              ['Rated Tasks', stats.ratedTasks.length],
             ].map(([label, value]) => (
               <div key={label} className='flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0'>
                 <span className='text-gray-600'>{label}</span>
@@ -457,6 +491,38 @@ const EmployeeDashboardView = () => {
               </button>
             )) : (
               <p className='text-sm text-gray-500 py-6 text-center'>No leads yet</p>
+            )}
+          </div>
+        </Panel>
+
+        <Panel title='Task Ratings' actionLabel='My Tasks' onAction={() => navigate('/my-tasks')}>
+          <div className='space-y-3 max-h-80 overflow-y-auto'>
+            {stats.ratedTasks.length ? stats.ratedTasks.slice(0, 6).map((task) => (
+              <button
+                key={task._id}
+                type='button'
+                onClick={() => navigate(`/my-tasks/${task._id}`)}
+                className='w-full text-left p-3 rounded-lg border border-amber-100 bg-amber-50/40 hover:bg-amber-50 transition-colors'
+              >
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='min-w-0 flex-1'>
+                    <p className='text-sm font-semibold text-gray-900 truncate'>{task.title}</p>
+                    <p className='text-xs text-gray-500 truncate mt-0.5'>{getProjectName(task)}</p>
+                  </div>
+                  <StarDisplay score={task.rating.score} />
+                </div>
+                {task.rating.comments && (
+                  <p className='text-xs text-gray-600 mt-2 line-clamp-2'>&ldquo;{task.rating.comments}&rdquo;</p>
+                )}
+                <p className='text-[10px] text-gray-400 mt-2'>
+                  Rated by {task.rating.ratedBy?.name || task.assignedBy?.name || 'Manager'}
+                  {task.rating.ratedAt ? ` · ${formatDate(task.rating.ratedAt)}` : ''}
+                </p>
+              </button>
+            )) : (
+              <p className='text-sm text-gray-500 py-6 text-center'>
+                No task ratings yet. Complete tasks to receive feedback from your manager.
+              </p>
             )}
           </div>
         </Panel>

@@ -32,6 +32,7 @@ export const getDesignationFields = () => ({
   permissions: {
     hasFullAccess: { type: Boolean, default: false },
     canAddProject: { type: Boolean, default: false },
+    canEditProject: { type: Boolean, default: false },
     canViewProjects: { type: Boolean, default: false },
     canAssignTask: { type: Boolean, default: false },
     canApproveLeave: { type: Boolean, default: false },
@@ -68,6 +69,7 @@ export const getDefaultDesignationMeta = (title) => {
     permissions: {
       hasFullAccess: false,
       canAddProject: false,
+      canEditProject: false,
       canViewProjects: false,
       canAssignTask: false,
       canApproveLeave: false,
@@ -90,6 +92,7 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         hasFullAccess: true,
         canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
@@ -111,6 +114,7 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         hasFullAccess: true,
         canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
@@ -132,6 +136,7 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         hasFullAccess: true,
         canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
@@ -151,9 +156,33 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         hasFullAccess: false,
         canAddProject: t !== 'engineering manager',
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
+        canManageEmployees: false,
+        canManageSocialCalendar: true,
+      },
+    };
+  }
+
+  if (
+    t.endsWith(' manager')
+    && t !== 'hr manager'
+    && !['admin'].includes(t)
+  ) {
+    return {
+      ...base,
+      level: 'Manager',
+      accessRole: 'manager',
+      sortOrder: 15,
+      permissions: {
+        hasFullAccess: false,
+        canAddProject: ['program manager', 'sales manager', 'account manager'].includes(t),
+        canEditProject: true,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: ['program manager', 'sales manager', 'account manager', 'customer success manager'].includes(t),
         canManageEmployees: false,
         canManageSocialCalendar: true,
       },
@@ -169,6 +198,7 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         ...base.permissions,
         canAddProject: t === 'senior software engineer',
+        canEditProject: t === 'senior software engineer',
         canViewProjects: true,
         canAssignTask: t === 'senior software engineer',
       },
@@ -199,6 +229,7 @@ export const getDefaultDesignationMeta = (title) => {
       permissions: {
         hasFullAccess: true,
         canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,

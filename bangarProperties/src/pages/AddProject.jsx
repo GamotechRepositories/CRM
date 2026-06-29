@@ -73,7 +73,11 @@ const AddProject = () => {
     const fetchProject = async () => {
       try {
         const res = await api.get(`/projects/${id}`)
-        const p = res.data
+        const p = res.data?.project ?? res.data
+        if (!p || typeof p !== 'object') {
+          setError('Project not found')
+          return
+        }
         const clientId = toId(p.client?._id ?? p.client)
         const clientName = p.client?.clientName ?? ''
         const managerId = toId(p.projectManager?._id ?? p.projectManager)
@@ -155,6 +159,10 @@ const AddProject = () => {
     e.preventDefault()
     if (!form.client) {
       setError('Please select a client')
+      return
+    }
+    if (!form.startDate) {
+      setError('Please select a start date')
       return
     }
     setLoading(true)

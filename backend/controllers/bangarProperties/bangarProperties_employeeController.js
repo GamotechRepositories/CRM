@@ -6,6 +6,7 @@ import Attendance from "../../models/bangarProperties/bangarProperties_attendanc
 import Leave from "../../models/bangarProperties/bangarProperties_leave.js";
 import Salary from "../../models/bangarProperties/bangarProperties_salary.js";
 import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
+import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployeeAvailability.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
 import { getEmployeeApiError, validateEmployeePayload } from "../../utils/employeeApiErrors.js";
 import bcrypt from "bcryptjs";
@@ -109,4 +110,11 @@ export const getEmployeeProfile = async (req, res) => {
     res.status(500).json({ message: 'Error fetching employee profile', error: error?.message || error });
   }
 };
+
+export const getEmployeesAvailability = createGetEmployeesAvailabilityHandler({
+  Employee,
+  Task,
+  Attendance,
+  Leave,
+});
 

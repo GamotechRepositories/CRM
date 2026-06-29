@@ -20,7 +20,7 @@ function fmtDate(d) {
  */
 export function ProjectDetailModal({ project, onClose }) {
   const navigate = useNavigate()
-  const { canAddProject, canAssignTask } = useAuth()
+  const { canEditProject, canAssignTask } = useAuth()
 
   const close = useCallback(() => onClose?.(), [onClose])
 
@@ -165,7 +165,7 @@ export function ProjectDetailModal({ project, onClose }) {
               Assign task
             </button>
           ) : null}
-          {canAddProject() && project._id ? (
+          {canEditProject() && project._id ? (
             <button
               type='button'
               onClick={() => {

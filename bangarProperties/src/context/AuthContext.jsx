@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/axios'
 import { getDashboardPathForUser } from '../config/dashboardRoutes'
+import {
+  canAddProjectForUser,
+  canEditProjectForUser,
+  canAssignTaskForUser,
+  canRateTaskForUser,
+  getDesignationTitle as getUserDesignationTitle,
+} from '../config/authPermissions'
 
 const AUTH_KEY = 'crm_user'
 
@@ -44,7 +51,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(AUTH_KEY)
   }
 
-  const getDesignationTitle = () => (user?.designation?.title || user?.designation?.name || '').toLowerCase()
+  const getDesignationTitle = () => getUserDesignationTitle(user)
 
   const isAdmin = () => getDesignationTitle() === 'admin'
 
@@ -58,10 +65,9 @@ export const AuthProvider = ({ children }) => {
     return ['admin', 'hr manager', 'technical lead'].includes(title)
   }
 
-  const canAddProject = () => {
-    const title = getDesignationTitle()
-    return ['admin', 'hr manager', 'technical lead', 'senior software engineer', 'product manager'].includes(title)
-  }
+  const canAddProject = () => canAddProjectForUser(user)
+
+  const canEditProject = () => canEditProjectForUser(user)
 
   /** Any logged-in employee can add/edit posts on the social media calendar. */
   const canManageSocialCalendar = () => Boolean(user)
@@ -80,19 +86,9 @@ export const AuthProvider = ({ children }) => {
     ].includes(title)
   }
 
-  const canAssignTask = () => {
-    const title = getDesignationTitle()
-    return [
-      'admin',
-      'social media manager',
-      'hr manager',
-      'technical lead',
-      'product manager',
-      'senior software engineer',
-      'project manager',
-      'engineering manager',
-    ].includes(title)
-  }
+  const canAssignTask = () => canAssignTaskForUser(user)
+
+  const canRateTask = () => canRateTaskForUser(user)
 
   const canApproveLeave = () => {
     const title = getDesignationTitle()
@@ -112,7 +108,7 @@ export const AuthProvider = ({ children }) => {
   const getDashboardPath = () => getDashboardPathForUser(user)
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isHRManager, hasFullAccess, canAddProject, canManageSocialCalendar, canViewProjects, canAssignTask, canApproveLeave, getSidebarSections, getDashboardPath, isAdmin }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, isHRManager, hasFullAccess, canAddProject, canEditProject, canManageSocialCalendar, canViewProjects, canAssignTask, canRateTask, canApproveLeave, getSidebarSections, getDashboardPath, isAdmin }}>
       {children}
     </AuthContext.Provider>
   )

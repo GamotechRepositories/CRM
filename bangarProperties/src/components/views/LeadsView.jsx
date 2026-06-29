@@ -115,7 +115,7 @@ const LeadsView = () => {
 
       <div className='bg-white rounded-lg shadow p-4 mb-6'>
         <h3 className='text-sm font-semibold text-gray-700 mb-3'>Filters</h3>
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+        <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4'>
           <div>
             <label className='block text-xs font-medium text-gray-600 mb-1'>Search</label>
             <input

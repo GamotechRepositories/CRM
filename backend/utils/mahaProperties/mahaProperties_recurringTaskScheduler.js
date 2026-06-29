@@ -44,6 +44,7 @@ const createTaskFromTemplate = async (template, scheduledFor) => {
     status: 'Pending',
     priority: template.priority || 'Medium',
     dueDate: scheduledFor,
+    estimatedDurationMinutes: template.estimatedDurationMinutes || null,
     isRecurringTemplate: false,
     recurrenceEnabled: false,
     recurringParentTask: template._id,

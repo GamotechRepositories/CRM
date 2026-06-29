@@ -29,6 +29,11 @@ const clientSchema = new mongoose.Schema({
     enum: ['Recurring', 'Non Recurring'],
     required: true,
   },
+  clientCategory: {
+    type: String,
+    enum: ['Marketing', 'Property'],
+    default: 'Property',
+  },
   projectEndDate: {
     type: Date,
     required: function () {

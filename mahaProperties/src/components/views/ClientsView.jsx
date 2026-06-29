@@ -16,6 +16,7 @@ const ClientsView = () => {
   const [dateTo, setDateTo] = useState('')
   const [filterOnboardBy, setFilterOnboardBy] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [categoryTab, setCategoryTab] = useState('All')
 
   const fetchClients = async () => {
     try {
@@ -97,11 +98,16 @@ const ClientsView = () => {
           const clientStatus = c.status || 'Active'
           if (clientStatus !== filterStatus) return false
         }
+
+        if (categoryTab !== 'All') {
+          const category = c.clientCategory || 'Property'
+          if (category !== categoryTab) return false
+        }
       }
 
       return true
     })
-  }, [clients, searchText, dateFrom, dateTo, filterOnboardBy, filterStatus, focusId])
+  }, [clients, searchText, dateFrom, dateTo, filterOnboardBy, filterStatus, categoryTab, focusId])
 
   useEffect(() => {
     if (!focusId || loading) return
@@ -126,7 +132,7 @@ const ClientsView = () => {
       <div className='flex items-center justify-between mb-6'>
         <div>
           <h1 className='text-2xl font-bold text-gray-900'>Clients</h1>
-          <p className='text-gray-600 mt-1 text-sm'>Manage all your clients and accounts.</p>
+          <p className='text-gray-600 mt-1 text-sm'>Manage marketing clients and property clients separately.</p>
         </div>
         <div>
           <button
@@ -136,6 +142,23 @@ const ClientsView = () => {
             Add Client
           </button>
         </div>
+      </div>
+
+      <div className='flex flex-wrap gap-2 mb-4'>
+        {['All', 'Property', 'Marketing'].map((tab) => (
+          <button
+            key={tab}
+            type='button'
+            onClick={() => setCategoryTab(tab)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              categoryTab === tab
+                ? 'bg-blue-600 text-white'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {tab === 'All' ? 'All Clients' : `${tab} Clients`}
+          </button>
+        ))}
       </div>
 
       <div className='bg-white rounded-lg shadow border border-gray-100 p-4 mb-4'>
@@ -226,6 +249,7 @@ const ClientsView = () => {
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business Type</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Services</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Date</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Category</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Onboard By</th>
@@ -235,7 +259,7 @@ const ClientsView = () => {
             <tbody>
               {filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className='px-4 py-8 text-center text-gray-400'>
+                  <td colSpan={11} className='px-4 py-8 text-center text-gray-400'>
                     No clients found.
                   </td>
                 </tr>
@@ -254,6 +278,15 @@ const ClientsView = () => {
                     <td className='px-4 py-3'>{c.businessType}</td>
                     <td className='px-4 py-3'>{Array.isArray(c.services) ? c.services.join(', ') : '—'}</td>
                     <td className='px-4 py-3'>{c.date ? new Date(c.date).toLocaleDateString() : '—'}</td>
+                    <td className='px-4 py-3'>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        (c.clientCategory || 'Property') === 'Marketing'
+                          ? 'bg-purple-100 text-purple-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {c.clientCategory || 'Property'}
+                      </span>
+                    </td>
                     <td className='px-4 py-3'>{c.clientType || '—'}</td>
                     <td className='px-4 py-3'>
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${(c.status || 'Active') === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>

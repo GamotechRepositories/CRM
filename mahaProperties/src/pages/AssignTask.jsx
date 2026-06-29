@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +10,26 @@ const RECURRENCE_TYPES = [
   { value: 'monthly', label: 'Month(s)' },
 ]
 
+const AVAILABILITY_STYLES = {
+  available: 'bg-green-100 text-green-800 border-green-200',
+  moderate: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  busy: 'bg-orange-100 text-orange-800 border-orange-200',
+  on_leave: 'bg-red-100 text-red-800 border-red-200',
+  absent: 'bg-red-100 text-red-800 border-red-200',
+  checked_out: 'bg-gray-100 text-gray-700 border-gray-200',
+  inactive: 'bg-gray-100 text-gray-500 border-gray-200',
+}
+
+const formatDuration = (minutes) => {
+  const mins = Number(minutes)
+  if (!Number.isFinite(mins) || mins <= 0) return '—'
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h && m) return `${h}h ${m}m`
+  if (h) return `${h}h`
+  return `${m}m`
+}
+
 const AssignTask = () => {
   const { user, canAssignTask } = useAuth()
   const [searchParams] = useSearchParams()
@@ -18,6 +38,8 @@ const AssignTask = () => {
 
   const [projects, setProjects] = useState([])
   const [employees, setEmployees] = useState([])
+  const [availabilityMap, setAvailabilityMap] = useState({})
+  const [availabilityLoading, setAvailabilityLoading] = useState(false)
   const [form, setForm] = useState({
     project: projectIdFromUrl || '',
     title: '',
@@ -25,6 +47,8 @@ const AssignTask = () => {
     assignedTo: '',
     priority: 'Medium',
     dueDate: '',
+    durationHours: '',
+    durationMinutes: '',
     isRecurring: false,
     recurrenceType: 'daily',
     recurrenceInterval: 1,
@@ -33,6 +57,8 @@ const AssignTask = () => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  const availabilityDate = form.dueDate || form.recurrenceStartDate || new Date().toISOString().slice(0, 10)
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -61,6 +87,40 @@ const AssignTask = () => {
     if (projectIdFromUrl) setForm((f) => ({ ...f, project: projectIdFromUrl }))
   }, [projectIdFromUrl])
 
+  useEffect(() => {
+    let cancelled = false
+    const fetchAvailability = async () => {
+      setAvailabilityLoading(true)
+      try {
+        const res = await api.get('/employees/availability', { params: { date: availabilityDate } })
+        const list = Array.isArray(res.data) ? res.data : []
+        const map = {}
+        list.forEach((item) => {
+          map[String(item.employeeId)] = item
+        })
+        if (!cancelled) setAvailabilityMap(map)
+      } catch (err) {
+        console.error('Failed to fetch employee availability:', err)
+        if (!cancelled) setAvailabilityMap({})
+      } finally {
+        if (!cancelled) setAvailabilityLoading(false)
+      }
+    }
+    fetchAvailability()
+    return () => {
+      cancelled = true
+    }
+  }, [availabilityDate])
+
+  const selectedAvailability = form.assignedTo ? availabilityMap[String(form.assignedTo)] : null
+
+  const totalDurationMinutes = useMemo(() => {
+    const hours = Number(form.durationHours) || 0
+    const minutes = Number(form.durationMinutes) || 0
+    const total = hours * 60 + minutes
+    return total > 0 ? total : null
+  }, [form.durationHours, form.durationMinutes])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user?._id) {
@@ -69,6 +129,10 @@ const AssignTask = () => {
     }
     if (!form.project || !form.title || !form.assignedTo) {
       setError('Project, title, and assignee are required')
+      return
+    }
+    if (!totalDurationMinutes) {
+      setError('Please enter a time duration for this task')
       return
     }
     setLoading(true)
@@ -82,6 +146,7 @@ const AssignTask = () => {
         assignedBy: user._id,
         priority: form.priority,
         dueDate: form.dueDate || undefined,
+        estimatedDurationMinutes: totalDurationMinutes,
         isRecurring: form.isRecurring,
         recurrenceEnabled: form.isRecurring,
         recurrenceType: form.isRecurring ? form.recurrenceType : undefined,
@@ -112,7 +177,7 @@ const AssignTask = () => {
     <div className='p-8 w-full'>
       <div className='mb-8'>
         <h1 className='text-2xl font-bold text-gray-900'>Assign Task</h1>
-        <p className='text-gray-600 mt-1 text-sm'>Assign a task to an employee for a project.</p>
+        <p className='text-gray-600 mt-1 text-sm'>Assign a task with duration and check employee availability before assigning.</p>
       </div>
 
       <form onSubmit={handleSubmit} className='bg-white rounded-xl shadow-lg border border-gray-100 p-6 space-y-4'>
@@ -157,7 +222,12 @@ const AssignTask = () => {
         </div>
 
         <div>
-          <label className='block text-sm font-medium text-gray-700 mb-1'>Assign To *</label>
+          <div className='flex items-center justify-between gap-2 mb-1'>
+            <label className='block text-sm font-medium text-gray-700'>Assign To *</label>
+            <span className='text-xs text-gray-500'>
+              {availabilityLoading ? 'Checking availability…' : `Availability for ${availabilityDate}`}
+            </span>
+          </div>
           <select
             value={form.assignedTo}
             onChange={(e) => setForm((f) => ({ ...f, assignedTo: e.target.value }))}
@@ -165,12 +235,65 @@ const AssignTask = () => {
             className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
           >
             <option value=''>Select employee</option>
-            {employees.map((emp) => (
-              <option key={emp._id} value={emp._id}>
-                {emp.name} {emp.designation?.title ? `(${emp.designation.title})` : ''}
-              </option>
-            ))}
+            {employees.map((emp) => {
+              const avail = availabilityMap[String(emp._id)]
+              const suffix = avail ? ` — ${avail.availabilityLabel}` : ''
+              return (
+                <option key={emp._id} value={emp._id}>
+                  {emp.name}
+                  {emp.designation?.title ? ` (${emp.designation.title})` : ''}
+                  {suffix}
+                </option>
+              )
+            })}
           </select>
+
+          {selectedAvailability && (
+            <div className={`mt-3 rounded-lg border p-4 ${AVAILABILITY_STYLES[selectedAvailability.availabilityStatus] || AVAILABILITY_STYLES.available}`}>
+              <div className='flex flex-wrap items-start justify-between gap-2'>
+                <div>
+                  <p className='text-sm font-semibold'>{selectedAvailability.name}</p>
+                  <p className='text-xs mt-0.5 opacity-90'>{selectedAvailability.availabilityLabel}</p>
+                </div>
+                <span className='text-xs font-medium px-2 py-1 rounded-full bg-white/70 border border-current/20'>
+                  {selectedAvailability.openTaskCount} open task{selectedAvailability.openTaskCount === 1 ? '' : 's'}
+                </span>
+              </div>
+              <dl className='mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs'>
+                <div>
+                  <dt className='opacity-75'>Working hours</dt>
+                  <dd className='font-medium mt-0.5'>{selectedAvailability.workingHours || '—'}</dd>
+                </div>
+                <div>
+                  <dt className='opacity-75'>Scheduled load</dt>
+                  <dd className='font-medium mt-0.5'>{formatDuration(selectedAvailability.scheduledMinutes)}</dd>
+                </div>
+                <div>
+                  <dt className='opacity-75'>Attendance</dt>
+                  <dd className='font-medium mt-0.5'>
+                    {selectedAvailability.attendanceToday?.status || (selectedAvailability.onLeave ? 'On leave' : 'Not checked in')}
+                  </dd>
+                </div>
+                <div>
+                  <dt className='opacity-75'>Designation</dt>
+                  <dd className='font-medium mt-0.5'>{selectedAvailability.designation || '—'}</dd>
+                </div>
+              </dl>
+              {selectedAvailability.openTasks?.length > 0 && (
+                <div className='mt-3 pt-3 border-t border-current/20'>
+                  <p className='text-xs font-semibold mb-1.5'>Current open tasks</p>
+                  <ul className='space-y-1 text-xs'>
+                    {selectedAvailability.openTasks.slice(0, 4).map((t) => (
+                      <li key={t._id} className='flex justify-between gap-2'>
+                        <span className='truncate'>{t.title}</span>
+                        <span className='shrink-0 opacity-80'>{formatDuration(t.estimatedDurationMinutes)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
@@ -194,6 +317,40 @@ const AssignTask = () => {
               onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
               className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
             />
+          </div>
+        </div>
+
+        <div>
+          <label className='block text-sm font-medium text-gray-700 mb-1'>Time Duration *</label>
+          <p className='text-xs text-gray-500 mb-2'>How long should this task take to complete?</p>
+          <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 items-end'>
+            <div>
+              <label className='block text-xs text-gray-500 mb-1'>Hours</label>
+              <input
+                type='number'
+                min='0'
+                max='999'
+                value={form.durationHours}
+                onChange={(e) => setForm((f) => ({ ...f, durationHours: e.target.value }))}
+                placeholder='0'
+                className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+              />
+            </div>
+            <div>
+              <label className='block text-xs text-gray-500 mb-1'>Minutes</label>
+              <input
+                type='number'
+                min='0'
+                max='59'
+                value={form.durationMinutes}
+                onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))}
+                placeholder='0'
+                className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+              />
+            </div>
+            <div className='text-sm text-gray-600 pb-2'>
+              Total: <span className='font-semibold text-gray-900'>{totalDurationMinutes ? formatDuration(totalDurationMinutes) : '—'}</span>
+            </div>
           </div>
         </div>
 

@@ -15,6 +15,7 @@ const AddClient = () => {
     services: [],
     date: '',
     clientType: 'Recurring',
+    clientCategory: 'Property',
     projectEndDate: '',
     address: '',
     city: '',
@@ -102,6 +103,7 @@ const AddClient = () => {
           services: loadedServices,
           date: c.date ? c.date.split('T')[0] : '',
           clientType: c.clientType ?? 'Recurring',
+          clientCategory: c.clientCategory ?? 'Property',
           projectEndDate: c.projectEndDate ? c.projectEndDate.split('T')[0] : '',
           address: c.address ?? '',
           city: c.city ?? '',
@@ -246,6 +248,13 @@ const AddClient = () => {
               <div>
                 <label className='block text-sm font-medium text-gray-700'>Mail ID</label>
                 <input name='mailId' type='email' value={form.mailId} onChange={handleChange} required className={inputClass} />
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700'>Client Category</label>
+                <select name='clientCategory' value={form.clientCategory} onChange={handleChange} required className={inputClass}>
+                  <option value='Property'>Property Client</option>
+                  <option value='Marketing'>Marketing Client</option>
+                </select>
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700'>Business Type</label>

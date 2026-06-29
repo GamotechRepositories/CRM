@@ -20,9 +20,9 @@ const isHROnlyPath = (pathname) => {
   return HR_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 }
 
-const isAddProjectPath = (pathname) => {
-  return pathname === '/add-project' || pathname.startsWith('/projects/edit/')
-}
+const isAddProjectPath = (pathname) => pathname === '/add-project'
+
+const isEditProjectPath = (pathname) => pathname.startsWith('/projects/edit/')
 
 const isProjectsOnlyPath = (pathname) => {
   if (pathname === '/projects') return true
@@ -35,7 +35,7 @@ const isAssignTaskPath = (pathname) => pathname === '/assign-task'
 const isTasksListPath = (pathname) => pathname === '/tasks'
 
 const RoleGuard = ({ children }) => {
-  const { hasFullAccess, canAddProject, canViewProjects, canAssignTask, getDashboardPath } = useAuth()
+  const { hasFullAccess, canAddProject, canEditProject, canViewProjects, canAssignTask, getDashboardPath } = useAuth()
   const location = useLocation()
   const dashboardPath = getDashboardPath()
 
@@ -52,6 +52,9 @@ const RoleGuard = ({ children }) => {
     return <Navigate to={dashboardPath} replace />
   }
   if (isAddProjectPath(location.pathname) && !canAddProject()) {
+    return <Navigate to={dashboardPath} replace />
+  }
+  if (isEditProjectPath(location.pathname) && !canEditProject()) {
     return <Navigate to={dashboardPath} replace />
   }
   if (isAssignTaskPath(location.pathname) && !canAssignTask()) {

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getTaskDurationAndRatingFields } from '../../utils/taskFields.js';
 
 const taskSchema = new mongoose.Schema({
   project: {
@@ -36,6 +37,7 @@ const taskSchema = new mongoose.Schema({
   dueDate: {
     type: Date,
   },
+  ...getTaskDurationAndRatingFields('adsResearchGlobal_Employee'),
   completedAt: {
     type: Date,
     default: null,

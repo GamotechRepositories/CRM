@@ -107,6 +107,7 @@ const routeFiles = [
   'collaboratorRoute',
   'leaveRoute',
   'billingRoute',
+  'quotationRoute',
   'companyRoute',
   'expenseRoute',
   'clientProfileRoute',
