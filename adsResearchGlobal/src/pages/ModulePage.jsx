@@ -1,10 +1,16 @@
 import React from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MODULE_META } from '../config/moduleMeta'
+import PerformanceModuleView from '../components/views/PerformanceModuleView'
 
 const ModulePage = () => {
   const { slug } = useParams()
   const navigate = useNavigate()
+
+  if (slug === 'performance') {
+    return <PerformanceModuleView />
+  }
+
   const meta = MODULE_META[slug] || {
     title: slug?.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Module',
     section: 'CRM',

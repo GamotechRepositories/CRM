@@ -17,10 +17,11 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       .populate('client', 'name companyName')
       .select('projectName status priority progress startDate endDate deadline client department projectManager')
       .lean(),
-    Task.find({ assignedTo: employeeId })
+    Task.find({ assignedTo: employeeId, isRecurringTemplate: { $ne: true } })
       .populate('project', 'projectName')
-      .select('title status priority dueDate completedAt project')
-      .sort({ dueDate: -1 })
+      .populate('rating.ratedBy', 'name designation')
+      .select('title status priority dueDate completedAt project estimatedDurationMinutes rating createdAt')
+      .sort({ updatedAt: -1 })
       .lean(),
     Attendance.find({ employee: employeeId }).sort({ date: -1 }).limit(60).lean(),
     Leave.find({ employee: employeeId }).sort({ startDate: -1 }).lean(),
@@ -48,10 +49,53 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       .map((p) => ({ ...p, role: 'Team Member' })),
   ];
 
+  const ratedTasks = tasks.filter((t) => t.rating?.score);
+  const taskRatingScores = ratedTasks
+    .map((t) => Number(t.rating.score))
+    .filter((score) => Number.isFinite(score) && score > 0);
+  const taskRatingAverage = taskRatingScores.length
+    ? Math.round((taskRatingScores.reduce((sum, score) => sum + score, 0) / taskRatingScores.length) * 10) / 10
+    : null;
+
+  const taskRatingPerformance = {
+    averageRating: taskRatingAverage,
+    ratedTaskCount: ratedTasks.length,
+    totalAssignedTasks: tasks.length,
+    assignedTasks: tasks.map((t) => ({
+      taskId: t._id,
+      title: t.title,
+      projectName: t.project?.projectName || '',
+      status: t.status,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      completedAt: t.completedAt,
+      createdAt: t.createdAt,
+      estimatedDurationMinutes: t.estimatedDurationMinutes,
+      ratingScore: t.rating?.score ?? null,
+      ratingComments: t.rating?.comments || '',
+      ratedAt: t.rating?.ratedAt || null,
+      ratedByName: t.rating?.ratedBy?.name || '',
+    })),
+    ratings: ratedTasks
+      .map((t) => ({
+        taskId: t._id,
+        title: t.title,
+        projectName: t.project?.projectName || '',
+        score: t.rating.score,
+        comments: t.rating.comments || '',
+        ratedAt: t.rating.ratedAt,
+        ratedByName: t.rating.ratedBy?.name || '',
+        status: t.status,
+        completedAt: t.completedAt,
+      }))
+      .sort((a, b) => new Date(b.ratedAt || 0) - new Date(a.ratedAt || 0)),
+  };
+
   return {
     employee,
     assignedProjects,
     tasks,
+    taskRatingPerformance,
     attendance: {
       summary: { presentDays, absentDays, lateMarks, totalRecords: attendance.length },
       records: attendance,

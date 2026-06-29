@@ -15,6 +15,25 @@ const TABS = [
   'Activity Log',
 ]
 
+const taskStatusClass = (status) => {
+  switch (status) {
+    case 'Completed': return 'bg-green-100 text-green-800'
+    case 'In Progress': return 'bg-blue-100 text-blue-800'
+    case 'Cancelled': return 'bg-gray-100 text-gray-600'
+    default: return 'bg-amber-100 text-amber-800'
+  }
+}
+
+const formatDuration = (minutes) => {
+  const mins = Number(minutes)
+  if (!Number.isFinite(mins) || mins <= 0) return '—'
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h && m) return `${h}h ${m}m`
+  if (h) return `${h}h`
+  return `${m}m`
+}
+
 const formatDate = (d) => {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -316,6 +335,24 @@ const EmployeeProfileView = () => {
     const leaveBalanceTotal = Object.values(attendance.leaveBalance || {}).reduce((s, v) => s + (Number(v) || 0), 0)
     const latestReview = performance.reviews?.[performance.reviews.length - 1]
     const rating = latestReview?.rating || performance.appraisalHistory?.slice(-1)?.[0]?.score || 0
+    const taskRating = profile.taskRatingPerformance || {}
+    const taskAvgRating = taskRating.averageRating ?? null
+    const assignedTasks = taskRating.assignedTasks?.length
+      ? taskRating.assignedTasks
+      : (profile.tasks || []).map((t) => ({
+          taskId: t._id,
+          title: t.title,
+          projectName: t.project?.projectName || '',
+          status: t.status,
+          priority: t.priority,
+          dueDate: t.dueDate,
+          completedAt: t.completedAt,
+          estimatedDurationMinutes: t.estimatedDurationMinutes,
+          ratingScore: t.rating?.score ?? null,
+          ratingComments: t.rating?.comments || '',
+          ratedAt: t.rating?.ratedAt || null,
+          ratedByName: t.rating?.ratedBy?.name || '',
+        }))
 
     const activities = [
       ...(notes.activityLog || []).map((a) => ({ date: a.date, text: a.action, by: a.by })),
@@ -325,14 +362,14 @@ const EmployeeProfileView = () => {
       { date: e.updatedAt, text: 'Profile updated', by: 'System' },
     ].filter((a) => a.date).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6)
 
-    return { e, docs, payroll, skills, assets, access, notes, performance, attendance, halfDays, docCount, assetCount, leaveBalanceTotal, rating, latestReview, activities }
+    return { e, docs, payroll, skills, assets, access, notes, performance, attendance, halfDays, docCount, assetCount, leaveBalanceTotal, rating, taskRating, taskAvgRating, assignedTasks, latestReview, activities }
   }, [profile])
 
   if (loading) return <div className='p-8 text-sm text-gray-600'>Loading employee profile...</div>
   if (error) return <div className='p-8 text-sm text-red-600'>{error}</div>
   if (!derived) return <div className='p-8 text-sm text-gray-600'>Employee not found.</div>
 
-  const { e, docs, payroll, skills, assets, access, notes, performance, attendance, halfDays, docCount, assetCount, leaveBalanceTotal, rating, latestReview, activities } = derived
+  const { e, docs, payroll, skills, assets, access, notes, performance, attendance, halfDays, docCount, assetCount, leaveBalanceTotal, rating, taskRating, taskAvgRating, assignedTasks, latestReview, activities } = derived
   const empStatus = e.employmentStatus || e.status || 'Active'
 
   const goTab = (tab) => setActiveTab(tab)
@@ -388,11 +425,22 @@ const EmployeeProfileView = () => {
       </InfoCard>
 
       <InfoCard title='Performance Overview' icon={<CardIcon><svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z' /></svg></CardIcon>} actionLabel='View More' onAction={() => goTab('Performance')}>
-        <p className='text-xs text-gray-500 mb-2'>Current Rating</p>
+        <p className='text-xs text-gray-500 mb-2'>HR Review Rating</p>
         <div className='flex items-center gap-3 mb-4'>
           <StarRating rating={rating} />
           <span className='text-lg font-bold text-gray-900'>{rating ? `${rating} / 5` : '—'}</span>
         </div>
+        <p className='text-xs text-gray-500 mb-2'>Avg Task Rating</p>
+        <div className='flex items-center gap-3 mb-4'>
+          <StarRating rating={taskAvgRating || 0} />
+          <span className='text-lg font-bold text-gray-900'>
+            {taskAvgRating != null ? `${taskAvgRating} / 5` : '—'}
+          </span>
+          {taskRating.ratedTaskCount > 0 && (
+            <span className='text-xs text-gray-500'>({taskRating.ratedTaskCount} rated)</span>
+          )}
+        </div>
+        <DetailRow label='Rated Tasks' value={taskRating.ratedTaskCount ? `${taskRating.ratedTaskCount} of ${taskRating.totalAssignedTasks || 0}` : '—'} />
         <DetailRow label='Last Review' value={formatDate(latestReview?.date || performance.appraisalHistory?.slice(-1)?.[0]?.date)} />
         <DetailRow label='Next Review' value='—' />
       </InfoCard>
@@ -490,13 +538,96 @@ const EmployeeProfileView = () => {
       </div>
     ),
     Performance: (
-      <InfoCard title='Performance'>
-        <DetailRow label='Current Rating' value={rating ? `${rating} / 5` : '—'} />
-        {(performance.kpis || []).map((k, i) => <DetailRow key={i} label={`KPI ${i + 1}`} value={k} />)}
-        {(performance.reviews || []).map((r, i) => <DetailRow key={i} label={`Review ${formatDate(r.date)}`} value={`Rating ${r.rating}: ${r.comments || ''}`} />)}
-        {(performance.goals || []).map((g, i) => <DetailRow key={i} label={`Goal ${i + 1}`} value={`${g.title} (${g.status})`} />)}
-        {!performance.kpis?.length && !performance.reviews?.length && <p className='text-sm text-gray-500'>No performance data yet.</p>}
-      </InfoCard>
+      <div className='space-y-5'>
+        <InfoCard title='HR Performance Reviews'>
+          <DetailRow label='Current Review Rating' value={rating ? `${rating} / 5` : '—'} />
+          {(performance.kpis || []).map((k, i) => <DetailRow key={i} label={`KPI ${i + 1}`} value={k} />)}
+          {(performance.reviews || []).map((r, i) => <DetailRow key={i} label={`Review ${formatDate(r.date)}`} value={`Rating ${r.rating}: ${r.comments || ''}`} />)}
+          {(performance.goals || []).map((g, i) => <DetailRow key={i} label={`Goal ${i + 1}`} value={`${g.title} (${g.status})`} />)}
+          {!performance.kpis?.length && !performance.reviews?.length && !performance.goals?.length && (
+            <p className='text-sm text-gray-500'>No HR review data yet.</p>
+          )}
+        </InfoCard>
+
+        <InfoCard title='Assigned Tasks & Ratings'>
+          <div className='flex flex-wrap items-center justify-between gap-4 mb-5 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100'>
+            <div>
+              <p className='text-xs font-semibold text-blue-700 uppercase tracking-wide'>Average Task Rating</p>
+              <div className='flex items-center gap-3 mt-2'>
+                <StarRating rating={taskAvgRating || 0} />
+                <span className='text-2xl font-bold text-gray-900'>
+                  {taskAvgRating != null ? `${taskAvgRating} / 5` : '—'}
+                </span>
+              </div>
+              <p className='text-xs text-gray-500 mt-1'>
+                Calculated from {taskRating.ratedTaskCount ?? 0} rated task{taskRating.ratedTaskCount === 1 ? '' : 's'}
+                {' '}out of {assignedTasks.length} assigned
+              </p>
+            </div>
+            <div className='grid grid-cols-2 gap-3'>
+              <StatBox label='Assigned' value={assignedTasks.length} color='blue' />
+              <StatBox label='Rated' value={taskRating.ratedTaskCount ?? 0} color='green' />
+            </div>
+          </div>
+
+          {assignedTasks.length ? (
+            <div className='overflow-x-auto rounded-lg border border-gray-200'>
+              <table className='w-full text-sm'>
+                <thead className='bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase'>
+                  <tr>
+                    <th className='px-4 py-3'>Task</th>
+                    <th className='px-4 py-3'>Project</th>
+                    <th className='px-4 py-3'>Status</th>
+                    <th className='px-4 py-3'>Due Date</th>
+                    <th className='px-4 py-3'>Duration</th>
+                    <th className='px-4 py-3'>Rating</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-100'>
+                  {assignedTasks.map((task) => (
+                    <tr key={task.taskId} className='hover:bg-gray-50/80'>
+                      <td className='px-4 py-3'>
+                        <p className='font-medium text-gray-900'>{task.title}</p>
+                        {task.ratingComments && (
+                          <p className='text-xs text-gray-500 mt-1 line-clamp-2'>&ldquo;{task.ratingComments}&rdquo;</p>
+                        )}
+                      </td>
+                      <td className='px-4 py-3 text-gray-600'>{task.projectName || '—'}</td>
+                      <td className='px-4 py-3'>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${taskStatusClass(task.status)}`}>
+                          {task.status || 'Pending'}
+                        </span>
+                      </td>
+                      <td className='px-4 py-3 text-gray-600 whitespace-nowrap'>{formatDate(task.dueDate)}</td>
+                      <td className='px-4 py-3 text-gray-600 whitespace-nowrap'>{formatDuration(task.estimatedDurationMinutes)}</td>
+                      <td className='px-4 py-3'>
+                        {task.ratingScore ? (
+                          <div>
+                            <div className='flex items-center gap-1.5'>
+                              <StarRating rating={task.ratingScore} />
+                              <span className='text-sm font-bold text-gray-900'>{task.ratingScore}/5</span>
+                            </div>
+                            {task.ratedByName && (
+                              <p className='text-[10px] text-gray-400 mt-1'>
+                                by {task.ratedByName}
+                                {task.ratedAt ? ` · ${formatDate(task.ratedAt)}` : ''}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className='text-xs text-gray-400'>Not rated</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className='text-sm text-gray-500 py-6 text-center'>No tasks assigned to this employee yet.</p>
+          )}
+        </InfoCard>
+      </div>
     ),
     Skills: (
       <InfoCard title='Skills & Certifications'>
@@ -627,10 +758,12 @@ const EmployeeProfileView = () => {
               <DetailRow label='Leave Balance' value={`${leaveBalanceTotal} Days`} />
               <DetailRow label='Present This Month' value={`${attendance.summary?.presentDays ?? 0} Days`} />
               <DetailRow label='Performance Rating' value={rating ? `${rating} / 5` : '—'} />
+              <DetailRow label='Avg Task Rating' value={taskAvgRating != null ? `${taskAvgRating} / 5` : '—'} />
+              <DetailRow label='Rated Tasks' value={`${taskRating.ratedTaskCount ?? 0} / ${assignedTasks.length}`} />
               <DetailRow label='Documents' value={`${docCount} Files`} />
               <DetailRow label='Assets Assigned' value={`${assetCount} Items`} />
               <DetailRow label='Assigned Projects' value={profile.assignedProjects?.length ?? 0} />
-              <DetailRow label='Assigned Tasks' value={profile.tasks?.length ?? 0} />
+              <DetailRow label='Assigned Tasks' value={assignedTasks.length} />
             </InfoCard>
 
             <InfoCard title='Recent Activity' icon={<CardIcon><svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' /></svg></CardIcon>}>
