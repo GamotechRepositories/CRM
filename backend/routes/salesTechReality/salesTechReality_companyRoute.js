@@ -6,9 +6,14 @@ import {
   updateCompany,
   deleteCompany,
 } from '../../controllers/salesTechReality/salesTechReality_companyController.js';
+import Company from '../../models/salesTechReality/salesTechReality_company.js';
+import { createCompanyProfileHandlers } from '../../utils/createCompanyProfileHandlers.js';
 
 const router = Router();
+const { getCompanyProfile, upsertCompanyProfile } = createCompanyProfileHandlers({ Company });
 
+router.get('/company-profile', getCompanyProfile);
+router.put('/company-profile', upsertCompanyProfile);
 router.get('/companies', getCompanies);
 router.post('/companies', createCompany);
 router.get('/companies/:id', getCompanyById);

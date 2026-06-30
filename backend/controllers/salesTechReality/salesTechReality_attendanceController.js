@@ -6,6 +6,33 @@ const getStatus = (durationHours) => {
   return 'Half Day';
 };
 
+const getTodayRange = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+  return { today, tomorrow };
+};
+
+const appendLocationPoint = (attendance, { latitude, longitude, address, at = new Date(), minMove = 0.00025 }) => {
+  if (!attendance) return;
+  if (Number.isNaN(latitude) || Number.isNaN(longitude)) return;
+  const timeline = Array.isArray(attendance.locationTimeline) ? attendance.locationTimeline : [];
+  const last = timeline[timeline.length - 1];
+  const moved =
+    !last ||
+    Math.abs(Number(last.latitude) - latitude) > minMove ||
+    Math.abs(Number(last.longitude) - longitude) > minMove ||
+    ((address || '').trim() && (last.address || '').trim() !== (address || '').trim());
+  if (!moved) return;
+  timeline.push({
+    at,
+    latitude,
+    longitude,
+    address: typeof address === 'string' ? address.trim() : '',
+  });
+  attendance.locationTimeline = timeline.slice(-200);
+};
+
 export const checkIn = async (req, res) => {
   try {
     const { employee, latitude, longitude, address } = req.body;
@@ -18,12 +45,11 @@ export const checkIn = async (req, res) => {
       return res.status(400).json({ message: 'Check-in location is required. Enable device location and allow this site to use it.' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { today, tomorrow } = getTodayRange();
 
     let attendance = await Attendance.findOne({
       employee,
-      date: { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+      date: { $gte: today, $lt: tomorrow },
     });
 
     if (attendance?.checkIn) {
@@ -49,6 +75,7 @@ export const checkIn = async (req, res) => {
     } else {
       Object.assign(attendance, checkInPayload);
     }
+    appendLocationPoint(attendance, { latitude: lat, longitude: lon, address, at: checkInPayload.checkIn, minMove: 0 });
 
     await attendance.save();
     const populated = await Attendance.findById(attendance._id).populate('employee');
@@ -63,12 +90,11 @@ export const checkOut = async (req, res) => {
     const { employee, latitude, longitude, address } = req.body;
     const lat = latitude == null ? null : (typeof latitude === 'number' ? latitude : Number(latitude));
     const lon = longitude == null ? null : (typeof longitude === 'number' ? longitude : Number(longitude));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { today, tomorrow } = getTodayRange();
 
     let attendance = await Attendance.findOne({
       employee,
-      date: { $gte: today, $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000) },
+      date: { $gte: today, $lt: tomorrow },
     });
 
     // If no check-in today, apply auto checkout for previous day's open session (day ended)
@@ -88,7 +114,18 @@ export const checkOut = async (req, res) => {
         attendance.checkOut = recordDate;
       }
     } else {
-      attendance.checkOut = new Date();
+      const now = new Date();
+      attendance.checkOut = now;
+      if (attendance.breakStartedAt) {
+        const breakMins = Math.max(0, Math.floor((now - attendance.breakStartedAt) / (1000 * 60)));
+        attendance.breakDurationMinutes = (attendance.breakDurationMinutes || 0) + breakMins;
+        attendance.breakStartedAt = null;
+      }
+      if (attendance.meetingStartedAt) {
+        const meetingMins = Math.max(0, Math.floor((now - attendance.meetingStartedAt) / (1000 * 60)));
+        attendance.meetingDurationMinutes = (attendance.meetingDurationMinutes || 0) + meetingMins;
+        attendance.meetingStartedAt = null;
+      }
       // Only capture location for a real (today) checkout initiated by user
       if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat != null && lon != null) {
         attendance.checkOutLatitude = lat;
@@ -96,6 +133,7 @@ export const checkOut = async (req, res) => {
         if (typeof address === 'string' && address.trim()) {
           attendance.checkOutAddress = address.trim();
         }
+        appendLocationPoint(attendance, { latitude: lat, longitude: lon, address, at: now });
       }
     }
 
@@ -104,7 +142,8 @@ export const checkOut = async (req, res) => {
     }
 
     const durationMs = attendance.checkOut - attendance.checkIn;
-    attendance.durationHours = durationMs / (1000 * 60 * 60);
+    const breakMs = (attendance.breakDurationMinutes || 0) * 60 * 1000;
+    attendance.durationHours = Math.max(0, durationMs - breakMs) / (1000 * 60 * 60);
     attendance.status = getStatus(attendance.durationHours);
 
     await attendance.save();
@@ -185,5 +224,119 @@ export const getAttendanceByEmployee = async (req, res) => {
     res.status(200).json(attendances);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching attendance', error });
+  }
+};
+
+export const startBreak = async (req, res) => {
+  try {
+    const { employee } = req.body;
+    if (!employee) return res.status(400).json({ message: 'Employee is required' });
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+    });
+    if (!attendance?.checkIn) return res.status(400).json({ message: 'Check in first to start break' });
+    if (attendance.checkOut) return res.status(400).json({ message: 'Cannot start break after check out' });
+    if (attendance.breakStartedAt) return res.status(400).json({ message: 'Break already started' });
+    attendance.breakStartedAt = new Date();
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({ message: 'Break started', attendance: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Error starting break', error });
+  }
+};
+
+export const endBreak = async (req, res) => {
+  try {
+    const { employee } = req.body;
+    if (!employee) return res.status(400).json({ message: 'Employee is required' });
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+    });
+    if (!attendance?.breakStartedAt) return res.status(400).json({ message: 'No active break found' });
+    const now = new Date();
+    const mins = Math.max(0, Math.floor((now - attendance.breakStartedAt) / (1000 * 60)));
+    attendance.breakDurationMinutes = (attendance.breakDurationMinutes || 0) + mins;
+    attendance.breakStartedAt = null;
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({ message: 'Break ended', attendance: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Error ending break', error });
+  }
+};
+
+export const startMeeting = async (req, res) => {
+  try {
+    const { employee } = req.body;
+    if (!employee) return res.status(400).json({ message: 'Employee is required' });
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+    });
+    if (!attendance?.checkIn) return res.status(400).json({ message: 'Check in first to start meeting' });
+    if (attendance.checkOut) return res.status(400).json({ message: 'Cannot start meeting after check out' });
+    if (attendance.meetingStartedAt) return res.status(400).json({ message: 'Meeting already started' });
+    attendance.meetingStartedAt = new Date();
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({ message: 'Meeting started', attendance: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Error starting meeting', error });
+  }
+};
+
+export const endMeeting = async (req, res) => {
+  try {
+    const { employee } = req.body;
+    if (!employee) return res.status(400).json({ message: 'Employee is required' });
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+    });
+    if (!attendance?.meetingStartedAt) return res.status(400).json({ message: 'No active meeting found' });
+    const now = new Date();
+    const mins = Math.max(0, Math.floor((now - attendance.meetingStartedAt) / (1000 * 60)));
+    attendance.meetingDurationMinutes = (attendance.meetingDurationMinutes || 0) + mins;
+    attendance.meetingStartedAt = null;
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({ message: 'Meeting ended', attendance: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Error ending meeting', error });
+  }
+};
+
+export const updateLocationTimeline = async (req, res) => {
+  try {
+    const { employee, latitude, longitude, address } = req.body;
+    const lat = typeof latitude === 'number' ? latitude : Number(latitude);
+    const lon = typeof longitude === 'number' ? longitude : Number(longitude);
+    if (!employee) return res.status(400).json({ message: 'Employee is required' });
+    if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      return res.status(400).json({ message: 'Valid latitude and longitude are required' });
+    }
+
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+    });
+    if (!attendance?.checkIn || attendance.checkOut) {
+      return res.status(400).json({ message: 'No active attendance session found' });
+    }
+
+    appendLocationPoint(attendance, { latitude: lat, longitude: lon, address, at: new Date() });
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({ message: 'Location timeline updated', attendance: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating location timeline', error });
   }
 };

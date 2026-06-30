@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
+import { useAuth } from '../../context/AuthContext'
 
 const TABS = [
   'Overview',
@@ -292,10 +293,13 @@ const StarRating = ({ rating = 0 }) => {
   return <div className='flex items-center gap-1'>{stars}</div>
 }
 
-const EmployeeProfileView = () => {
-  const { id } = useParams()
+const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false }) => {
+  const { id: routeId } = useParams()
+  const id = employeeIdProp || routeId
   const navigate = useNavigate()
+  const { getDashboardPath } = useAuth()
   const [profile, setProfile] = useState(null)
+  const [assignedAssets, setAssignedAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('Overview')
@@ -314,6 +318,19 @@ const EmployeeProfileView = () => {
       }
     }
     if (id) fetchProfile()
+  }, [id])
+
+  useEffect(() => {
+    const fetchAssignedAssets = async () => {
+      if (!id) return
+      try {
+        const res = await api.get('/assets', { params: { employeeId: id } })
+        setAssignedAssets(Array.isArray(res.data) ? res.data : [])
+      } catch {
+        setAssignedAssets([])
+      }
+    }
+    fetchAssignedAssets()
   }, [id])
 
   const derived = useMemo(() => {
@@ -639,14 +656,42 @@ const EmployeeProfileView = () => {
       </InfoCard>
     ),
     Assets: (
-      <InfoCard title='Assets Assigned'>
-        <DetailRow label='Laptop' value={val(assets.laptop)} />
-        <DetailRow label='Desktop' value={val(assets.desktop)} />
-        <DetailRow label='Mobile Phone' value={val(assets.mobilePhone)} />
-        <DetailRow label='SIM Card' value={val(assets.simCard)} />
-        <DetailRow label='Access Cards' value={val(assets.accessCards)} />
-        <DetailRow label='Other Assets' value={val(assets.other)} />
-      </InfoCard>
+      <div className='space-y-5'>
+        {assignedAssets.length > 0 && (
+          <InfoCard title='Company Assets'>
+            <div className='overflow-x-auto -mx-1'>
+              <table className='w-full text-sm'>
+                <thead>
+                  <tr className='text-left text-xs font-semibold text-gray-500 uppercase border-b border-gray-100'>
+                    <th className='py-2 pr-3'>Asset</th>
+                    <th className='py-2 pr-3'>Type</th>
+                    <th className='py-2 pr-3'>Tag</th>
+                    <th className='py-2'>Assigned On</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-50'>
+                  {assignedAssets.map((asset) => (
+                    <tr key={asset._id}>
+                      <td className='py-2.5 pr-3 font-medium text-gray-900'>{asset.name}</td>
+                      <td className='py-2.5 pr-3 text-gray-600'>{asset.assetType}</td>
+                      <td className='py-2.5 pr-3 font-mono text-xs text-gray-500'>{asset.assetTag || '—'}</td>
+                      <td className='py-2.5 text-gray-600'>{formatDate(asset.assignedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </InfoCard>
+        )}
+        <InfoCard title='Asset Records'>
+          <DetailRow label='Laptop' value={val(assets.laptop)} />
+          <DetailRow label='Desktop' value={val(assets.desktop)} />
+          <DetailRow label='Mobile Phone' value={val(assets.mobilePhone)} />
+          <DetailRow label='SIM Card' value={val(assets.simCard)} />
+          <DetailRow label='Access Cards' value={val(assets.accessCards)} />
+          <DetailRow label='Other Assets' value={val(assets.other)} />
+        </InfoCard>
+      </div>
     ),
     'Access & Permissions': (
       <InfoCard title='Access & Permissions'>
@@ -681,17 +726,42 @@ const EmployeeProfileView = () => {
       <div className='w-full'>
         {/* Page header */}
         <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
-          <h1 className='text-2xl font-bold text-gray-900'>Employee Profile</h1>
+          <div>
+            {isSelfProfile && (
+              <nav className='text-sm text-gray-500 mb-2'>
+                <span className='text-gray-900 font-medium'>My Workspace</span>
+                <span className='mx-2 text-gray-300'>›</span>
+                <span className='text-gray-900 font-medium'>My Profile</span>
+              </nav>
+            )}
+            <h1 className='text-2xl font-bold text-gray-900'>{isSelfProfile ? 'My Profile' : 'Employee Profile'}</h1>
+            {isSelfProfile && (
+              <p className='text-sm text-gray-500 mt-1'>Your complete employment, payroll, attendance, and performance information.</p>
+            )}
+          </div>
           <div className='flex flex-wrap gap-2'>
-            <button type='button' className='px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'>
-              Generate ID Card
-            </button>
-            <button type='button' onClick={() => navigate(`/employees/edit/${id}`)} className='px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700'>
-              Edit Profile
-            </button>
-            <button type='button' onClick={() => navigate('/employees')} className='px-4 py-2 text-sm font-medium bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100'>
-              Back to List
-            </button>
+            {!isSelfProfile && (
+              <>
+                <button type='button' className='px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'>
+                  Generate ID Card
+                </button>
+                <button type='button' onClick={() => navigate(`/employees/edit/${id}`)} className='px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700'>
+                  Edit Profile
+                </button>
+                <button type='button' onClick={() => navigate('/employees')} className='px-4 py-2 text-sm font-medium bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100'>
+                  Back to List
+                </button>
+              </>
+            )}
+            {isSelfProfile && (
+              <button
+                type='button'
+                onClick={() => navigate(getDashboardPath())}
+                className='px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'
+              >
+                Back to Dashboard
+              </button>
+            )}
           </div>
         </div>
 
@@ -706,8 +776,8 @@ const EmployeeProfileView = () => {
                 <h2 className='text-2xl font-bold text-gray-900'>{e.name}</h2>
                 <StatusBadge status={empStatus} />
               </div>
-              <p className='text-blue-600 font-medium'>{e.designation?.title || '—'}</p>
-              <p className='text-sm text-gray-500 mt-1'>Employee ID: {val(e.employeeCode || e._id)}</p>
+              <p className='text-blue-600 font-medium'>{e.designation?.title || e.designation?.name || e.designation || '—'}</p>
+              <p className='text-sm text-gray-500 mt-1'>{val(e.department)}</p>
               <div className='flex flex-wrap gap-4 mt-4 text-sm text-gray-600'>
                 <span className='flex items-center gap-1.5'><MailIcon /> {val(e.email)}</span>
                 <span className='flex items-center gap-1.5'><PhoneIcon /> {val(e.officialMobile || e.personalMobile)}</span>
@@ -761,7 +831,7 @@ const EmployeeProfileView = () => {
               <DetailRow label='Avg Task Rating' value={taskAvgRating != null ? `${taskAvgRating} / 5` : '—'} />
               <DetailRow label='Rated Tasks' value={`${taskRating.ratedTaskCount ?? 0} / ${assignedTasks.length}`} />
               <DetailRow label='Documents' value={`${docCount} Files`} />
-              <DetailRow label='Assets Assigned' value={`${assetCount} Items`} />
+              <DetailRow label='Assets Assigned' value={`${assignedAssets.length || assetCount} Items`} />
               <DetailRow label='Assigned Projects' value={profile.assignedProjects?.length ?? 0} />
               <DetailRow label='Assigned Tasks' value={assignedTasks.length} />
             </InfoCard>

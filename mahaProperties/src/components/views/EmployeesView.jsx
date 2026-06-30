@@ -367,7 +367,6 @@ const EmployeesView = () => {
                   <thead>
                     <tr className='bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide'>
                       <th className='px-5 py-3'>Employee</th>
-                      <th className='px-5 py-3'>Employee ID</th>
                       <th className='px-5 py-3'>Department</th>
                       <th className='px-5 py-3'>Designation</th>
                       <th className='px-5 py-3'>Email</th>
@@ -379,12 +378,12 @@ const EmployeesView = () => {
                   <tbody className='divide-y divide-gray-100'>
                     {paginatedRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className='px-5 py-12 text-center text-gray-500'>
+                        <td colSpan={7} className='px-5 py-12 text-center text-gray-500'>
                           No employees match your filters.
                         </td>
                       </tr>
                     ) : (
-                      paginatedRows.map(({ emp, displayStatus, code }) => (
+                      paginatedRows.map(({ emp, displayStatus }) => (
                         <tr
                           key={emp._id}
                           id={`employee-focus-${emp._id}`}
@@ -397,12 +396,9 @@ const EmployeesView = () => {
                               <EmployeeAvatar employee={emp} />
                               <div>
                                 <p className='font-medium text-gray-900'>{emp.name}</p>
-                                <p className='text-xs text-gray-400'>{code}</p>
+                                <p className='text-xs text-gray-400'>{getDesignationTitle(emp)}</p>
                               </div>
                             </div>
-                          </td>
-                          <td className='px-5 py-3 text-gray-700 font-mono text-xs'>
-                            {getEmployeeCode(emp)}
                           </td>
                           <td className='px-5 py-3 text-gray-700'>{emp.department || '—'}</td>
                           <td className='px-5 py-3 text-gray-700'>{getDesignationTitle(emp)}</td>

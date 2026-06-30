@@ -14,6 +14,7 @@ const HR_ONLY_PATHS = [
   '/campaigns',
   '/reports',
   '/calendar',
+  '/company-profile',
 ]
 
 const isHROnlyPath = (pathname) => {
@@ -35,11 +36,16 @@ const isAssignTaskPath = (pathname) => pathname === '/assign-task'
 const isTasksListPath = (pathname) => pathname === '/tasks'
 
 const RoleGuard = ({ children }) => {
-  const { hasFullAccess, canAddProject, canEditProject, canViewProjects, canAssignTask, getDashboardPath } = useAuth()
+  const { user, hasFullAccess, canAddProject, canEditProject, canViewProjects, canAssignTask, getDashboardPath } = useAuth()
   const location = useLocation()
   const dashboardPath = getDashboardPath()
 
+  const ownProfileMatch = location.pathname.match(/^\/employees\/([^/]+)\/profile$/)
+  const isOwnProfile = ownProfileMatch && user?._id && String(ownProfileMatch[1]) === String(user._id)
+
   if (hasFullAccess()) return children
+
+  if (isOwnProfile) return children
 
   const tasksDetailMatch = location.pathname.match(/^\/tasks\/([^/]+)$/)
   if (tasksDetailMatch) {

@@ -141,6 +141,16 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       ],
     },
     {
+      id: 'company',
+      label: 'Company',
+      icon: '🏢',
+      type: 'group',
+      requiresFullAccess: true,
+      children: [
+        { id: 'company-profile', label: 'Company Profile', path: '/company-profile' },
+      ],
+    },
+    {
       id: 'reports',
       label: 'Reports & Analytics',
       icon: '📊',

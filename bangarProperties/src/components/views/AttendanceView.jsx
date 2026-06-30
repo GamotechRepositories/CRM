@@ -10,6 +10,9 @@ import {
   resolveAddressFromCoords,
 } from '../../utils/geolocation'
 
+const getDesignationTitle = (employee) =>
+  employee?.designation?.title || employee?.designation?.name || employee?.designation || employee?.department || '—'
+
 const LATE_AFTER_HOUR = 9
 const LATE_AFTER_MINUTE = 30
 const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#3b82f6']
@@ -24,6 +27,21 @@ const formatTime = (ms) => {
 
 const formatClock = (date = new Date()) =>
   date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+const formatMinutesAsHours = (minutes) => {
+  const safeMinutes = Number(minutes) || 0
+  return (safeMinutes / 60).toFixed(1)
+}
+
+const trackedMinutesFromRow = (row, startedAtKey, totalMinutesKey, nowMs = Date.now()) => {
+  const savedMinutes = Number(row?.[totalMinutesKey]) || 0
+  const startedAt = row?.[startedAtKey]
+  if (!startedAt) return savedMinutes
+  const startMs = new Date(startedAt).getTime()
+  if (Number.isNaN(startMs)) return savedMinutes
+  const liveMinutes = Math.max(0, (nowMs - startMs) / (1000 * 60))
+  return savedMinutes + liveMinutes
+}
 
 const formatAttendanceTime = (value) => {
   if (!value) return '—'
@@ -49,13 +67,45 @@ const getTodayDateKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const toDateKey = (value) => {
+  const d = new Date(value)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const getCurrentMonthKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const getDaysInMonth = (monthKey) => {
+  const [y, m] = monthKey.split('-').map(Number)
+  const count = new Date(y, m, 0).getDate()
+  return Array.from({ length: count }, (_, i) => {
+    const day = i + 1
+    return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  })
+}
+
+const csvEscape = (value) => {
+  const s = String(value ?? '')
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
+}
+
+const formatDurationHours = (row) => {
+  const ms = durationMsFromRow(row)
+  if (ms == null) return ''
+  return (ms / (1000 * 60 * 60)).toFixed(2)
+}
+
 const durationMsFromRow = (row, nowMs = Date.now()) => {
   if (!row?.checkIn) return null
   const start = new Date(row.checkIn).getTime()
   if (Number.isNaN(start)) return null
   const end = row.checkOut ? new Date(row.checkOut).getTime() : nowMs
   if (row.checkOut && Number.isNaN(end)) return null
-  return Math.max(0, end - start)
+  const breakMinutes = trackedMinutesFromRow(row, 'breakStartedAt', 'breakDurationMinutes', nowMs)
+  return Math.max(0, end - start - (breakMinutes * 60 * 1000))
 }
 
 const hoursFromAttendanceRow = (row, nowMs = Date.now()) => {
@@ -195,6 +245,7 @@ const AttendanceView = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [viewMode, setViewMode] = useState('live')
+  const viewModeInitializedRef = useRef(false)
   const [employees, setEmployees] = useState([])
   const [dayAttendances, setDayAttendances] = useState([])
   const [monthAttendances, setMonthAttendances] = useState([])
@@ -205,6 +256,7 @@ const AttendanceView = () => {
 
   const [selectedEmployee, setSelectedEmployee] = useState('')
   const [checkInTime, setCheckInTime] = useState(null)
+  const [checkInLockedDate, setCheckInLockedDate] = useState('')
   const [elapsedMs, setElapsedMs] = useState(0)
   const [liveClock, setLiveClock] = useState(() => new Date())
   const [loading, setLoading] = useState(false)
@@ -220,21 +272,39 @@ const AttendanceView = () => {
   const [refreshingLocation, setRefreshingLocation] = useState(false)
   const timerRef = useRef(null)
   const lastGeocodeRef = useRef({ lat: null, lon: null, at: 0 })
+  const lastTimelinePushRef = useRef({ lat: null, lon: null, at: 0 })
 
   const isToday = selectedDate === getTodayDateKey()
 
-  const myTodayAttendance = useMemo(() => {
-    if (!user?._id || !isToday) return null
+  const myDayAttendance = useMemo(() => {
+    if (!user?._id) return null
     return (
       dayAttendances.find((a) => String(a.employee?._id || a.employee) === String(user._id)) || null
     )
-  }, [dayAttendances, user?._id, isToday])
+  }, [dayAttendances, user?._id])
+
+  const myTodayAttendance = useMemo(() => {
+    if (!isToday) return null
+    return myDayAttendance
+  }, [myDayAttendance, isToday])
 
   const hasCheckedInToday = Boolean(myTodayAttendance?.checkIn)
   const hasCheckedOutToday = Boolean(myTodayAttendance?.checkOut)
+  const isCheckInLockedForToday = checkInLockedDate === getTodayDateKey()
   const isSessionActive = hasCheckedInToday && !hasCheckedOutToday
-  const canCheckIn = isToday && !hasCheckedInToday
+  const canCheckIn = isToday && !hasCheckedInToday && !isCheckInLockedForToday
   const canCheckOut = isToday && isSessionActive
+  const isBreakActive = Boolean(myTodayAttendance?.breakStartedAt) && !hasCheckedOutToday
+  const isMeetingActive = Boolean(myTodayAttendance?.meetingStartedAt) && !hasCheckedOutToday
+  const liveBreakMinutes = trackedMinutesFromRow(myTodayAttendance, 'breakStartedAt', 'breakDurationMinutes')
+  const liveMeetingMinutes = trackedMinutesFromRow(myTodayAttendance, 'meetingStartedAt', 'meetingDurationMinutes')
+  const liveBreakMs = liveBreakMinutes * 60 * 1000
+  const liveMeetingMs = liveMeetingMinutes * 60 * 1000
+  const netWorkingMsToday = durationMsFromRow(myTodayAttendance, liveClock.getTime()) || 0
+  const locationTimeline = useMemo(() => {
+    const entries = Array.isArray(myDayAttendance?.locationTimeline) ? myDayAttendance.locationTimeline : []
+    return entries.slice().sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+  }, [myDayAttendance?.locationTimeline])
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -273,13 +343,14 @@ const AttendanceView = () => {
   const fetchMonthAttendance = useCallback(async () => {
     try {
       const params = { month: selectedMonth }
-      if (!canViewTeam && user?._id) params.employeeId = user._id
+      const targetEmployeeId = canViewTeam ? (selectedEmployee || user?._id) : user?._id
+      if (targetEmployeeId) params.employeeId = targetEmployeeId
       const res = await api.get('/attendance/by-month', { params })
       setMonthAttendances(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
       console.error('Failed to fetch month attendance:', err)
     }
-  }, [selectedMonth, canViewTeam, user?._id])
+  }, [selectedMonth, canViewTeam, user?._id, selectedEmployee])
 
   const fetchLeaves = useCallback(async () => {
     try {
@@ -334,8 +405,29 @@ const AttendanceView = () => {
   }, [user?._id])
 
   useEffect(() => {
+    if (!viewModeInitializedRef.current && canViewTeam) {
+      setViewMode('monthly')
+      viewModeInitializedRef.current = true
+    }
+  }, [canViewTeam])
+
+  useEffect(() => {
     syncActiveSessionFromServer()
   }, [syncActiveSessionFromServer])
+
+  useEffect(() => {
+    const todayKey = getTodayDateKey()
+    if (checkInLockedDate && checkInLockedDate !== todayKey) {
+      setCheckInLockedDate('')
+    }
+  }, [checkInLockedDate, selectedDate])
+
+  useEffect(() => {
+    if (!isToday) return
+    if (myTodayAttendance?.checkIn) {
+      setCheckInLockedDate(getTodayDateKey())
+    }
+  }, [myTodayAttendance?.checkIn, isToday])
 
   useEffect(() => {
     if (!isToday) {
@@ -461,6 +553,38 @@ const AttendanceView = () => {
 
   const getLocation = getCurrentLocation
 
+  const pushLocationTimeline = useCallback(async (location) => {
+    if (!selectedEmployee || !isSessionActive) return
+    const lat = Number(location?.latitude)
+    const lon = Number(location?.longitude)
+    if (Number.isNaN(lat) || Number.isNaN(lon)) return
+    const now = Date.now()
+    const last = lastTimelinePushRef.current
+    const moved =
+      last.lat == null ||
+      Math.abs(lat - last.lat) > 0.00025 ||
+      Math.abs(lon - last.lon) > 0.00025
+    if (!moved || (now - last.at < 20000)) return
+    lastTimelinePushRef.current = { lat, lon, at: now }
+    try {
+      await api.post('/attendance/location-update', {
+        employee: selectedEmployee,
+        latitude: lat,
+        longitude: lon,
+        address: location?.address || '',
+      })
+      fetchDayAttendance()
+    } catch {
+      // Silent fail: timeline updates are best-effort.
+    }
+  }, [selectedEmployee, isSessionActive, fetchDayAttendance])
+
+  useEffect(() => {
+    if (!isSessionActive) return
+    if (currentLocation.latitude == null || currentLocation.longitude == null) return
+    pushLocationTimeline(currentLocation)
+  }, [isSessionActive, currentLocation.latitude, currentLocation.longitude, currentLocation.address, pushLocationTimeline])
+
   const handleCheckIn = async () => {
     if (!selectedEmployee) {
       setError('User is not ready yet. Please try again.')
@@ -492,6 +616,7 @@ const AttendanceView = () => {
       const checkIn = new Date(res.data.attendance?.checkIn || Date.now())
       setCheckInTime(checkIn)
       setElapsedMs(Math.max(0, Date.now() - checkIn.getTime()))
+      setCheckInLockedDate(getTodayDateKey())
       await fetchDayAttendance()
       await syncActiveSessionFromServer()
       fetchMonthAttendance()
@@ -527,6 +652,66 @@ const AttendanceView = () => {
       fetchMonthAttendance()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking out')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStartBreak = async () => {
+    if (!selectedEmployee) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/attendance/break/start', { employee: selectedEmployee })
+      await fetchDayAttendance()
+      fetchMonthAttendance()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error starting break')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEndBreak = async () => {
+    if (!selectedEmployee) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/attendance/break/end', { employee: selectedEmployee })
+      await fetchDayAttendance()
+      fetchMonthAttendance()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error ending break')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStartMeeting = async () => {
+    if (!selectedEmployee) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/attendance/meeting/start', { employee: selectedEmployee })
+      await fetchDayAttendance()
+      fetchMonthAttendance()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error starting meeting')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEndMeeting = async () => {
+    if (!selectedEmployee) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/attendance/meeting/end', { employee: selectedEmployee })
+      await fetchDayAttendance()
+      fetchMonthAttendance()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error ending meeting')
     } finally {
       setLoading(false)
     }
@@ -623,34 +808,10 @@ const AttendanceView = () => {
       .map(([name, value]) => ({ name, value }))
   }, [selectedDate, activeEmployees, monthAttendances, isOnLeave, canViewTeam, user?._id])
 
-  const myDayAttendance = useMemo(() => {
-    if (!user?._id) return null
-    return (
-      dayAttendances.find((a) => String(a.employee?._id || a.employee) === String(user._id)) || null
-    )
-  }, [dayAttendances, user?._id])
-
   const myDayStatus = useMemo(() => {
     if (!user?._id) return 'Absent'
     return deriveLiveStatus(myDayAttendance, isOnLeave(user._id, selectedDate))
   }, [user?._id, myDayAttendance, isOnLeave, selectedDate])
-
-  const todaySummary = useMemo(() => {
-    const rows = dayAttendances.filter((a) => {
-      if (!canViewTeam) return String(a.employee?._id || a.employee) === String(user?._id)
-      return true
-    })
-    const hours = rows.reduce((s, r) => s + hoursFromAttendanceRow(r), 0)
-    const lateCount = rows.filter((r) => isLateCheckIn(r.checkIn)).length
-    const avg = rows.length ? hours / rows.length : 0
-    return {
-      avgHours: avg.toFixed(1),
-      totalHours: hours.toFixed(1),
-      overtime: Math.max(0, hours - 8).toFixed(1),
-      lateArrivals: lateCount,
-      earlyDepartures: rows.filter((r) => r.checkOut && new Date(r.checkOut).getHours() < 18).length,
-    }
-  }, [dayAttendances, canViewTeam, user?._id])
 
   const paginatedRows = filteredLiveRows.slice((page - 1) * pageSize, page * pageSize)
   const totalPages = Math.max(1, Math.ceil(filteredLiveRows.length / pageSize))
@@ -658,6 +819,87 @@ const AttendanceView = () => {
   const monthLabel = selectedMonth
     ? new Date(`${selectedMonth}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
     : ''
+
+  const monthlyEmployeeId = canViewTeam ? (selectedEmployee || user?._id) : user?._id
+
+  const selectedMonthlyEmployee = useMemo(() => {
+    if (!monthlyEmployeeId) return null
+    return employees.find((e) => String(e._id) === String(monthlyEmployeeId)) || {
+      _id: monthlyEmployeeId,
+      name: user?.name,
+      email: user?.email,
+      employeeCode: user?.employeeCode,
+      profilePhoto: user?.profilePhoto,
+    }
+  }, [employees, monthlyEmployeeId, user])
+
+  const fullMonthRows = useMemo(() => {
+    if (!selectedMonth || !monthlyEmployeeId) return []
+    const todayKey = getTodayDateKey()
+    return getDaysInMonth(selectedMonth).map((dateKey) => {
+      const att = monthAttendances.find((a) => {
+        if (!a.date) return false
+        return toDateKey(a.date) === dateKey
+      })
+      const onLeave = isOnLeave(monthlyEmployeeId, dateKey)
+      const isFuture = dateKey > todayKey
+      const status = isFuture ? '—' : deriveLiveStatus(att, onLeave)
+      return { dateKey, att, status, isFuture }
+    })
+  }, [selectedMonth, monthlyEmployeeId, monthAttendances, isOnLeave])
+
+  const monthlyStats = useMemo(() => {
+    const rows = fullMonthRows.filter((r) => !r.isFuture)
+    return {
+      present: rows.filter((r) => r.status === 'Present').length,
+      late: rows.filter((r) => r.status === 'Late').length,
+      absent: rows.filter((r) => r.status === 'Absent').length,
+      onLeave: rows.filter((r) => r.status === 'On Leave').length,
+      totalHours: rows.reduce((sum, r) => sum + hoursFromAttendanceRow(r.att), 0),
+    }
+  }, [fullMonthRows])
+
+  const downloadAttendanceReport = () => {
+    if (!canViewTeam || !selectedMonth) return
+    const emp = selectedMonthlyEmployee
+    const headers = [
+      'Date',
+      'Day',
+      'Employee Name',
+      'Employee ID',
+      'Check In',
+      'Check Out',
+      'Duration (hrs)',
+      'Status',
+      'Check In Location',
+      'Check Out Location',
+    ]
+    const lines = fullMonthRows.map(({ dateKey, att, status, isFuture }) => {
+      const dayName = new Date(`${dateKey}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })
+      const rowStatus = isFuture ? 'Upcoming' : status
+      return [
+        dateKey,
+        dayName,
+        emp?.name || '',
+        emp?.employeeCode || '',
+        att?.checkIn ? new Date(att.checkIn).toLocaleString('en-IN') : '',
+        att?.checkOut ? new Date(att.checkOut).toLocaleString('en-IN') : '',
+        att ? formatDurationHours(att) : '',
+        rowStatus,
+        att?.checkInAddress || '',
+        att?.checkOutAddress || '',
+      ].map(csvEscape).join(',')
+    })
+    const csv = `${headers.map(csvEscape).join(',')}\n${lines.join('\n')}`
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const code = emp?.employeeCode || 'employee'
+    link.href = url
+    link.download = `attendance-${code}-${selectedMonth}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className='min-h-full bg-[#f4f6f8]'>
@@ -669,7 +911,9 @@ const AttendanceView = () => {
             </h1>
             <p className='text-sm text-gray-500 mt-1'>
               {canViewTeam
-                ? `Overview of ${isToday ? "today's" : "selected day's"} attendance and real-time status`
+                ? viewMode === 'monthly'
+                  ? `Monthly attendance for ${selectedMonthlyEmployee?.name || 'selected employee'}`
+                  : `Overview of ${isToday ? "today's" : "selected day's"} attendance and real-time status`
                 : `Track your check-in, check-out, and attendance for ${isToday ? 'today' : formatDateLabel(selectedDate)}`}
             </p>
           </div>
@@ -691,12 +935,38 @@ const AttendanceView = () => {
               </button>
             </div>
             {viewMode === 'monthly' && (
-              <input
-                type='month'
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className='border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
+              <>
+                {canViewTeam && (
+                  <select
+                    value={selectedEmployee || user?._id || ''}
+                    onChange={(e) => setSelectedEmployee(e.target.value)}
+                    className='border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  >
+                    {employees.map((emp) => (
+                      <option key={emp._id} value={emp._id}>
+                        {emp.name}{emp.employeeCode ? ` · ${emp.employeeCode}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type='month'
+                  value={selectedMonth}
+                  max={getCurrentMonthKey()}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className='border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+                {canViewTeam && (
+                  <button
+                    type='button'
+                    onClick={downloadAttendanceReport}
+                    className='inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700'
+                  >
+                    <span>↓</span>
+                    Download Report
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -705,7 +975,8 @@ const AttendanceView = () => {
       <div className='p-6 md:px-8 md:py-6 space-y-6'>
         {viewMode === 'live' && (
           <>
-            <div className={`grid grid-cols-1 gap-6 ${canViewTeam ? 'xl:grid-cols-[1fr_320px]' : 'max-w-4xl'}`}>
+            <div className='grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]'>
+              <div className='space-y-6 min-w-0 order-2 xl:order-1'>
               {canViewTeam && (
               <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
                 <div className='px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3'>
@@ -781,7 +1052,7 @@ const AttendanceView = () => {
                                 <EmployeeAvatar employee={emp} />
                                 <div>
                                   <p className='font-medium text-gray-900'>{emp.name}</p>
-                                  <p className='text-xs text-gray-400'>{emp.email || emp._id?.slice(-6)}</p>
+                                  <p className='text-xs text-gray-400'>{getDesignationTitle(emp)}</p>
                                 </div>
                               </div>
                             </td>
@@ -842,132 +1113,6 @@ const AttendanceView = () => {
                 </div>
               </div>
               )}
-
-              <div className='space-y-4'>
-                <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-5'>
-                  <div className='flex items-center justify-between mb-4'>
-                    <h3 className='font-semibold text-gray-900'>My Attendance</h3>
-                    {isSessionActive ? (
-                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200'>Checked In</span>
-                    ) : hasCheckedOutToday ? (
-                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200'>Checked Out</span>
-                    ) : (
-                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600'>Not checked in</span>
-                    )}
-                  </div>
-                  <p className='text-3xl font-bold text-gray-900 font-mono tabular-nums'>{formatClock(liveClock)}</p>
-                  <p className='text-xs text-gray-500 mt-1'>{formatDateLabel(selectedDate)}</p>
-                  {isSessionActive && (
-                    <p className='text-sm text-blue-600 font-mono mt-2'>Working · {formatTime(elapsedMs)}</p>
-                  )}
-
-                  <div className='mt-4 p-3 rounded-lg bg-gray-50 border border-gray-100'>
-                    <div className='flex items-center justify-between gap-2 mb-2'>
-                      <p className='text-xs font-semibold text-gray-700 uppercase tracking-wide'>Current Location</p>
-                      <button
-                        type='button'
-                        onClick={refreshCurrentLocation}
-                        disabled={refreshingLocation}
-                        className='text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50'
-                      >
-                        {refreshingLocation ? 'Updating…' : 'Refresh'}
-                      </button>
-                    </div>
-                    {currentLocation.loading && !currentLocation.latitude ? (
-                      <p className='text-xs text-gray-500'>Detecting your location…</p>
-                    ) : currentLocation.error ? (
-                      <p className='text-xs text-red-600'>{currentLocation.error}</p>
-                    ) : (
-                      <>
-                        <LocationDisplay
-                          address={currentLocation.address}
-                          latitude={currentLocation.latitude}
-                          longitude={currentLocation.longitude}
-                        />
-                        {currentLocation.accuracy != null && (
-                          <p className='text-[11px] text-gray-400 mt-2'>
-                            Accuracy ±{Math.round(currentLocation.accuracy)} m
-                          </p>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div className='flex gap-2 mt-4'>
-                    <button
-                      type='button'
-                      onClick={handleCheckIn}
-                      disabled={loading || !canCheckIn}
-                      className='flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                    >
-                      Check In
-                    </button>
-                    <button
-                      type='button'
-                      onClick={handleCheckOut}
-                      disabled={loading || !canCheckOut}
-                      className='flex-1 py-2.5 rounded-lg border border-blue-600 text-blue-600 text-sm font-semibold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed'
-                    >
-                      Check Out
-                    </button>
-                  </div>
-                  {hasCheckedInToday && !hasCheckedOutToday && (
-                    <p className='text-xs text-emerald-700 mt-2'>You are checked in for today. Check out when you finish work.</p>
-                  )}
-                  {hasCheckedOutToday && (
-                    <p className='text-xs text-blue-700 mt-2'>Attendance completed for today. Check-in opens again tomorrow.</p>
-                  )}
-                  <div className='grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100'>
-                    <div className='text-center p-2 rounded-lg bg-gray-50'>
-                      <p className='text-xs text-gray-500'>Working Hours</p>
-                      <p className='font-semibold text-gray-900'>{(elapsedMs / 3600000).toFixed(1)}h</p>
-                    </div>
-                    <div className='text-center p-2 rounded-lg bg-gray-50'>
-                      <p className='text-xs text-gray-500'>Break Time</p>
-                      <p className='font-semibold text-gray-900'>0.0h</p>
-                    </div>
-                  </div>
-                  {error && <p className='text-red-600 text-xs mt-3'>{error}</p>}
-                  {!isToday && <p className='text-xs text-amber-600 mt-2'>Check-in is only available for today.</p>}
-                </div>
-
-                <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-5'>
-                  <h3 className='font-semibold text-gray-900 mb-4'>
-                    {canViewTeam ? (isToday ? "Today's Summary" : 'Day Summary') : 'My Summary'}
-                  </h3>
-                  <ul className='space-y-3 text-sm'>
-                    <li className='flex justify-between'><span className='text-gray-500'>Average Working Hours</span><span className='font-medium'>{todaySummary.avgHours}h</span></li>
-                    <li className='flex justify-between'><span className='text-gray-500'>Total Working Hours</span><span className='font-medium'>{todaySummary.totalHours}h</span></li>
-                    <li className='flex justify-between'><span className='text-gray-500'>Overtime Hours</span><span className='font-medium text-emerald-600'>{todaySummary.overtime}h</span></li>
-                    <li className='flex justify-between'><span className='text-gray-500'>Late Arrivals</span><span className='font-medium text-amber-600'>{todaySummary.lateArrivals}</span></li>
-                    <li className='flex justify-between'><span className='text-gray-500'>Early Departures</span><span className='font-medium text-red-600'>{todaySummary.earlyDepartures}</span></li>
-                  </ul>
-                </div>
-
-                <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-5'>
-                  <h3 className='font-semibold text-gray-900 mb-1'>Attendance Overview</h3>
-                  <p className='text-xs text-gray-500 mb-4'>{canViewTeam ? 'This week' : 'My week'}</p>
-                  <div className='h-44'>
-                    <ResponsiveContainer width='100%' height='100%'>
-                      <PieChart>
-                        <Pie data={weekChartData} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius={48} outerRadius={68} paddingAngle={2}>
-                          {weekChartData.map((entry, index) => (
-                            <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className='flex flex-wrap justify-center gap-3 mt-2'>
-                    {weekChartData.map((item, index) => (
-                      <span key={item.name} className='inline-flex items-center gap-1 text-xs text-gray-600'>
-                        <span className='w-2 h-2 rounded-full' style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
-                        {item.name} ({item.value})
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
 
               {!canViewTeam && (
                 <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
@@ -1040,6 +1185,175 @@ const AttendanceView = () => {
                   </div>
                 </div>
               )}
+
+              <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-5'>
+                <h3 className='font-semibold text-gray-900 mb-1'>Attendance Overview</h3>
+                <p className='text-xs text-gray-500 mb-4'>{canViewTeam ? 'This week' : 'My week'}</p>
+                <div className='h-44'>
+                  <ResponsiveContainer width='100%' height='100%'>
+                    <PieChart>
+                      <Pie data={weekChartData} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius={48} outerRadius={68} paddingAngle={2}>
+                        {weekChartData.map((entry, index) => (
+                          <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className='flex flex-wrap justify-center gap-3 mt-2'>
+                  {weekChartData.map((item, index) => (
+                    <span key={item.name} className='inline-flex items-center gap-1 text-xs text-gray-600'>
+                      <span className='w-2 h-2 rounded-full' style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
+                      {item.name} ({item.value})
+                    </span>
+                  ))}
+                </div>
+              </div>
+              </div>
+
+              <div className='space-y-4 order-1 xl:order-2 xl:sticky xl:top-6 xl:self-start'>
+                <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-5'>
+                  <div className='flex items-center justify-between mb-4'>
+                    <h3 className='font-semibold text-gray-900'>My Attendance</h3>
+                    {isSessionActive ? (
+                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200'>Checked In</span>
+                    ) : hasCheckedOutToday ? (
+                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200'>Checked Out</span>
+                    ) : (
+                      <span className='text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600'>Not checked in</span>
+                    )}
+                  </div>
+                  <p className='text-3xl font-bold text-gray-900 font-mono tabular-nums'>{formatClock(liveClock)}</p>
+                  <p className='text-xs text-gray-500 mt-1'>{formatDateLabel(selectedDate)}</p>
+                  {isSessionActive && (
+                    <p className='text-sm text-blue-600 font-mono mt-2'>Working · {formatTime(netWorkingMsToday)}</p>
+                  )}
+
+                  <div className='mt-4 p-3 rounded-lg bg-gray-50 border border-gray-100'>
+                    <div className='flex items-center justify-between gap-2 mb-2'>
+                      <p className='text-xs font-semibold text-gray-700 uppercase tracking-wide'>Current Location</p>
+                      <button
+                        type='button'
+                        onClick={refreshCurrentLocation}
+                        disabled={refreshingLocation}
+                        className='text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50'
+                      >
+                        {refreshingLocation ? 'Updating…' : 'Refresh'}
+                      </button>
+                    </div>
+                    {currentLocation.loading && !currentLocation.latitude ? (
+                      <p className='text-xs text-gray-500'>Detecting your location…</p>
+                    ) : currentLocation.error ? (
+                      <p className='text-xs text-red-600'>{currentLocation.error}</p>
+                    ) : (
+                      <>
+                        <LocationDisplay
+                          address={currentLocation.address}
+                          latitude={currentLocation.latitude}
+                          longitude={currentLocation.longitude}
+                        />
+                        {currentLocation.accuracy != null && (
+                          <p className='text-[11px] text-gray-400 mt-2'>
+                            Accuracy ±{Math.round(currentLocation.accuracy)} m
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className='flex gap-2 mt-4'>
+                    <button
+                      type='button'
+                      onClick={handleCheckIn}
+                      disabled={loading || !canCheckIn}
+                      className='flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      Check In
+                    </button>
+                    <button
+                      type='button'
+                      onClick={handleCheckOut}
+                      disabled={loading || !canCheckOut}
+                      className='flex-1 py-2.5 rounded-lg border border-blue-600 text-blue-600 text-sm font-semibold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      Check Out
+                    </button>
+                  </div>
+                  <div className='grid grid-cols-2 gap-2 mt-2'>
+                    <button
+                      type='button'
+                      onClick={isBreakActive ? handleEndBreak : handleStartBreak}
+                      disabled={loading || !isSessionActive}
+                      className='py-2 rounded-lg border border-amber-400 text-amber-700 text-sm font-semibold hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      {isBreakActive ? 'End Break' : 'Start Break'}
+                    </button>
+                    <button
+                      type='button'
+                      onClick={isMeetingActive ? handleEndMeeting : handleStartMeeting}
+                      disabled={loading || !isSessionActive}
+                      className='py-2 rounded-lg border border-violet-400 text-violet-700 text-sm font-semibold hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      {isMeetingActive ? 'End Meeting' : 'Start Meeting'}
+                    </button>
+                  </div>
+                  <div className='grid grid-cols-2 gap-2 mt-1'>
+                    <p className={`text-xs font-mono ${isBreakActive ? 'text-amber-700' : 'text-gray-500'}`}>
+                      Break Timer: {formatTime(liveBreakMs)}
+                    </p>
+                    <p className={`text-xs font-mono text-right ${isMeetingActive ? 'text-violet-700' : 'text-gray-500'}`}>
+                      Meeting Timer: {formatTime(liveMeetingMs)}
+                    </p>
+                  </div>
+                  {hasCheckedInToday && !hasCheckedOutToday && (
+                    <p className='text-xs text-emerald-700 mt-2'>You are checked in for today. Check out when you finish work.</p>
+                  )}
+                  {hasCheckedOutToday && (
+                    <p className='text-xs text-blue-700 mt-2'>Attendance completed for today. Check-in opens again tomorrow.</p>
+                  )}
+                  <div className='grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100'>
+                    <div className='text-center p-2 rounded-lg bg-gray-50'>
+                      <p className='text-xs text-gray-500'>Working Hours</p>
+                      <p className='font-semibold text-gray-900'>{(netWorkingMsToday / 3600000).toFixed(1)}h</p>
+                    </div>
+                    <div className='text-center p-2 rounded-lg bg-gray-50'>
+                      <p className='text-xs text-gray-500'>Break Time</p>
+                      <p className='font-semibold text-gray-900'>{formatMinutesAsHours(liveBreakMinutes)}h</p>
+                    </div>
+                    <div className='text-center p-2 rounded-lg bg-gray-50'>
+                      <p className='text-xs text-gray-500'>Meeting Time</p>
+                      <p className='font-semibold text-gray-900'>{formatMinutesAsHours(liveMeetingMinutes)}h</p>
+                    </div>
+                  </div>
+
+                  <div className='mt-4 pt-4 border-t border-gray-100'>
+                    <p className='text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3'>Location Timeline</p>
+                    {locationTimeline.length === 0 ? (
+                      <p className='text-xs text-gray-500'>No location changes recorded for {isToday ? 'today' : formatDateLabel(selectedDate)}.</p>
+                    ) : (
+                      <div className='space-y-3 max-h-52 overflow-y-auto pr-1'>
+                        {locationTimeline.map((point, idx) => (
+                          <div key={`${point.at || idx}-${idx}`} className='relative pl-4 border-l-2 border-blue-200 pb-2 last:pb-0'>
+                            <span className='absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-blue-500' />
+                            <p className='text-xs font-mono font-medium text-gray-800'>{formatAttendanceTime(point.at)}</p>
+                            <div className='mt-1'>
+                              <LocationDisplay
+                                address={point.address}
+                                latitude={point.latitude}
+                                longitude={point.longitude}
+                                compact
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {error && <p className='text-red-600 text-xs mt-3'>{error}</p>}
+                  {!isToday && <p className='text-xs text-amber-600 mt-2'>Check-in is only available for today.</p>}
+                </div>
+              </div>
             </div>
 
             {canViewTeam && (
@@ -1055,18 +1369,40 @@ const AttendanceView = () => {
         )}
 
         {viewMode === 'monthly' && (
+          <div className='space-y-4'>
+            {canViewTeam && (
+              <div className='grid grid-cols-2 lg:grid-cols-5 gap-4'>
+                <SummaryCard title='Present' value={monthlyStats.present} trend='This month' icon='✓' iconBg='bg-emerald-100 text-emerald-600' />
+                <SummaryCard title='Late' value={monthlyStats.late} trend='After 9:30 AM' icon='⏰' iconBg='bg-amber-100 text-amber-600' />
+                <SummaryCard title='Absent' value={monthlyStats.absent} trend='No check-in' icon='✕' iconBg='bg-red-100 text-red-600' />
+                <SummaryCard title='On Leave' value={monthlyStats.onLeave} trend='Approved leave' icon='🌴' iconBg='bg-violet-100 text-violet-600' />
+                <SummaryCard title='Total Hours' value={monthlyStats.totalHours.toFixed(1)} trend='Worked' icon='⏱' iconBg='bg-blue-100 text-blue-600' />
+              </div>
+            )}
+
           <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
-            <div className='px-5 py-4 border-b border-gray-100'>
-              <h2 className='font-semibold text-gray-900'>
-                {canViewTeam ? `Monthly Attendance · ${monthLabel}` : `My Attendance · ${monthLabel}`}
-              </h2>
+            <div className='px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3'>
+              <div className='flex items-center gap-3'>
+                {selectedMonthlyEmployee && (
+                  <EmployeeAvatar employee={selectedMonthlyEmployee} />
+                )}
+                <div>
+                  <h2 className='font-semibold text-gray-900'>
+                    {canViewTeam ? 'Monthly Attendance' : 'My Attendance'} · {monthLabel}
+                  </h2>
+                  <p className='text-sm text-gray-500'>
+                    {selectedMonthlyEmployee?.name || '—'}
+                    {selectedMonthlyEmployee?.employeeCode ? ` · ${selectedMonthlyEmployee.employeeCode}` : ''}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className='overflow-x-auto'>
               <table className='w-full text-sm'>
                 <thead>
                   <tr className='bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase'>
                     <th className='px-5 py-3'>Date</th>
-                    {canViewTeam && <th className='px-5 py-3'>Employee</th>}
+                    <th className='px-5 py-3'>Day</th>
                     <th className='px-5 py-3'>Check In Time</th>
                     <th className='px-5 py-3'>Check Out Time</th>
                     <th className='px-5 py-3'>Check In Location</th>
@@ -1076,46 +1412,46 @@ const AttendanceView = () => {
                   </tr>
                 </thead>
                 <tbody className='divide-y divide-gray-100'>
-                  {monthAttendances.length === 0 ? (
-                    <tr><td colSpan={canViewTeam ? 8 : 7} className='px-5 py-12 text-center text-gray-500'>No records for {monthLabel}</td></tr>
+                  {fullMonthRows.length === 0 ? (
+                    <tr><td colSpan={8} className='px-5 py-12 text-center text-gray-500'>No records for {monthLabel}</td></tr>
                   ) : (
-                    monthAttendances.map((a) => (
-                      <tr key={a._id} className='hover:bg-gray-50/80'>
-                        <td className='px-5 py-3'>{a.date ? new Date(a.date).toLocaleDateString('en-IN') : '—'}</td>
-                        {canViewTeam && (
+                    fullMonthRows.map(({ dateKey, att, status, isFuture }) => (
+                      <tr key={dateKey} className={`hover:bg-gray-50/80 ${isFuture ? 'opacity-50' : ''}`}>
+                        <td className='px-5 py-3 whitespace-nowrap'>
+                          {new Date(`${dateKey}T12:00:00`).toLocaleDateString('en-IN')}
+                        </td>
+                        <td className='px-5 py-3 text-gray-600'>
+                          {new Date(`${dateKey}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })}
+                        </td>
+                        <td className='px-5 py-3 font-mono whitespace-nowrap'>{formatAttendanceTime(att?.checkIn)}</td>
+                        <td className='px-5 py-3 font-mono whitespace-nowrap'>{formatAttendanceTime(att?.checkOut)}</td>
+                        <td className='px-5 py-3 align-top'>
+                          <LocationDisplay
+                            address={att?.checkInAddress}
+                            latitude={att?.checkInLatitude}
+                            longitude={att?.checkInLongitude}
+                            compact
+                          />
+                        </td>
+                        <td className='px-5 py-3 align-top'>
+                          <LocationDisplay
+                            address={att?.checkOutAddress}
+                            latitude={att?.checkOutLatitude}
+                            longitude={att?.checkOutLongitude}
+                            compact
+                          />
+                        </td>
+                        <td className='px-5 py-3'><DurationCell row={att} /></td>
                         <td className='px-5 py-3'>
-                          <div className='flex items-center gap-3'>
-                            <EmployeeAvatar employee={a.employee} />
-                            <span className='font-medium'>{a.employee?.name || '—'}</span>
-                          </div>
+                          {isFuture ? <span className='text-gray-400'>—</span> : <StatusBadge status={status} />}
                         </td>
-                        )}
-                        <td className='px-5 py-3 font-mono whitespace-nowrap'>{formatAttendanceTime(a.checkIn)}</td>
-                        <td className='px-5 py-3 font-mono whitespace-nowrap'>{formatAttendanceTime(a.checkOut)}</td>
-                        <td className='px-5 py-3 align-top'>
-                          <LocationDisplay
-                            address={a.checkInAddress}
-                            latitude={a.checkInLatitude}
-                            longitude={a.checkInLongitude}
-                            compact
-                          />
-                        </td>
-                        <td className='px-5 py-3 align-top'>
-                          <LocationDisplay
-                            address={a.checkOutAddress}
-                            latitude={a.checkOutLatitude}
-                            longitude={a.checkOutLongitude}
-                            compact
-                          />
-                        </td>
-                        <td className='px-5 py-3'><DurationCell row={a} /></td>
-                        <td className='px-5 py-3'><StatusBadge status={a.status} /></td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
         )}
       </div>

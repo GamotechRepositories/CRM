@@ -3,6 +3,7 @@ import Logo from '../assets/logo.jpg'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getSidebarNav } from '../config/sidebarNav'
+import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
 
 const MenuToggleIcon = () => (
@@ -130,7 +131,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
                   } ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
                   title={!isOpen ? section.label : undefined}
                 >
-                  <span className='text-base shrink-0 w-6 text-center'>{section.icon}</span>
+                  <SidebarSectionIcon id={section.id} className='size-5 shrink-0' />
                   {isOpen && <span className='text-sm font-medium truncate'>{section.label}</span>}
                 </button>
               )
@@ -149,7 +150,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
                   } ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
                   title={!isOpen ? section.label : undefined}
                 >
-                  <span className='text-base shrink-0 w-6 text-center'>{section.icon}</span>
+                  <SidebarSectionIcon id={section.id} className='size-5 shrink-0' />
                   {isOpen && (
                     <>
                       <span className='text-sm font-medium truncate flex-1 text-left'>{section.label}</span>

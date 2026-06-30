@@ -37,6 +37,7 @@ import AddBilling from '../pages/AddBilling'
 import InvoicePage from '../pages/InvoicePage'
 import CompaniesView from '../components/views/CompaniesView'
 import AddCompany from '../pages/AddCompany'
+import CompanyProfilePage from '../pages/CompanyProfilePage'
 import ClientProfilesView from '../components/views/ClientProfilesView'
 import ClientDashboardView from '../components/views/ClientDashboardView'
 import ProjectDashboardView from '../components/views/ProjectDashboardView'
@@ -67,6 +68,7 @@ const router = createBrowserRouter([
             { path: 'companies', element: <CompaniesView /> },
             { path: 'add-company', element: <AddCompany /> },
             { path: 'companies/edit/:id', element: <AddCompany /> },
+            { path: 'company-profile', element: <CompanyProfilePage /> },
             { path: 'collaborators', element: <CollaboratorsView /> },
             { path: 'add-collaborator', element: <AddCollaborator /> },
             { path: 'collaborators/edit/:id', element: <AddCollaborator /> },

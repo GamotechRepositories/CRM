@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
+import { SidebarSectionIcon } from '../config/sidebarIcons'
 
 const emptyForm = {
   name: '',
@@ -509,7 +510,7 @@ const AddEmployee = () => {
                       onChange={() => toggleSidebarSection(section.id)}
                       className='rounded border-gray-300 text-blue-600 focus:ring-blue-500'
                     />
-                    <span className='text-base'>{section.icon}</span>
+                    <SidebarSectionIcon id={section.id} className='size-5 shrink-0' />
                     <span className='truncate flex-1'>{section.label}</span>
                     {disabled && <span className='text-[10px] text-gray-400 shrink-0'>Always on</span>}
                   </label>

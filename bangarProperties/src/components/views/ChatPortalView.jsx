@@ -280,7 +280,9 @@ const ChatPortalView = () => {
 
   const messagesEndRef = useRef(null)
   const scrollContainerRef = useRef(null)
+  const topSentinelRef = useRef(null)
   const stickToBottomRef = useRef(true)
+  const isPrependingRef = useRef(false)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
   const photoInputRef = useRef(null)
@@ -304,6 +306,11 @@ const ChatPortalView = () => {
   const roomId = room?._id
 
   const scrollToBottom = () => {
+    const container = scrollContainerRef.current
+    if (container) {
+      container.scrollTop = container.scrollHeight
+      return
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -359,6 +366,7 @@ const ChatPortalView = () => {
 
     setLoadingOlder(true)
     stickToBottomRef.current = false
+    isPrependingRef.current = true
     try {
       const res = await api.get(`/chat/conversations/${roomId}/messages`, {
         params: { employeeId: currentUserId, day: previousDay },
@@ -369,10 +377,14 @@ const ChatPortalView = () => {
       setHasOlderDays(Boolean(res.data?.hasOlder))
 
       requestAnimationFrame(() => {
-        if (!container) return
-        container.scrollTop = container.scrollHeight - prevScrollHeight
+        requestAnimationFrame(() => {
+          if (!container) return
+          container.scrollTop = container.scrollHeight - prevScrollHeight
+          isPrependingRef.current = false
+        })
       })
     } catch (e) {
+      isPrependingRef.current = false
       setError(e.response?.data?.message || 'Failed to load older messages')
     } finally {
       setLoadingOlder(false)
@@ -381,11 +393,36 @@ const ChatPortalView = () => {
 
   const handleMessagesScroll = useCallback(() => {
     const container = scrollContainerRef.current
-    if (!container || loadingOlder || !hasOlderDays) return
-    if (container.scrollTop <= 64) {
+    if (!container) return
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 96
+
+    if (loadingOlder || !hasOlderDays) return
+    if (container.scrollTop <= 96) {
       loadOlderMessages()
     }
   }, [loadingOlder, hasOlderDays, loadOlderMessages])
+
+  useEffect(() => {
+    if (!hasOlderDays || loadingOlder || loadingMessages || loadingRoom) return undefined
+
+    const sentinel = topSentinelRef.current
+    const root = scrollContainerRef.current
+    if (!sentinel || !root) return undefined
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          loadOlderMessages()
+        }
+      },
+      { root, rootMargin: '120px 0px 0px 0px', threshold: 0 }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasOlderDays, loadingOlder, loadingMessages, loadingRoom, loadOlderMessages, messages.length])
 
   const pollNewMessages = useCallback(async () => {
     if (!currentUserId || !roomId) return
@@ -638,6 +675,7 @@ const ChatPortalView = () => {
   }, [roomId, loadTodayMessages])
 
   useEffect(() => {
+    if (isPrependingRef.current) return
     if (stickToBottomRef.current) scrollToBottom()
   }, [messages, roomId])
 
@@ -696,11 +734,18 @@ const ChatPortalView = () => {
               <p className='text-sm text-gray-600 text-center py-8'>Loading messages…</p>
             ) : (
               <>
-                {loadingOlder && (
-                  <p className='text-xs text-[#54656f] text-center py-2'>Loading older messages…</p>
-                )}
-                {!loadingOlder && hasOlderDays && (
-                  <p className='text-xs text-[#54656f] text-center py-2'>Scroll up for older messages</p>
+                <div ref={topSentinelRef} className='h-px w-full shrink-0' aria-hidden />
+                {hasOlderDays && (
+                  <div className='flex justify-center py-2'>
+                    <button
+                      type='button'
+                      onClick={loadOlderMessages}
+                      disabled={loadingOlder}
+                      className='text-xs font-medium text-[#128c7e] bg-[#ffffffd9] hover:bg-white disabled:opacity-60 px-3 py-1.5 rounded-full shadow-sm border border-[#d1d7db]/80'
+                    >
+                      {loadingOlder ? 'Loading older messages…' : 'Load older messages'}
+                    </button>
+                  </div>
                 )}
                 {messages.length === 0 ? (
                   <>

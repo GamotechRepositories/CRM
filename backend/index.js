@@ -113,6 +113,7 @@ const routeFiles = [
   'clientProfileRoute',
   'locationRoute',
   'chatRoute',
+  'assetRoute',
 ];
 
 for (const company of companies) {

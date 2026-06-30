@@ -13,6 +13,7 @@ export const SIDEBAR_PARENT_SECTIONS = [
   { id: 'reports', label: 'Reports & Analytics', icon: '📊' },
   { id: 'approvals', label: 'Approvals', icon: '✅' },
   { id: 'communication', label: 'Communication', icon: '💬' },
+  { id: 'company', label: 'Company', icon: '🏢' },
   { id: 'administration', label: 'Administration', icon: '⚙' },
   { id: 'workspace', label: 'My Workspace', icon: '👤', alwaysOn: true },
 ]
