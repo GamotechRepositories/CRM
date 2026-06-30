@@ -67,22 +67,28 @@ const runRecurringTaskScheduler = async () => {
 runRecurringTaskScheduler();
 setInterval(runRecurringTaskScheduler, 10 * 60 * 1000);
 
+const DEFAULT_CORS_ORIGINS = [
+  'https://www.dmcrms.in',
+  'https://dmcrms.in',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+];
 
-app.use(
-  cors({
-    origin: [
-      "https://www.dmcrms.in",
-      "https://dmcrms.in",
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:5175",
-      "http://localhost:5176",
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    credentials: true
-  })
-);
-app.options(/.*/, cors());
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: corsOrigins.length ? corsOrigins : DEFAULT_CORS_ORIGINS,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -114,6 +120,7 @@ const routeFiles = [
   'locationRoute',
   'chatRoute',
   'assetRoute',
+  'notificationRoute',
 ];
 
 for (const company of companies) {

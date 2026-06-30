@@ -7,15 +7,17 @@ const KpiCard = ({ title, value, subtitle, icon, color, onClick }) => (
   <button
     type='button'
     onClick={onClick}
-    className={`text-left bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition-shadow w-full ${onClick ? 'cursor-pointer' : ''}`}
+    className={`text-left bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow w-full min-w-0 ${onClick ? 'cursor-pointer' : ''}`}
   >
-    <div className='flex items-start justify-between gap-3'>
-      <div>
-        <p className='text-sm text-gray-500 font-medium'>{title}</p>
-        <p className='text-3xl font-bold text-gray-900 mt-1'>{value}</p>
-        {subtitle && <p className='text-xs text-gray-500 mt-1'>{subtitle}</p>}
+    <div className='flex items-center justify-between gap-2'>
+      <div className='min-w-0 flex-1'>
+        <p className='text-sm text-gray-500 font-medium truncate'>{title}</p>
+        <div className='flex items-baseline gap-2 mt-1 min-w-0'>
+          <span className='text-2xl font-bold text-gray-900 tabular-nums leading-none shrink-0'>{value}</span>
+          {subtitle && <span className='text-xs text-gray-500 truncate'>{subtitle}</span>}
+        </div>
       </div>
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl ${color}`}>{icon}</div>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${color}`}>{icon}</div>
     </div>
   </button>
 )
@@ -33,13 +35,6 @@ const Panel = ({ title, actionLabel, onAction, children, className = '' }) => (
     <div className='p-5'>{children}</div>
   </div>
 )
-
-const priorityClass = (priority) => {
-  const p = (priority || 'Medium').toLowerCase()
-  if (p === 'high' || p === 'urgent') return 'bg-red-100 text-red-700'
-  if (p === 'low') return 'bg-green-100 text-green-700'
-  return 'bg-orange-100 text-orange-700'
-}
 
 const leadStatusClass = (status) => {
   if (status === 'Interested') return 'bg-orange-100 text-orange-700'
@@ -82,6 +77,19 @@ const isSameDay = (a, b) => {
   const d2 = new Date(b)
   return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate()
 }
+
+const startOfDay = (date = new Date()) => {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+const isPastDay = (date, ref = new Date()) => {
+  if (!date) return false
+  return startOfDay(date) < startOfDay(ref)
+}
+
+const isIncompleteTask = (task) => ['Pending', 'In Progress'].includes(task?.status)
 
 const isThisMonth = (d, ref = new Date()) => {
   if (!d) return false
@@ -229,7 +237,6 @@ const EmployeeDashboardView = () => {
   const [loading, setLoading] = useState(true)
   const [tasks, setTasks] = useState([])
   const [myLeads, setMyLeads] = useState([])
-  const [taskTab, setTaskTab] = useState('pending')
   const now = new Date()
   const firstName = (user?.name || 'there').split(' ')[0]
   const designation = user?.designation?.title || user?.designation?.name || 'Employee'
@@ -260,7 +267,11 @@ const EmployeeDashboardView = () => {
   }, [user?._id, user?.name])
 
   const stats = useMemo(() => {
-    const pendingTasks = tasks.filter((t) => ['Pending', 'In Progress'].includes(t.status))
+    const pendingTasks = tasks.filter((t) => isIncompleteTask(t))
+    const todaysTasks = pendingTasks.filter((t) => t.dueDate && isSameDay(t.dueDate, now))
+    const pastIncompleteTasks = pendingTasks
+      .filter((t) => t.dueDate && isPastDay(t.dueDate, now))
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     const completedTasks = tasks.filter((t) => t.status === 'Completed')
     const completedThisMonth = completedTasks.filter((t) => isThisMonth(t.completedAt || t.updatedAt, now))
     const openDeals = myLeads.filter((l) => ['Interested', 'Meeting Schedule', 'Call You After Sometime'].includes(l.status))
@@ -300,10 +311,6 @@ const EmployeeDashboardView = () => {
     const monthlyTarget = pendingTasks.length + completedThisMonth.length
     const performancePct = monthlyTarget ? (completedThisMonth.length / monthlyTarget) * 100 : 0
 
-    const tabTasks = taskTab === 'pending'
-      ? pendingTasks.sort((a, b) => new Date(a.dueDate || 0) - new Date(b.dueDate || 0))
-      : completedTasks.sort((a, b) => new Date(b.completedAt || b.updatedAt) - new Date(a.completedAt || a.updatedAt))
-
     const ratedTasks = tasks
       .filter((t) => isRealTask(t) && t.rating?.score)
       .sort((a, b) => new Date(b.rating?.ratedAt || b.updatedAt) - new Date(a.rating?.ratedAt || a.updatedAt))
@@ -315,6 +322,8 @@ const EmployeeDashboardView = () => {
 
     return {
       pendingTasks,
+      todaysTasks,
+      pastIncompleteTasks,
       completedTasks,
       completedThisMonth,
       openDeals,
@@ -323,13 +332,12 @@ const EmployeeDashboardView = () => {
       todaySchedule,
       recentLeads,
       performancePct,
-      tabTasks,
       ratedTasks,
       avgRating,
       followUps: myLeads.reduce((sum, l) => sum + (Array.isArray(l.followUps) ? l.followUps.length : 0), 0),
       dealsClosed: myLeads.filter((l) => l.meetingInfoSent === true).length,
     }
-  }, [tasks, myLeads, taskTab, now])
+  }, [tasks, myLeads, now])
 
   const announcements = [
     { icon: '📢', title: 'Use My Tasks to track daily work', desc: 'Check pending items and mark them complete on time.', date: formatDate(now) },
@@ -354,8 +362,9 @@ const EmployeeDashboardView = () => {
         </div>
       </div>
 
-      <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-6'>
-        <KpiCard title='My Tasks' value={stats.pendingTasks.length} subtitle='Pending Tasks' icon='📋' color='bg-blue-50' onClick={() => navigate('/my-tasks?status=Pending')} />
+      <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6'>
+        <KpiCard title='My Tasks' value={stats.todaysTasks.length} subtitle="Today's Tasks" icon='📋' color='bg-blue-50' onClick={() => navigate('/my-tasks?status=Pending')} />
+        <KpiCard title='Past Tasks' value={stats.pastIncompleteTasks.length} subtitle='Not Completed' icon='⏳' color='bg-red-50' onClick={() => navigate('/my-tasks?status=Pending')} />
         <KpiCard title='Tasks Completed' value={stats.completedThisMonth.length} subtitle='This Month' icon='✅' color='bg-green-50' onClick={() => navigate('/my-tasks?status=Completed')} />
         <KpiCard title='My Leads' value={myLeads.length} subtitle='Total Leads' icon='🎯' color='bg-purple-50' onClick={() => navigate('/lead-management')} />
         <KpiCard title='My Deals' value={stats.openDeals.length} subtitle='Open Deals' icon='💼' color='bg-orange-50' onClick={() => navigate('/lead-management')} />
@@ -363,51 +372,22 @@ const EmployeeDashboardView = () => {
       </div>
 
       <div className='grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6'>
-        <Panel title='My Tasks' actionLabel='View All' onAction={() => navigate('/my-tasks')}>
-          <div className='flex gap-2 mb-4'>
-            <button
-              type='button'
-              onClick={() => setTaskTab('pending')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${taskTab === 'pending' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            >
-              Pending ({stats.pendingTasks.length})
-            </button>
-            <button
-              type='button'
-              onClick={() => setTaskTab('completed')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${taskTab === 'completed' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600'}`}
-            >
-              Completed ({stats.completedTasks.length})
-            </button>
-          </div>
-          <div className='space-y-3 max-h-80 overflow-y-auto'>
-            {stats.tabTasks.length ? stats.tabTasks.slice(0, 6).map((task) => (
-              <button
-                key={task._id}
-                type='button'
-                onClick={() => navigate(`/my-tasks/${task._id}`)}
-                className='w-full flex items-start gap-3 text-left p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors'
-              >
-                <span className={`mt-1 w-4 h-4 rounded border shrink-0 ${task.status === 'Completed' ? 'bg-green-500 border-green-500' : 'border-gray-300'}`} />
-                <div className='min-w-0 flex-1'>
-                  <p className='text-sm font-medium text-gray-900 truncate'>{task.title}</p>
-                  <p className='text-xs text-gray-500 truncate'>{getProjectName(task)}</p>
-                  {task.rating?.score > 0 && (
-                    <div className='mt-1'>
-                      <StarDisplay score={task.rating.score} />
-                    </div>
-                  )}
-                </div>
-                <div className='flex flex-col items-end gap-1 shrink-0'>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${priorityClass(task.priority)}`}>
-                    {task.priority || 'Medium'}
-                  </span>
-                  <span className='text-[10px] text-gray-400'>{formatDate(task.dueDate)}</span>
-                </div>
-              </button>
-            )) : (
-              <p className='text-sm text-gray-500 py-6 text-center'>No {taskTab} tasks</p>
-            )}
+        <Panel title='My Performance'>
+          <PerformanceRing percent={stats.performancePct} />
+          <div className='mt-5 space-y-2'>
+            {[
+              ['Leads Assigned', myLeads.length],
+              ['Deals Closed', stats.dealsClosed],
+              ['Tasks Done (Month)', stats.completedThisMonth.length],
+              ['Pending Tasks', stats.pendingTasks.length],
+              ['Avg Task Rating', stats.avgRating != null ? `${stats.avgRating}/5` : '—'],
+              ['Rated Tasks', stats.ratedTasks.length],
+            ].map(([label, value]) => (
+              <div key={label} className='flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0'>
+                <span className='text-gray-600'>{label}</span>
+                <span className='font-semibold text-gray-900'>{value}</span>
+              </div>
+            ))}
           </div>
         </Panel>
 
@@ -446,26 +426,7 @@ const EmployeeDashboardView = () => {
         </Panel>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6'>
-        <Panel title='My Performance'>
-          <PerformanceRing percent={stats.performancePct} />
-          <div className='mt-5 space-y-2'>
-            {[
-              ['Leads Assigned', myLeads.length],
-              ['Deals Closed', stats.dealsClosed],
-              ['Tasks Done (Month)', stats.completedThisMonth.length],
-              ['Pending Tasks', stats.pendingTasks.length],
-              ['Avg Task Rating', stats.avgRating != null ? `${stats.avgRating}/5` : '—'],
-              ['Rated Tasks', stats.ratedTasks.length],
-            ].map(([label, value]) => (
-              <div key={label} className='flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0'>
-                <span className='text-gray-600'>{label}</span>
-                <span className='font-semibold text-gray-900'>{value}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
+      <div className='grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6'>
         <Panel title='Recent Leads' actionLabel='View All' onAction={() => navigate('/lead-management')}>
           <div className='space-y-3'>
             {stats.recentLeads.length ? stats.recentLeads.map((lead) => (

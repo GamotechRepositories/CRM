@@ -1,9 +1,15 @@
 import mongoose from 'mongoose';
 import Task from '../../models/salesTechReality/salesTechReality_task.js';
+import Notification from '../../models/salesTechReality/salesTechReality_notification.js';
 import SocialMediaCalendar from '../../models/salesTechReality/salesTechReality_socialMediaCalendar.js';
 import { syncClientProfileByProjectId } from '../../utils/salesTechReality/salesTechReality_clientProfileSync.js';
 import { getNextRecurringDate } from '../../utils/salesTechReality/salesTechReality_recurringTaskScheduler.js';
 import { normalizeTaskPayload } from '../../utils/normalizeTaskPayload.js';
+import { createNotificationService } from '../../utils/notificationService.js';
+import { runTaskNotificationSideEffects } from '../../utils/taskNotificationHooks.js';
+import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../utils/taskTiming.js';
+
+const notificationService = createNotificationService({ Notification });
 
 const normalizeDateStart = (value) => {
   const d = new Date(value);
@@ -39,6 +45,8 @@ export const createTask = async (req, res) => {
       return res.status(400).json({ message: 'Project, title, assignedTo, and assignedBy are required' });
     }
 
+    await assertEmployeeAvailableForTask(Task, assignedTo);
+
     if (shouldCreateRecurringTemplate({ recurrenceEnabled, isRecurring })) {
       if (!recurrenceType || !['daily', 'weekly', 'monthly'].includes(recurrenceType)) {
         return res.status(400).json({ message: 'Valid recurrenceType is required for auto task' });
@@ -65,6 +73,7 @@ export const createTask = async (req, res) => {
         isRecurringTemplate: false,
         recurrenceEnabled: false,
         recurringScheduledFor: firstRunDate,
+        startedAt: null,
       });
       await firstTask.save();
 
@@ -96,6 +105,8 @@ export const createTask = async (req, res) => {
         .populate('assignedTo')
         .populate('assignedBy');
 
+      await runTaskNotificationSideEffects({ notificationService, updated: populated });
+
       return res.status(201).json({
         message: 'Auto task created successfully',
         task: populated,
@@ -117,6 +128,7 @@ export const createTask = async (req, res) => {
       completedAt: initialStatus === 'Completed' ? new Date() : null,
       isRecurringTemplate: false,
       recurrenceEnabled: false,
+      ...applyTaskStatusTiming({ existingStatus: null, nextStatus: initialStatus }),
     });
     await task.save();
     await syncClientProfileByProjectId(project);
@@ -124,8 +136,12 @@ export const createTask = async (req, res) => {
       .populate('project')
       .populate('assignedTo')
       .populate('assignedBy');
+    await runTaskNotificationSideEffects({ notificationService, updated: populated });
     return res.status(201).json({ message: 'Task assigned successfully', task: populated });
   } catch (error) {
+    if (error?.statusCode === 409) {
+      return res.status(409).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Error creating task', error });
   }
 };
@@ -233,11 +249,26 @@ export const getTaskById = async (req, res) => {
 
 export const updateTask = async (req, res) => {
   try {
-    const existing = await Task.findById(req.params.id).select('project status');
+    const existing = await Task.findById(req.params.id).select(
+      'project status assignedTo assignedBy title rating'
+    );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
     const nextStatus = req.body.status !== undefined ? req.body.status : existing.status;
     const payload = normalizeTaskPayload(req.body);
+    Object.assign(
+      payload,
+      applyTaskStatusTiming({ existingStatus: existing.status, nextStatus, payload })
+    );
+
+    const nextAssignee = payload.assignedTo ?? existing.assignedTo;
+    const assigneeChanged =
+      nextAssignee &&
+      String(nextAssignee) !== String(existing.assignedTo?._id || existing.assignedTo || '');
+    if (assigneeChanged) {
+      await assertEmployeeAvailableForTask(Task, nextAssignee, req.params.id);
+    }
+
     if (nextStatus === 'Completed' && existing.status !== 'Completed') {
       payload.completedAt = payload.completedAt || new Date();
     } else if (nextStatus !== 'Completed' && existing.status === 'Completed') {
@@ -249,10 +280,14 @@ export const updateTask = async (req, res) => {
       .populate('assignedTo')
       .populate('assignedBy')
       .populate('rating.ratedBy', 'name designation');
+    await runTaskNotificationSideEffects({ notificationService, existing, updated });
     await syncClientProfileByProjectId(existing.project);
     await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
     res.status(200).json({ message: 'Task updated', task: updated });
   } catch (error) {
+    if (error?.statusCode === 409) {
+      return res.status(409).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Error updating task', error });
   }
 };

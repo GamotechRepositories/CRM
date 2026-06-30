@@ -14,6 +14,7 @@ const AVAILABILITY_STYLES = {
   available: 'bg-green-100 text-green-800 border-green-200',
   moderate: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   busy: 'bg-orange-100 text-orange-800 border-orange-200',
+  allocated: 'bg-red-100 text-red-800 border-red-200',
   on_leave: 'bg-red-100 text-red-800 border-red-200',
   absent: 'bg-red-100 text-red-800 border-red-200',
   checked_out: 'bg-gray-100 text-gray-700 border-gray-200',
@@ -114,6 +115,14 @@ const AssignTask = () => {
 
   const selectedAvailability = form.assignedTo ? availabilityMap[String(form.assignedTo)] : null
 
+  useEffect(() => {
+    if (!form.assignedTo) return
+    const avail = availabilityMap[String(form.assignedTo)]
+    if (avail?.isAssignable === false) {
+      setForm((f) => ({ ...f, assignedTo: '' }))
+    }
+  }, [availabilityMap, form.assignedTo])
+
   const totalDurationMinutes = useMemo(() => {
     const hours = Number(form.durationHours) || 0
     const minutes = Number(form.durationMinutes) || 0
@@ -133,6 +142,10 @@ const AssignTask = () => {
     }
     if (!totalDurationMinutes) {
       setError('Please enter a time duration for this task')
+      return
+    }
+    if (selectedAvailability && selectedAvailability.isAssignable === false) {
+      setError('Selected employee is not available. They already have an open task assigned.')
       return
     }
     setLoading(true)
@@ -237,12 +250,19 @@ const AssignTask = () => {
             <option value=''>Select employee</option>
             {employees.map((emp) => {
               const avail = availabilityMap[String(emp._id)]
-              const suffix = avail ? ` — ${avail.availabilityLabel}` : ''
+              const unavailable = avail?.isAssignable === false
+              const remaining = avail?.remainingTimeLabel
+              const suffix = avail
+                ? unavailable
+                  ? ` — ${avail.availabilityLabel}${remaining ? ` (${remaining} left)` : ''}`
+                  : ` — ${avail.availabilityLabel}`
+                : ''
               return (
-                <option key={emp._id} value={emp._id}>
+                <option key={emp._id} value={emp._id} disabled={unavailable}>
                   {emp.name}
                   {emp.designation?.title ? ` (${emp.designation.title})` : ''}
                   {suffix}
+                  {unavailable ? ' [Unavailable]' : ''}
                 </option>
               )
             })}
@@ -265,8 +285,10 @@ const AssignTask = () => {
                   <dd className='font-medium mt-0.5'>{selectedAvailability.workingHours || '—'}</dd>
                 </div>
                 <div>
-                  <dt className='opacity-75'>Scheduled load</dt>
-                  <dd className='font-medium mt-0.5'>{formatDuration(selectedAvailability.scheduledMinutes)}</dd>
+                  <dt className='opacity-75'>Task time left</dt>
+                  <dd className='font-medium mt-0.5'>
+                    {selectedAvailability.remainingTimeLabel || formatDuration(selectedAvailability.remainingMinutes) || '—'}
+                  </dd>
                 </div>
                 <div>
                   <dt className='opacity-75'>Attendance</dt>
@@ -275,18 +297,34 @@ const AssignTask = () => {
                   </dd>
                 </div>
                 <div>
-                  <dt className='opacity-75'>Designation</dt>
-                  <dd className='font-medium mt-0.5'>{selectedAvailability.designation || '—'}</dd>
+                  <dt className='opacity-75'>Assignable</dt>
+                  <dd className='font-medium mt-0.5'>
+                    {selectedAvailability.isAssignable === false ? 'No — open task exists' : 'Yes'}
+                  </dd>
                 </div>
               </dl>
+              {selectedAvailability.activeTask && (
+                <div className='mt-3 pt-3 border-t border-current/20'>
+                  <p className='text-xs font-semibold mb-1.5'>Current task</p>
+                  <div className='flex justify-between gap-2 text-xs'>
+                    <span className='truncate'>{selectedAvailability.activeTask.title}</span>
+                    <span className='shrink-0 font-medium'>
+                      {selectedAvailability.activeTask.remainingTimeLabel || formatDuration(selectedAvailability.activeTask.remainingMinutes)} left
+                    </span>
+                  </div>
+                  <p className='text-[10px] mt-1 opacity-80'>Status: {selectedAvailability.activeTask.status}</p>
+                </div>
+              )}
               {selectedAvailability.openTasks?.length > 0 && (
                 <div className='mt-3 pt-3 border-t border-current/20'>
-                  <p className='text-xs font-semibold mb-1.5'>Current open tasks</p>
+                  <p className='text-xs font-semibold mb-1.5'>Open tasks</p>
                   <ul className='space-y-1 text-xs'>
                     {selectedAvailability.openTasks.slice(0, 4).map((t) => (
                       <li key={t._id} className='flex justify-between gap-2'>
                         <span className='truncate'>{t.title}</span>
-                        <span className='shrink-0 opacity-80'>{formatDuration(t.estimatedDurationMinutes)}</span>
+                        <span className='shrink-0 opacity-80'>
+                          {t.remainingTimeLabel || formatDuration(t.remainingMinutes)} left
+                        </span>
                       </li>
                     ))}
                   </ul>

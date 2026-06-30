@@ -1,7 +1,19 @@
+import { getTaskRemainingMinutes } from './taskTiming.js';
+
 const startOfDay = (value) => {
   const d = value ? new Date(value) : new Date();
   d.setHours(0, 0, 0, 0);
   return d;
+};
+
+const formatDurationLabel = (minutes) => {
+  const mins = Number(minutes);
+  if (!Number.isFinite(mins) || mins <= 0) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
 };
 
 const isOnApprovedLeave = (leave, dayStart, dayEnd) => {
@@ -45,7 +57,7 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
       assignedTo: { $in: ids },
       status: { $in: ['Pending', 'In Progress'] },
       isRecurringTemplate: { $ne: true },
-    }).select('assignedTo estimatedDurationMinutes dueDate status title'),
+    }).select('assignedTo estimatedDurationMinutes dueDate status title startedAt'),
   ]);
 
   return employees.map((emp) => {
@@ -56,22 +68,39 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
     const tasks = openTasks.filter((t) => String(t.assignedTo) === id);
     const openTaskCount = tasks.length;
     const scheduledMinutes = tasks.reduce((sum, t) => sum + (t.estimatedDurationMinutes || 0), 0);
+    const inProgressTask = tasks.find((t) => t.status === 'In Progress') || null;
+    const activeTask = inProgressTask || tasks[0] || null;
+    const remainingMinutes = tasks.reduce((sum, t) => sum + (getTaskRemainingMinutes(t) || 0), 0);
+    const activeTaskRemainingMinutes = activeTask ? getTaskRemainingMinutes(activeTask) : null;
+    const isAllocated = openTaskCount > 0;
 
     let availabilityStatus = 'available';
     let availabilityLabel = 'Available';
+    let isAssignable = true;
 
     if (emp.employmentStatus && emp.employmentStatus !== 'Active') {
       availabilityStatus = 'inactive';
       availabilityLabel = 'Inactive';
+      isAssignable = false;
     } else if (onLeave) {
       availabilityStatus = 'on_leave';
       availabilityLabel = 'On approved leave';
+      isAssignable = false;
     } else if (attendance?.status === 'Absent') {
       availabilityStatus = 'absent';
       availabilityLabel = 'Absent today';
+      isAssignable = false;
     } else if (attendance?.checkOut) {
       availabilityStatus = 'checked_out';
       availabilityLabel = 'Checked out';
+      isAssignable = false;
+    } else if (isAllocated) {
+      availabilityStatus = 'allocated';
+      const remainingLabel = formatDurationLabel(activeTaskRemainingMinutes ?? remainingMinutes);
+      availabilityLabel = inProgressTask
+        ? `On task — ${remainingLabel || 'in progress'} remaining`
+        : `Allocated — ${openTaskCount} open task${openTaskCount === 1 ? '' : 's'}`;
+      isAssignable = false;
     } else if (openTaskCount >= 6 || scheduledMinutes >= 480) {
       availabilityStatus = 'busy';
       availabilityLabel = 'Heavily loaded';
@@ -87,9 +116,25 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
       workingHours: emp.workingHours || '',
       availabilityStatus,
       availabilityLabel,
+      isAssignable,
       onLeave,
       openTaskCount,
       scheduledMinutes,
+      remainingMinutes,
+      activeTaskRemainingMinutes,
+      remainingTimeLabel: formatDurationLabel(activeTaskRemainingMinutes ?? remainingMinutes),
+      activeTask: activeTask
+        ? {
+            _id: activeTask._id,
+            title: activeTask.title,
+            status: activeTask.status,
+            dueDate: activeTask.dueDate,
+            estimatedDurationMinutes: activeTask.estimatedDurationMinutes,
+            startedAt: activeTask.startedAt,
+            remainingMinutes: getTaskRemainingMinutes(activeTask),
+            remainingTimeLabel: formatDurationLabel(getTaskRemainingMinutes(activeTask)),
+          }
+        : null,
       scheduledHours: Math.round((scheduledMinutes / 60) * 10) / 10,
       attendanceToday: attendance
         ? {
@@ -105,6 +150,9 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
         status: t.status,
         dueDate: t.dueDate,
         estimatedDurationMinutes: t.estimatedDurationMinutes,
+        startedAt: t.startedAt,
+        remainingMinutes: getTaskRemainingMinutes(t),
+        remainingTimeLabel: formatDurationLabel(getTaskRemainingMinutes(t)),
       })),
     };
   });
