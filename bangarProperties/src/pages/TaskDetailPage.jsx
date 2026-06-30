@@ -2,6 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import {
+  formatTaskDuration,
+  getTaskRemainingMinutes,
+  getTaskStatusColor,
+  normalizeTaskStatus,
+  taskStatusToSocialStatus,
+} from '../utils/taskStatus'
 
 const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
 const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
@@ -27,7 +34,7 @@ const formatDuration = (minutes) => {
 }
 
 const getCompletionDurationMinutes = (task) => {
-  if (task?.status !== 'Completed' || !task?.completedAt || !task?.createdAt) return null
+  if (normalizeTaskStatus(task?.status) !== 'Completed' || !task?.completedAt || !task?.createdAt) return null
   const diffMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime()
   if (!Number.isFinite(diffMs) || diffMs < 0) return null
   return Math.round(diffMs / 60000)
@@ -111,20 +118,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
     }
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-800'
-      case 'In Progress': return 'bg-blue-100 text-blue-800'
-      case 'Cancelled': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const taskStatusToSocialStatus = (status) => {
-    if (status === 'Completed') return 'Published'
-    if (status === 'Cancelled') return 'Cancelled'
-    return 'Scheduled'
-  }
+  const getStatusColor = getTaskStatusColor
 
   const canUpdateTaskStatus = useCallback(
     (t) => {
@@ -211,17 +205,24 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
   const handleStatusChange = async (t, newStatus) => {
     const tid = t._id
     if (!tid || !newStatus) return
+    const resolvedStatus = normalizeTaskStatus(newStatus)
     setUpdatingStatus(true)
     try {
       if (t.source === 'social_media' && t.clientId && t.postId) {
-        const socialStatus = taskStatusToSocialStatus(newStatus)
+        const socialStatus = taskStatusToSocialStatus(resolvedStatus)
         await api.put(`/social-calendars/client/${t.clientId}/posts/${t.postId}`, {
           status: socialStatus,
         })
-        setTask((prev) => (prev?._id === tid ? { ...prev, status: newStatus } : prev))
+        setTask((prev) => (
+          prev?._id === tid
+            ? { ...prev, status: resolvedStatus, socialPostStatus: socialStatus }
+            : prev
+        ))
       } else {
-        const res = await api.put(`/tasks/${tid}`, { status: newStatus })
-        setTask((prev) => res.data?.task || (prev?._id === tid ? { ...prev, status: newStatus } : prev))
+        const res = await api.put(`/tasks/${tid}`, { status: resolvedStatus })
+        const updated = res.data?.task
+        const status = normalizeTaskStatus(updated?.status || resolvedStatus)
+        setTask((prev) => (prev?._id === tid ? { ...prev, ...updated, status } : prev))
       }
     } catch (err) {
       console.error('Failed to update task status:', err)
@@ -488,7 +489,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
               <span className='text-sm text-gray-500'>Status</span>
               {canUpdateTaskStatus(task) ? (
                 <select
-                  value={task.status}
+                  value={normalizeTaskStatus(task.status) || task.status}
                   onChange={(e) => handleStatusChange(task, e.target.value)}
                   disabled={updatingStatus}
                   className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 max-w-[11rem]'
@@ -499,7 +500,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                 </select>
               ) : (
                 <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
-                  {task.status}
+                  {normalizeTaskStatus(task.status) || task.status}
                 </span>
               )}
             </div>
@@ -523,15 +524,23 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                     {formatDuration(task.estimatedDurationMinutes)}
                   </span>
                 </div>
+                {normalizeTaskStatus(task.status) === 'In Progress' && getTaskRemainingMinutes(task) != null && (
+                  <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
+                    <span className='text-sm text-gray-500'>Time Remaining</span>
+                    <span className='text-sm font-medium text-blue-700'>
+                      {formatTaskDuration(getTaskRemainingMinutes(task))}
+                    </span>
+                  </div>
+                )}
                 <div className='flex justify-between items-start py-2 border-b border-gray-100 gap-4'>
                   <span className='text-sm text-gray-500 shrink-0'>Completion Duration</span>
                   <div className='text-right'>
                     <span className='text-sm font-medium text-gray-900'>
-                      {task.status === 'Completed'
+                      {normalizeTaskStatus(task.status) === 'Completed'
                         ? formatDuration(getCompletionDurationMinutes(task))
                         : '—'}
                     </span>
-                    {task.status === 'Completed' && (() => {
+                    {normalizeTaskStatus(task.status) === 'Completed' && (() => {
                       const variance = getDurationVarianceLabel(
                         task.estimatedDurationMinutes,
                         getCompletionDurationMinutes(task),
@@ -542,7 +551,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                     })()}
                   </div>
                 </div>
-                {task.status === 'Completed' && task.completedAt && (
+                {normalizeTaskStatus(task.status) === 'Completed' && task.completedAt && (
                   <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
                     <span className='text-sm text-gray-500'>Completed (date & time)</span>
                     <span className='text-sm text-gray-700'>{fmtDateTime(task.completedAt)}</span>

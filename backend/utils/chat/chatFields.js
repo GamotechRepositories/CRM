@@ -8,8 +8,14 @@ export const getChatConversationFields = (companyPrefix) => ({
   },
   participants: [
     {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: `${companyPrefix}_Employee`,
+      employee: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: `${companyPrefix}_Employee`,
+      },
+      joinedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
   ],
   participantKey: {

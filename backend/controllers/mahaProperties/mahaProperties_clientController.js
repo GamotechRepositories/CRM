@@ -6,12 +6,7 @@ import Task from '../../models/mahaProperties/mahaProperties_task.js';
 import SocialMediaCalendar from '../../models/mahaProperties/mahaProperties_socialMediaCalendar.js';
 import { calculateBillingSummary } from '../../utils/mahaProperties/mahaProperties_clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './mahaProperties_billingController.js';
-
-const socialStatusToTaskStatus = (status) => {
-  if (status === 'Published') return 'Completed';
-  if (status === 'Cancelled') return 'Cancelled';
-  return 'Pending'; // Scheduled, Draft
-};
+import { socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
 // Create a new client
 export const createClient = async (req, res) => {

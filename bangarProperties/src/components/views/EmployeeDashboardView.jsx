@@ -72,6 +72,13 @@ const getWeekRangeLabel = (date = new Date()) => {
   return `${fmt(start)} – ${fmt(end)}`
 }
 
+const localYmd = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 const isSameDay = (a, b) => {
   const d1 = new Date(a)
   const d2 = new Date(b)
@@ -363,8 +370,8 @@ const EmployeeDashboardView = () => {
       </div>
 
       <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6'>
-        <KpiCard title='My Tasks' value={stats.todaysTasks.length} subtitle="Today's Tasks" icon='📋' color='bg-blue-50' onClick={() => navigate('/my-tasks?status=Pending')} />
-        <KpiCard title='Past Tasks' value={stats.pastIncompleteTasks.length} subtitle='Not Completed' icon='⏳' color='bg-red-50' onClick={() => navigate('/my-tasks?status=Pending')} />
+        <KpiCard title='My Tasks' value={stats.todaysTasks.length} subtitle="Today's Tasks" icon='📋' color='bg-blue-50' onClick={() => navigate(`/my-tasks?date=${localYmd(now)}`)} />
+        <KpiCard title='Past Tasks' value={stats.pastIncompleteTasks.length} subtitle='Not Completed' icon='⏳' color='bg-red-50' onClick={() => navigate('/my-tasks?status=Delayed')} />
         <KpiCard title='Tasks Completed' value={stats.completedThisMonth.length} subtitle='This Month' icon='✅' color='bg-green-50' onClick={() => navigate('/my-tasks?status=Completed')} />
         <KpiCard title='My Leads' value={myLeads.length} subtitle='Total Leads' icon='🎯' color='bg-purple-50' onClick={() => navigate('/lead-management')} />
         <KpiCard title='My Deals' value={stats.openDeals.length} subtitle='Open Deals' icon='💼' color='bg-orange-50' onClick={() => navigate('/lead-management')} />

@@ -46,6 +46,65 @@ const normalizeMentions = (mentions = []) => {
     .filter((m) => m.name);
 };
 
+const getParticipantEmployeeId = (participant) => {
+  if (!participant) return null;
+  if (participant.employee) {
+    return String(participant.employee._id || participant.employee);
+  }
+  return String(participant._id || participant);
+};
+
+const normalizeParticipantsArray = (participants = []) => {
+  return participants
+    .map((participant) => {
+      const employeeId = getParticipantEmployeeId(participant);
+      if (!employeeId || employeeId === 'undefined' || employeeId === 'null') return null;
+      return {
+        employee: toObjectId(employeeId),
+        joinedAt: participant.joinedAt ? new Date(participant.joinedAt) : null,
+      };
+    })
+    .filter(Boolean);
+};
+
+const mergeCreatedAtWithJoinedAt = (clause, joinedAt) => {
+  if (!joinedAt) return clause;
+  const join = new Date(joinedAt);
+  if (Number.isNaN(join.getTime())) return clause;
+  if (!clause) return { $gte: join };
+
+  const merged = { ...clause };
+  const bump = (key) => {
+    if (!merged[key]) return;
+    merged[key] = new Date(Math.max(new Date(merged[key]).getTime(), join.getTime()));
+  };
+  bump('$gte');
+  bump('$gt');
+  if (!merged.$gte && !merged.$gt) merged.$gte = join;
+  return merged;
+};
+
+const buildOlderThanFilter = (beforeDate, joinedAt) => {
+  const filter = { $lt: beforeDate };
+  if (!joinedAt) return filter;
+
+  const join = new Date(joinedAt);
+  if (Number.isNaN(join.getTime())) return filter;
+  if (join >= beforeDate) return null;
+  filter.$gte = join;
+  return filter;
+};
+
+const buildUnreadMessageFilter = (conversationId, employeeId, joinedAt) => ({
+  conversation: conversationId,
+  sender: { $ne: employeeId },
+  readBy: { $not: { $elemMatch: { employee: employeeId } } },
+  ...(() => {
+    const createdAt = mergeCreatedAtWithJoinedAt(null, joinedAt);
+    return createdAt ? { createdAt } : {};
+  })(),
+});
+
 export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, getChatIntegration }) => {
   const ensureTeamConversation = async () => {
     let conversation = await Conversation.findOne({ type: 'team', participantKey: TEAM_PARTICIPANT_KEY });
@@ -61,6 +120,52 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
     return conversation;
   };
 
+  const ensureTeamMemberJoined = async (conv, employeeId) => {
+    const empKey = String(employeeId);
+    const members = normalizeParticipantsArray(conv.participants);
+    const existing = members.find((member) => String(member.employee) === empKey);
+
+    if (existing?.joinedAt) {
+      return new Date(existing.joinedAt);
+    }
+
+    const employee = await Employee.findById(employeeId).select('_id createdAt');
+    const now = new Date();
+    const hasPriorMessages = await Message.exists({
+      conversation: conv._id,
+      sender: employeeId,
+    });
+
+    let joinedAt = now;
+    if (hasPriorMessages) {
+      joinedAt = conv.createdAt || now;
+    } else {
+      const firstMessage = await Message.findOne({ conversation: conv._id })
+        .sort({ createdAt: 1 })
+        .select('createdAt')
+        .lean();
+      const employeeCreatedAt = employee?.createdAt ? new Date(employee.createdAt) : now;
+      if (firstMessage?.createdAt && employeeCreatedAt <= new Date(firstMessage.createdAt)) {
+        joinedAt = conv.createdAt || new Date(firstMessage.createdAt);
+      }
+    }
+
+    if (existing) {
+      existing.joinedAt = joinedAt;
+    } else {
+      members.push({ employee: toObjectId(employeeId), joinedAt });
+    }
+
+    await Conversation.findByIdAndUpdate(conv._id, { participants: members });
+    return joinedAt;
+  };
+
+  const getMemberJoinedAt = (conv, employeeId) => {
+    const members = normalizeParticipantsArray(conv.participants);
+    const member = members.find((entry) => String(entry.employee) === String(employeeId));
+    return member?.joinedAt ? new Date(member.joinedAt) : null;
+  };
+
   const assertCanAccess = async (conversationId, employeeId) => {
     const conv = await Conversation.findById(conversationId);
     if (!conv) return { error: { status: 404, message: 'Conversation not found' } };
@@ -69,12 +174,16 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
     if (!employee) return { error: { status: 403, message: 'Invalid employee' } };
 
     if (conv.type === 'team') {
-      return { conv, employee };
+      const joinedAt = await ensureTeamMemberJoined(conv, employeeId);
+      return { conv, employee, joinedAt };
     }
 
-    const isMember = conv.participants.some((p) => String(p) === String(employeeId));
+    const isMember = normalizeParticipantsArray(conv.participants)
+      .some((member) => String(member.employee) === String(employeeId));
     if (!isMember) return { error: { status: 403, message: 'Not a participant in this conversation' } };
-    return { conv, employee };
+
+    const joinedAt = getMemberJoinedAt(conv, employeeId) || conv.createdAt || new Date();
+    return { conv, employee, joinedAt };
   };
 
   const getIntegration = async (_req, res) => {
@@ -99,15 +208,15 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
       }
 
       const conversation = await ensureTeamConversation();
-      const unreadCount = await Message.countDocuments({
-        conversation: conversation._id,
-        sender: { $ne: employeeId },
-        readBy: { $not: { $elemMatch: { employee: employeeId } } },
-      });
+      const joinedAt = await ensureTeamMemberJoined(conversation, employeeId);
+      const unreadCount = await Message.countDocuments(
+        buildUnreadMessageFilter(conversation._id, employeeId, joinedAt)
+      );
 
       res.status(200).json({
         conversation: {
           ...conversation.toObject(),
+          joinedAt,
           unreadCount,
         },
         currentUser: employee,
@@ -125,17 +234,17 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
       }
 
       const conversation = await ensureTeamConversation();
-      const unreadCount = await Message.countDocuments({
-        conversation: conversation._id,
-        sender: { $ne: employeeId },
-        readBy: { $not: { $elemMatch: { employee: employeeId } } },
-      });
+      const joinedAt = await ensureTeamMemberJoined(conversation, employeeId);
+      const unreadCount = await Message.countDocuments(
+        buildUnreadMessageFilter(conversation._id, employeeId, joinedAt)
+      );
 
       res.status(200).json({
         conversations: [
           {
             ...conversation.toObject(),
             title: conversation.title || 'Team Chat',
+            joinedAt,
             unreadCount,
           },
         ],
@@ -162,18 +271,22 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
 
       const participantKey = buildDirectParticipantKey(employeeId, peerId);
       let conversation = await Conversation.findOne({ participantKey })
-        .populate('participants', 'name email department')
+        .populate('participants.employee', 'name email department')
         .populate('lastMessageSender', 'name');
 
       if (!conversation) {
+        const joinedAt = new Date();
         conversation = await Conversation.create({
           type: 'direct',
-          participants: [employeeId, peerId],
+          participants: [
+            { employee: employeeId, joinedAt },
+            { employee: peerId, joinedAt },
+          ],
           participantKey,
-          lastMessageAt: new Date(),
+          lastMessageAt: joinedAt,
         });
         conversation = await Conversation.findById(conversation._id)
-          .populate('participants', 'name email department')
+          .populate('participants.employee', 'name email department')
           .populate('lastMessageSender', 'name');
       }
 
@@ -196,7 +309,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         return res.status(400).json({ message: 'employeeId is required' });
       }
 
-      const { error } = await assertCanAccess(id, employeeId);
+      const { error, joinedAt } = await assertCanAccess(id, employeeId);
       if (error) return res.status(error.status).json({ message: error.message });
 
       const filter = { conversation: id };
@@ -206,18 +319,25 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
       if (after) {
         const afterDate = new Date(after);
         if (!Number.isNaN(afterDate.getTime())) {
-          filter.createdAt = { $gt: afterDate };
+          filter.createdAt = mergeCreatedAtWithJoinedAt({ $gt: afterDate }, joinedAt);
+        } else if (joinedAt) {
+          filter.createdAt = mergeCreatedAtWithJoinedAt(null, joinedAt);
         }
       } else {
         const { start, end, dayKey } = getDayBoundaries(day);
         responseDay = dayKey;
-        filter.createdAt = { $gte: start, $lte: end };
-        hasOlder = Boolean(
-          await Message.exists({
-            conversation: id,
-            createdAt: { $lt: start },
-          })
-        );
+
+        if (joinedAt && new Date(joinedAt) > end) {
+          filter.createdAt = { $gte: new Date(joinedAt), $lte: end };
+          hasOlder = false;
+        } else {
+          const effectiveStart = joinedAt && new Date(joinedAt) > start ? new Date(joinedAt) : start;
+          filter.createdAt = { $gte: effectiveStart, $lte: end };
+          const olderFilter = buildOlderThanFilter(start, joinedAt);
+          hasOlder = olderFilter
+            ? Boolean(await Message.exists({ conversation: id, createdAt: olderFilter }))
+            : false;
+        }
       }
 
       const messages = await Message.find(filter)
@@ -237,6 +357,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         messages,
         day: responseDay,
         hasOlder,
+        joinedAt,
       });
     } catch (error) {
       res.status(500).json({ message: 'Error fetching messages', error: error?.message });
@@ -297,7 +418,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         return res.status(400).json({ message: 'At least 2 poll options are required' });
       }
       if (cleanedOptions.length > 10) {
-        return res.status(400).json({ message: 'Maximum 10 poll options allowed' });
+        return res.status(400).json({ message: 'Maximum 10 poll options are allowed' });
       }
 
       const { error, conv, employee } = await assertCanAccess(id, employeeId);
@@ -400,14 +521,10 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         return res.status(400).json({ message: 'employeeId is required' });
       }
 
-      const { error } = await assertCanAccess(id, employeeId);
+      const { error, joinedAt } = await assertCanAccess(id, employeeId);
       if (error) return res.status(error.status).json({ message: error.message });
 
-      const unread = await Message.find({
-        conversation: id,
-        sender: { $ne: employeeId },
-        readBy: { $not: { $elemMatch: { employee: employeeId } } },
-      });
+      const unread = await Message.find(buildUnreadMessageFilter(id, employeeId, joinedAt));
 
       const now = new Date();
       await Promise.all(

@@ -6,12 +6,7 @@ import Task from '../../models/bangarProperties/bangarProperties_task.js';
 import SocialMediaCalendar from '../../models/bangarProperties/bangarProperties_socialMediaCalendar.js';
 import { calculateBillingSummary } from '../../utils/bangarProperties/bangarProperties_clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './bangarProperties_billingController.js';
-
-const socialStatusToTaskStatus = (status) => {
-  if (status === 'Published') return 'Completed';
-  if (status === 'Cancelled') return 'Cancelled';
-  return 'Pending'; // Scheduled, Draft
-};
+import { socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
 // Create a new client
 export const createClient = async (req, res) => {

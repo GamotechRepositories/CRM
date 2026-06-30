@@ -721,7 +721,7 @@ const ChatPortalView = () => {
         <div className='flex-1 flex flex-col bg-white overflow-hidden min-w-0'>
           <div className='px-5 py-3 border-b border-[#d1d7db] bg-[#075e54] text-white'>
             <p className='font-semibold'>{room?.title || 'Team Chat'}</p>
-            <p className='text-xs text-white/80'>All employees · Type @ to tag someone</p>
+            <p className='text-xs text-white/80'>Messages visible from when you joined · Type @ to tag someone</p>
           </div>
 
           <div
@@ -750,7 +750,9 @@ const ChatPortalView = () => {
                 {messages.length === 0 ? (
                   <>
                     <DateDivider label={formatDayLabel(new Date())} />
-                    <p className='text-sm text-gray-600 text-center py-8'>No messages yet. Start the conversation!</p>
+                    <p className='text-sm text-gray-600 text-center py-8'>
+                      No messages since you joined the chat. Say hello to the team!
+                    </p>
                   </>
                 ) : (
                   chatItems.map((item) => {

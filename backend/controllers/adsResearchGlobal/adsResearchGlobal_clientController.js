@@ -6,12 +6,7 @@ import Task from '../../models/adsResearchGlobal/adsResearchGlobal_task.js';
 import SocialMediaCalendar from '../../models/adsResearchGlobal/adsResearchGlobal_socialMediaCalendar.js';
 import { calculateBillingSummary } from '../../utils/adsResearchGlobal/adsResearchGlobal_clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './adsResearchGlobal_billingController.js';
-
-const socialStatusToTaskStatus = (status) => {
-  if (status === 'Published') return 'Completed';
-  if (status === 'Cancelled') return 'Cancelled';
-  return 'Pending'; // Scheduled, Draft
-};
+import { socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
 // Create a new client
 export const createClient = async (req, res) => {

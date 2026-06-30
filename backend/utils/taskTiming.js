@@ -2,7 +2,8 @@ export const getTaskRemainingMinutes = (task, nowMs = Date.now()) => {
   const estimated = Number(task?.estimatedDurationMinutes);
   if (!Number.isFinite(estimated) || estimated <= 0) return null;
 
-  if (task?.status === 'In Progress' && task?.startedAt) {
+  const status = String(task?.status || '').trim();
+  if (status === 'In Progress' && task?.startedAt) {
     const startedMs = new Date(task.startedAt).getTime();
     if (!Number.isNaN(startedMs)) {
       const elapsed = Math.floor((nowMs - startedMs) / 60000);

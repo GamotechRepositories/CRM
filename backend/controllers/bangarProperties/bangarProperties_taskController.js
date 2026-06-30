@@ -8,6 +8,7 @@ import { normalizeTaskPayload } from '../../utils/normalizeTaskPayload.js';
 import { createNotificationService } from '../../utils/notificationService.js';
 import { runTaskNotificationSideEffects } from '../../utils/taskNotificationHooks.js';
 import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../utils/taskTiming.js';
+import { normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
 const notificationService = createNotificationService({ Notification });
 
@@ -146,11 +147,6 @@ export const createTask = async (req, res) => {
   }
 };
 
-const socialStatusToTaskStatus = (status) => {
-  if (status === 'Published') return 'Completed';
-  if (status === 'Cancelled') return 'Cancelled';
-  return 'Pending'; // Scheduled, Draft
-};
 
 export const getTasks = async (req, res) => {
   try {
@@ -254,8 +250,13 @@ export const updateTask = async (req, res) => {
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
-    const nextStatus = req.body.status !== undefined ? req.body.status : existing.status;
+    const nextStatus = req.body.status !== undefined
+      ? normalizeTaskStatus(req.body.status)
+      : existing.status;
     const payload = normalizeTaskPayload(req.body);
+    if (req.body.status !== undefined) {
+      payload.status = nextStatus;
+    }
     Object.assign(
       payload,
       applyTaskStatusTiming({ existingStatus: existing.status, nextStatus, payload })

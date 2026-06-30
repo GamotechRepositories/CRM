@@ -2,8 +2,56 @@ import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import {
+  formatTaskDuration,
+  getTaskRemainingMinutes,
+  getTaskStatusColor,
+  normalizeTaskStatus,
+  taskStatusToSocialStatus,
+} from '../../utils/taskStatus'
 
 const VALID_STATUSES = ['All', 'Pending', 'In Progress', 'Completed', 'Cancelled', 'Delayed']
+
+const parseStatusParam = (raw) => {
+  if (!raw) return null
+  const decoded = decodeURIComponent(String(raw).replace(/\+/g, ' ')).trim()
+  return VALID_STATUSES.includes(decoded) ? decoded : null
+}
+
+const TaskStatCard = ({ title, value, subtitle, icon, color, accentClass, onClick }) => (
+  <button
+    type='button'
+    onClick={onClick}
+    className={`text-left bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow w-full min-w-0 border-t-[3px] ${accentClass} ${onClick ? 'cursor-pointer' : ''}`}
+  >
+    <div className='flex items-center justify-between gap-2'>
+      <div className='min-w-0 flex-1'>
+        <p className='text-sm text-gray-500 font-medium truncate'>{title}</p>
+        <div className='flex items-baseline gap-2 mt-1 min-w-0'>
+          <span className='text-2xl font-bold text-gray-900 tabular-nums leading-none shrink-0'>{value}</span>
+          {subtitle && <span className='text-xs text-gray-500 truncate'>{subtitle}</span>}
+        </div>
+      </div>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${color}`}>{icon}</div>
+    </div>
+  </button>
+)
+
+const formatShortName = (name) => {
+  if (!name || typeof name !== 'string') return '—'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '—'
+  if (parts.length === 1) return `${parts[0][0].toUpperCase()}.`
+  const firstInitial = parts[0][0].toUpperCase()
+  const surname = parts[parts.length - 1]
+  return `${firstInitial}. ${surname}`
+}
+
+const PersonShortName = ({ name }) => (
+  <span className='text-sm text-gray-900 font-medium whitespace-nowrap' title={name || undefined}>
+    {formatShortName(name)}
+  </span>
+)
 
 const localYmd = (d) => {
   const y = d.getFullYear()
@@ -28,14 +76,11 @@ const matchesDueDateFilter = (dueDateVal, filterYmd) => {
 
 const TasksView = ({ isMyTasks = false }) => {
   const { user, canAssignTask } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterProject, setFilterProject] = useState('')
-  const [filterStatus, setFilterStatus] = useState(() => {
-    const s = searchParams.get('status')
-    return s && VALID_STATUSES.includes(s) ? s : 'All'
-  })
+  const [filterStatus, setFilterStatus] = useState(() => parseStatusParam(searchParams.get('status')) || 'All')
   const [filterDate, setFilterDate] = useState(() =>
     searchParams.has('date') ? searchParams.get('date') || '' : ''
   )
@@ -47,8 +92,7 @@ const TasksView = ({ isMyTasks = false }) => {
   // Sync filters when URL search params change (e.g. dashboard links with ?date=&status=)
   useEffect(() => {
     if (searchParams.has('status')) {
-      const s = searchParams.get('status')
-      setFilterStatus(s && VALID_STATUSES.includes(s) ? s : 'All')
+      setFilterStatus(parseStatusParam(searchParams.get('status')) || 'All')
     } else {
       setFilterStatus('All')
     }
@@ -58,6 +102,17 @@ const TasksView = ({ isMyTasks = false }) => {
       setFilterDate('')
     }
   }, [searchParams])
+
+  const clearAllFilters = () => {
+    setFilterStatus('All')
+    setFilterDate('')
+    setFilterProject('')
+    setFilterAssignee('')
+    const next = new URLSearchParams(searchParams)
+    next.delete('status')
+    next.delete('date')
+    setSearchParams(next, { replace: true })
+  }
 
   const fetchTasks = async () => {
     try {
@@ -112,20 +167,25 @@ const TasksView = ({ isMyTasks = false }) => {
 
   const isDelayed = (t) => {
     if (!t?.dueDate) return false
-    return new Date(t.dueDate) < new Date() && !['Completed', 'Cancelled'].includes(t.status)
+    const status = normalizeTaskStatus(t.status)
+    return new Date(t.dueDate) < new Date() && status !== 'Completed' && status !== 'Cancelled'
   }
 
-  const filteredTasks = tasks.filter((t) => {
-    if (filterStatus === 'Delayed') {
-      if (!isDelayed(t)) return false
-    } else if (filterStatus !== 'All') {
-      if (t.status !== filterStatus) return false
-    }
+  const tasksForStats = tasks.filter((t) => {
     if ((isMyTasks || !canAssignTask()) && filterProject) {
       const projectId = t.project?._id || t.project
       if (projectId !== filterProject) return false
     }
     if (filterDate && !matchesDueDateFilter(t.dueDate, filterDate)) return false
+    return true
+  })
+
+  const filteredTasks = tasksForStats.filter((t) => {
+    if (filterStatus === 'Delayed') {
+      if (!isDelayed(t)) return false
+    } else if (filterStatus !== 'All') {
+      if (normalizeTaskStatus(t.status) !== filterStatus) return false
+    }
     return true
   })
 
@@ -141,14 +201,17 @@ const TasksView = ({ isMyTasks = false }) => {
     ).values()
   )
 
-  const totalTasks = filteredTasks.length
-  const completedTasks = filteredTasks.filter((t) => t.status === 'Completed').length
-  const inProgressTasks = filteredTasks.filter((t) => t.status === 'In Progress').length
-  const pendingTasks = filteredTasks.filter((t) => t.status === 'Pending').length
-  const overdueTasks = filteredTasks.filter((t) => {
-    if (!t.dueDate || t.status === 'Completed') return false
+  const totalTasks = tasksForStats.length
+  const completedTasks = tasksForStats.filter((t) => normalizeTaskStatus(t.status) === 'Completed').length
+  const inProgressTasks = tasksForStats.filter((t) => normalizeTaskStatus(t.status) === 'In Progress').length
+  const pendingTasks = tasksForStats.filter((t) => normalizeTaskStatus(t.status) === 'Pending').length
+  const overdueTasks = tasksForStats.filter((t) => {
+    if (!t.dueDate || normalizeTaskStatus(t.status) === 'Completed') return false
     return new Date(t.dueDate) < new Date(new Date().toDateString())
   }).length
+
+  const urgentTasks = tasksForStats.filter((t) => t.priority === 'Urgent').length
+  const completionPct = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -180,25 +243,12 @@ const TasksView = ({ isMyTasks = false }) => {
     return links.filter((l) => (l?.platform || '').toLowerCase() === selected)
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-800'
-      case 'In Progress': return 'bg-blue-100 text-blue-800'
-      case 'Cancelled': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
+  const getStatusColor = getTaskStatusColor
 
   const [viewTask, setViewTask] = useState(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [uploadingPostLink, setUploadingPostLink] = useState(false)
   const [socialUpload, setSocialUpload] = useState({ platform: '', url: '' })
-
-  const taskStatusToSocialStatus = (status) => {
-    if (status === 'Completed') return 'Published'
-    if (status === 'Cancelled') return 'Cancelled'
-    return 'Scheduled'
-  }
 
   const canUpdateTaskStatus = (task) => {
     if (!task || !user?._id) return false
@@ -207,30 +257,52 @@ const TasksView = ({ isMyTasks = false }) => {
     return assigneeId === user._id || canAssignTask()
   }
 
+  const hiddenByFilters = !loading && filteredTasks.length === 0 && tasksForStats.length > 0
+  const hasActiveFilters = filterStatus !== 'All' || filterDate || filterProject || filterAssignee
+
   const handleStatusChange = async (task, newStatus) => {
     const taskId = task._id
     if (!taskId || !newStatus) return
+    const resolvedStatus = normalizeTaskStatus(newStatus)
     setUpdatingStatus(true)
     try {
       if (task.source === 'social_media' && task.clientId && task.postId) {
-        const socialStatus = taskStatusToSocialStatus(newStatus)
+        const socialStatus = taskStatusToSocialStatus(resolvedStatus)
         await api.put(`/social-calendars/client/${task.clientId}/posts/${task.postId}`, {
           status: socialStatus,
         })
-        setViewTask((prev) => (prev?._id === taskId ? { ...prev, status: newStatus } : prev))
+        setViewTask((prev) => (
+          prev?._id === taskId
+            ? { ...prev, status: resolvedStatus, socialPostStatus: socialStatus }
+            : prev
+        ))
         setTasks((prev) =>
           prev.map((t) => {
-            if (t.source === 'social_media' && t.clientId === task.clientId && t.postId === task.postId) return { ...t, status: newStatus }
-            if (t._id === taskId) return { ...t, status: newStatus }
+            if (t.source === 'social_media' && t.clientId === task.clientId && t.postId === task.postId) {
+              return { ...t, status: resolvedStatus, socialPostStatus: socialStatus }
+            }
+            if (t._id === taskId) return { ...t, status: resolvedStatus, socialPostStatus: socialStatus }
             return t
           })
         )
       } else {
-        const res = await api.put(`/tasks/${taskId}`, { status: newStatus })
-        setViewTask((prev) => res.data?.task || prev)
+        const res = await api.put(`/tasks/${taskId}`, { status: resolvedStatus })
+        const updated = res.data?.task
+        const status = normalizeTaskStatus(updated?.status || resolvedStatus)
+        setViewTask((prev) => (prev?._id === taskId ? { ...prev, ...updated, status } : prev))
         setTasks((prev) =>
-          prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
+          prev.map((t) => (t._id === taskId ? { ...t, ...updated, status } : t))
         )
+      }
+      if (
+        filterStatus !== 'All'
+        && filterStatus !== 'Delayed'
+        && normalizeTaskStatus(resolvedStatus) !== filterStatus
+      ) {
+        setFilterStatus('All')
+        const next = new URLSearchParams(searchParams)
+        next.delete('status')
+        setSearchParams(next, { replace: true })
       }
     } catch (err) {
       console.error('Failed to update task status:', err)
@@ -314,31 +386,42 @@ const TasksView = ({ isMyTasks = false }) => {
         )}
       </div>
 
-      <div className='grid grid-cols-1 md:grid-cols-4 gap-6 mb-8'>
-        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-indigo-500'>
-          <p className='text-gray-600 text-sm font-medium'>Total Tasks</p>
-          <h3 className='text-sm font-bold text-gray-900 mt-2'>{totalTasks}</h3>
-          <p className='text-xs text-gray-600 mt-2'>{pendingTasks} pending, {inProgressTasks} in progress</p>
-        </div>
-        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-green-500'>
-          <p className='text-gray-600 text-sm font-medium'>Completed</p>
-          <h3 className='text-sm font-bold text-gray-900 mt-2'>{completedTasks}</h3>
-          <p className='text-xs text-green-600 mt-2'>
-            {totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0}% completion
-          </p>
-        </div>
-        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-orange-500'>
-          <p className='text-gray-600 text-sm font-medium'>Overdue</p>
-          <h3 className='text-sm font-bold text-gray-900 mt-2'>{overdueTasks}</h3>
-          <p className='text-xs text-orange-600 mt-2'>Attention needed</p>
-        </div>
-        <div className='bg-white rounded-lg shadow-md p-6 border-t-4 border-red-500'>
-          <p className='text-gray-600 text-sm font-medium'>Urgent</p>
-          <h3 className='text-sm font-bold text-gray-900 mt-2'>
-            {filteredTasks.filter((t) => t.priority === 'Urgent').length}
-          </h3>
-          <p className='text-xs text-red-600 mt-2'>High priority</p>
-        </div>
+      <div className='grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6'>
+        <TaskStatCard
+          title='Total Tasks'
+          value={totalTasks}
+          subtitle={`${pendingTasks} pending, ${inProgressTasks} in progress`}
+          icon='📋'
+          color='bg-indigo-50'
+          accentClass='border-t-indigo-500'
+          onClick={() => setFilterStatus('All')}
+        />
+        <TaskStatCard
+          title='Completed'
+          value={completedTasks}
+          subtitle={`${completionPct}% completion`}
+          icon='✅'
+          color='bg-green-50'
+          accentClass='border-t-green-500'
+          onClick={() => setFilterStatus('Completed')}
+        />
+        <TaskStatCard
+          title='Overdue'
+          value={overdueTasks}
+          subtitle='Attention needed'
+          icon='⏳'
+          color='bg-orange-50'
+          accentClass='border-t-orange-500'
+          onClick={() => setFilterStatus('Delayed')}
+        />
+        <TaskStatCard
+          title='Urgent'
+          value={urgentTasks}
+          subtitle='High priority'
+          icon='🔥'
+          color='bg-red-50'
+          accentClass='border-t-red-500'
+        />
       </div>
 
       <div className='mb-6 flex flex-wrap items-center gap-4'>
@@ -422,7 +505,24 @@ const TasksView = ({ isMyTasks = false }) => {
               </tr>
             ) : filteredTasks.length === 0 ? (
               <tr>
-                <td colSpan={9} className='py-12 text-center text-sm text-gray-500'>No tasks found</td>
+                <td colSpan={9} className='py-12 text-center text-sm text-gray-500'>
+                  {hiddenByFilters ? (
+                    <div className='space-y-3'>
+                      <p>No tasks match the current filters.</p>
+                      {hasActiveFilters && (
+                        <button
+                          type='button'
+                          onClick={clearAllFilters}
+                          className='text-indigo-600 hover:text-indigo-700 font-medium'
+                        >
+                          Clear all filters
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    'No tasks found'
+                  )}
+                </td>
               </tr>
             ) : (
               filteredTasks.map((task) => (
@@ -450,20 +550,10 @@ const TasksView = ({ isMyTasks = false }) => {
                     {task.project?.projectName || '—'}
                   </td>
                   <td className='py-4 px-6'>
-                    <div className='flex items-center gap-2'>
-                      <div className='w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-xs font-bold'>
-                        {(task.assignedTo?.name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <span className='text-sm text-gray-900'>{task.assignedTo?.name || '—'}</span>
-                    </div>
+                    <PersonShortName name={task.assignedTo?.name} />
                   </td>
                   <td className='py-4 px-6'>
-                    <div className='flex items-center gap-2'>
-                      <div className='w-8 h-8 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white text-xs font-bold'>
-                        {(task.assignedBy?.name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <span className='text-sm text-gray-900'>{task.assignedBy?.name || '—'}</span>
-                    </div>
+                    <PersonShortName name={task.assignedBy?.name} />
                   </td>
                   <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.createdAt)}</td>
                   <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.updatedAt)}</td>
@@ -476,9 +566,16 @@ const TasksView = ({ isMyTasks = false }) => {
                     </span>
                   </td>
                   <td className='py-4 px-6'>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
-                      {task.status}
-                    </span>
+                    <div className='flex flex-col gap-0.5'>
+                      <span className={`inline-flex w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                        {normalizeTaskStatus(task.status) || task.status}
+                      </span>
+                      {normalizeTaskStatus(task.status) === 'In Progress' && getTaskRemainingMinutes(task) != null && (
+                        <span className='text-xs text-blue-700'>
+                          {formatTaskDuration(getTaskRemainingMinutes(task))} left
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -653,17 +750,17 @@ const TasksView = ({ isMyTasks = false }) => {
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Assign to</span>
-                <span className='text-sm font-medium text-gray-900'>{viewTask.assignedTo?.name || '—'}</span>
+                <PersonShortName name={viewTask.assignedTo?.name} />
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Signed by</span>
-                <span className='text-sm font-medium text-gray-900'>{viewTask.assignedBy?.name || '—'}</span>
+                <PersonShortName name={viewTask.assignedBy?.name} />
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Status</span>
                 {canUpdateTaskStatus(viewTask) ? (
                   <select
-                    value={viewTask.status}
+                    value={normalizeTaskStatus(viewTask.status) || viewTask.status}
                     onChange={(e) => handleStatusChange(viewTask, e.target.value)}
                     disabled={updatingStatus}
                     className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50'
@@ -674,7 +771,7 @@ const TasksView = ({ isMyTasks = false }) => {
                   </select>
                 ) : (
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(viewTask.status)}`}>
-                    {viewTask.status}
+                    {normalizeTaskStatus(viewTask.status) || viewTask.status}
                   </span>
                 )}
               </div>
