@@ -29,12 +29,13 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   const location = useLocation()
   const { user, logout, hasFullAccess, canViewProjects, getSidebarSections, getDashboardPath } = useAuth()
   const fullAccess = hasFullAccess()
+  const canViewProjectsValue = canViewProjects()
   const allowedSections = getSidebarSections()
   const dashboardPath = getDashboardPath()
 
   const sections = useMemo(
-    () => getSidebarNav({ fullAccess, canViewProjects: canViewProjects(), allowedSections, dashboardPath }),
-    [fullAccess, canViewProjects, allowedSections, dashboardPath]
+    () => getSidebarNav({ fullAccess, canViewProjects: canViewProjectsValue, allowedSections, dashboardPath }),
+    [fullAccess, canViewProjectsValue, allowedSections, dashboardPath]
   )
 
   const defaultExpanded = useMemo(() => {
@@ -50,15 +51,23 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       if (fullAccess) open.crm = true
     }
     return open
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- initial only
+  }, [sections, location.pathname, fullAccess])
 
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   useEffect(() => {
-    sections.forEach((s) => {
-      if (s.type === 'group' && s.children.some((c) => isPathActive(location.pathname, c.path))) {
-        setExpanded((prev) => ({ ...prev, [s.id]: true }))
-      }
+    setExpanded((prev) => {
+      let changed = false
+      const next = { ...prev }
+      sections.forEach((s) => {
+        if (s.type === 'group' && s.children.some((c) => isPathActive(location.pathname, c.path))) {
+          if (!prev[s.id]) {
+            next[s.id] = true
+            changed = true
+          }
+        }
+      })
+      return changed ? next : prev
     })
   }, [location.pathname, sections])
 
@@ -102,7 +111,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
               title='Dashboard'
             >
               <div className='h-10 rounded-lg flex-shrink-0 overflow-hidden'>
-                <img src={Logo} alt='CRM' className='w-full h-full object-cover' />
+                <img src={Logo} alt='CRM' className='w-full h-full object-contain' />
               </div>
             </button>
             <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-colors flex-shrink-0' title='Collapse menu'>

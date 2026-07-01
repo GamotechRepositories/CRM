@@ -1,5 +1,8 @@
 import { SIDEBAR_PARENT_SECTIONS } from './sidebarParentSections'
 
+const ALL_SECTION_IDS = SIDEBAR_PARENT_SECTIONS.map((section) => section.id)
+const EMPTY_SECTION_IDS = []
+
 export const getDesignationTitle = (user) =>
   (user?.designation?.title || user?.designation?.name || '').toLowerCase()
 
@@ -108,8 +111,7 @@ export const canManageEmployeesForUser = (user) => {
 }
 
 export const getSidebarSectionsForUser = (user) => {
-  if (isAdminUser(user)) {
-    return SIDEBAR_PARENT_SECTIONS.map((section) => section.id)
-  }
-  return user?.access?.sidebarSections || []
+  if (isAdminUser(user)) return ALL_SECTION_IDS
+  const sections = user?.access?.sidebarSections
+  return sections?.length ? sections : EMPTY_SECTION_IDS
 }
