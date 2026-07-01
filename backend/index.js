@@ -68,6 +68,7 @@ runRecurringTaskScheduler();
 setInterval(runRecurringTaskScheduler, 10 * 60 * 1000);
 
 const DEFAULT_CORS_ORIGINS = [
+  'https://crm-mauve-mu.vercel.app',
   'https://www.dmcrms.in',
   'https://dmcrms.in',
   'http://localhost:5173',
