@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import connectDB from '../config/db.js';
 import { getDefaultDesignationMeta } from '../utils/designationFields.js';
+import { ALL_SIDEBAR_SECTION_IDS } from '../utils/adminAccess.js';
 import { backfillEmployeeCodes, buildEmployeeCode } from '../utils/employeeCode.js';
 
 dotenv.config();
@@ -45,6 +46,9 @@ const seedCompanyAdmin = async (company) => {
       workingHours: ADMIN.workingHours,
       status: ADMIN.status,
       employeeCode: buildEmployeeCode(company, 1),
+      access: {
+        sidebarSections: ALL_SIDEBAR_SECTION_IDS,
+      },
     },
     { upsert: true, new: true }
   );

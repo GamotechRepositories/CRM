@@ -1,12 +1,47 @@
+import { SIDEBAR_PARENT_SECTIONS } from './sidebarParentSections'
+
 export const getDesignationTitle = (user) =>
   (user?.designation?.title || user?.designation?.name || '').toLowerCase()
 
+export const isAdminUser = (user) => {
+  const title = getDesignationTitle(user)
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  return title === 'admin' || accessRole === 'admin'
+}
+
 export const getDesignationPermission = (user, key) => {
+  if (isAdminUser(user)) return true
   const val = user?.designation?.permissions?.[key]
   return typeof val === 'boolean' ? val : null
 }
 
+export const hasFullAccessForUser = (user) => {
+  if (isAdminUser(user)) return true
+  const fromDesignation = user?.designation?.permissions?.hasFullAccess
+  if (typeof fromDesignation === 'boolean') return fromDesignation
+  const title = getDesignationTitle(user)
+  return ['admin', 'hr manager', 'technical lead'].includes(title)
+}
+
+export const canViewProjectsForUser = (user) => {
+  if (isAdminUser(user)) return true
+  const fromDesignation = user?.designation?.permissions?.canViewProjects
+  if (typeof fromDesignation === 'boolean') return fromDesignation
+  const title = getDesignationTitle(user)
+  return [
+    'admin',
+    'hr manager',
+    'technical lead',
+    'social media manager',
+    'product manager',
+    'senior software engineer',
+    'project manager',
+    'engineering manager',
+  ].includes(title)
+}
+
 export const canAddProjectForUser = (user) => {
+  if (isAdminUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canAddProject')
   if (fromDesignation !== null) return fromDesignation
   const title = getDesignationTitle(user)
@@ -21,6 +56,7 @@ export const canAddProjectForUser = (user) => {
 }
 
 export const canEditProjectForUser = (user) => {
+  if (isAdminUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canEditProject')
   if (fromDesignation === true) return true
   if (canAddProjectForUser(user)) return true
@@ -29,6 +65,7 @@ export const canEditProjectForUser = (user) => {
 }
 
 export const canAssignTaskForUser = (user) => {
+  if (isAdminUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canAssignTask')
   if (fromDesignation !== null) return fromDesignation
   const title = getDesignationTitle(user)
@@ -45,3 +82,34 @@ export const canAssignTaskForUser = (user) => {
 }
 
 export const canRateTaskForUser = (user) => canAssignTaskForUser(user)
+
+export const canApproveLeaveForUser = (user) => {
+  if (isAdminUser(user)) return true
+  const fromDesignation = getDesignationPermission(user, 'canApproveLeave')
+  if (fromDesignation !== null) return fromDesignation
+  const title = getDesignationTitle(user)
+  return [
+    'admin',
+    'hr manager',
+    'project manager',
+    'technical lead',
+    'engineering manager',
+    'product manager',
+    'senior software engineer',
+  ].includes(title)
+}
+
+export const canManageEmployeesForUser = (user) => {
+  if (isAdminUser(user)) return true
+  const fromDesignation = getDesignationPermission(user, 'canManageEmployees')
+  if (fromDesignation !== null) return fromDesignation
+  const title = getDesignationTitle(user)
+  return ['admin', 'hr manager'].includes(title)
+}
+
+export const getSidebarSectionsForUser = (user) => {
+  if (isAdminUser(user)) {
+    return SIDEBAR_PARENT_SECTIONS.map((section) => section.id)
+  }
+  return user?.access?.sidebarSections || []
+}

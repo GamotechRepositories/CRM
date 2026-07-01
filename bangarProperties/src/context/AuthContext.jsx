@@ -6,10 +6,42 @@ import {
   canEditProjectForUser,
   canAssignTaskForUser,
   canRateTaskForUser,
+  hasFullAccessForUser,
+  canViewProjectsForUser,
+  canApproveLeaveForUser,
+  canManageEmployeesForUser,
+  getSidebarSectionsForUser,
+  isAdminUser,
   getDesignationTitle as getUserDesignationTitle,
 } from '../config/authPermissions'
 
 const AUTH_KEY = 'crm_user'
+
+const normalizeStoredUser = (user) => {
+  if (!user || !isAdminUser(user)) return user
+  return {
+    ...user,
+    designation: {
+      ...user.designation,
+      accessRole: 'admin',
+      permissions: {
+        hasFullAccess: true,
+        canAddProject: true,
+        canEditProject: true,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: true,
+        canManageEmployees: true,
+        canManageSocialCalendar: true,
+        ...(user.designation?.permissions || {}),
+      },
+    },
+    access: {
+      ...(user.access || {}),
+      sidebarSections: getSidebarSectionsForUser(user),
+    },
+  }
+}
 
 const AuthContext = createContext(null)
 
@@ -27,7 +59,9 @@ export const AuthProvider = ({ children }) => {
     const stored = localStorage.getItem(AUTH_KEY)
     if (stored) {
       try {
-        setUser(JSON.parse(stored))
+        const parsed = normalizeStoredUser(JSON.parse(stored))
+        setUser(parsed)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(parsed))
       } catch {
         localStorage.removeItem(AUTH_KEY)
       }
@@ -37,7 +71,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
-    const u = res.data?.user
+    const u = normalizeStoredUser(res.data?.user)
     if (u) {
       setUser(u)
       localStorage.setItem(AUTH_KEY, JSON.stringify(u))
@@ -53,62 +87,58 @@ export const AuthProvider = ({ children }) => {
 
   const getDesignationTitle = () => getUserDesignationTitle(user)
 
-  const isAdmin = () => getDesignationTitle() === 'admin'
+  const isAdmin = () => isAdminUser(user)
 
   const isHRManager = () => {
+    if (isAdminUser(user)) return true
     const title = getDesignationTitle()
-    return title === 'admin' || title === 'hr manager'
+    return title === 'hr manager'
   }
 
-  const hasFullAccess = () => {
-    const title = getDesignationTitle()
-    return ['admin', 'hr manager', 'technical lead'].includes(title)
-  }
+  const hasFullAccess = () => hasFullAccessForUser(user)
 
   const canAddProject = () => canAddProjectForUser(user)
 
   const canEditProject = () => canEditProjectForUser(user)
 
-  /** Any logged-in employee can add/edit posts on the social media calendar. */
-  const canManageSocialCalendar = () => Boolean(user)
+  const canManageSocialCalendar = () => isAdminUser(user) || Boolean(user)
 
-  const canViewProjects = () => {
-    const title = getDesignationTitle()
-    return [
-      'admin',
-      'hr manager',
-      'technical lead',
-      'social media manager',
-      'product manager',
-      'senior software engineer',
-      'project manager',
-      'engineering manager',
-    ].includes(title)
-  }
+  const canViewProjects = () => canViewProjectsForUser(user)
 
   const canAssignTask = () => canAssignTaskForUser(user)
 
   const canRateTask = () => canRateTaskForUser(user)
 
-  const canApproveLeave = () => {
-    const title = getDesignationTitle()
-    return [
-      'admin',
-      'hr manager',
-      'project manager',
-      'technical lead',
-      'engineering manager',
-      'product manager',
-      'senior software engineer',
-    ].includes(title)
-  }
+  const canApproveLeave = () => canApproveLeaveForUser(user)
 
-  const getSidebarSections = () => user?.access?.sidebarSections || []
+  const canManageEmployees = () => canManageEmployeesForUser(user)
+
+  const getSidebarSections = () => getSidebarSectionsForUser(user)
 
   const getDashboardPath = () => getDashboardPathForUser(user)
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isHRManager, hasFullAccess, canAddProject, canEditProject, canManageSocialCalendar, canViewProjects, canAssignTask, canRateTask, canApproveLeave, getSidebarSections, getDashboardPath, isAdmin }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        logout,
+        isHRManager,
+        hasFullAccess,
+        canAddProject,
+        canEditProject,
+        canManageSocialCalendar,
+        canViewProjects,
+        canAssignTask,
+        canRateTask,
+        canApproveLeave,
+        canManageEmployees,
+        getSidebarSections,
+        getDashboardPath,
+        isAdmin,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
