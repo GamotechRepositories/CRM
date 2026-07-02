@@ -2,6 +2,14 @@ import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams } from 'react-router-dom'
 
+const isManagerOrLeader = (employee) => {
+  const accessRole = String(employee?.designation?.accessRole || '').toLowerCase()
+  if (['admin', 'hr', 'manager', 'technical_lead'].includes(accessRole)) return true
+
+  const title = String(employee?.designation?.title || employee?.designation?.name || '').toLowerCase()
+  return ['manager', 'lead', 'head'].some((keyword) => title.includes(keyword))
+}
+
 const AddProject = () => {
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -121,7 +129,8 @@ const AddProject = () => {
   const filteredClients = clients.filter((c) =>
     (c.clientName || '').toLowerCase().includes(clientSearch.toLowerCase())
   )
-  const filteredEmployees = employees.filter((e) =>
+  const managerCandidates = employees.filter(isManagerOrLeader)
+  const filteredEmployees = managerCandidates.filter((e) =>
     (e.name || '').toLowerCase().includes(managerSearch.toLowerCase())
   )
 
@@ -323,7 +332,7 @@ const AddProject = () => {
                 {managerOpen && (
                   <ul className='absolute z-10 top-full left-0 right-0 mt-1 w-full max-h-48 overflow-auto bg-white border border-gray-300 rounded-lg shadow-lg py-1'>
                     {filteredEmployees.length === 0 ? (
-                      <li className='px-4 py-2 text-sm text-gray-500'>No employees found</li>
+                      <li className='px-4 py-2 text-sm text-gray-500'>No managers or leaders found</li>
                     ) : (
                       filteredEmployees.map((emp) => (
                         <li
@@ -332,6 +341,7 @@ const AddProject = () => {
                           className={`px-4 py-2 text-sm cursor-pointer hover:bg-blue-50 ${form.projectManager === emp._id ? 'bg-blue-100' : ''}`}
                         >
                           {emp.name}
+                          {emp.designation?.title ? ` (${emp.designation.title})` : ''}
                         </li>
                       ))
                     )}
@@ -363,6 +373,7 @@ const AddProject = () => {
                         className='rounded border-gray-300'
                       />
                       {emp.name}
+                      {emp.designation?.title ? ` (${emp.designation.title})` : ''}
                     </label>
                   ))
                 )}

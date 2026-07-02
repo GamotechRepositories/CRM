@@ -180,7 +180,7 @@ const AssignedTasksTab = () => {
         </div>
         <button
           type='button'
-          onClick={() => navigate('/assign-task')}
+          onClick={() => navigate('/assign-task?scope=my-projects')}
           className='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700'
         >
           + Assign Task

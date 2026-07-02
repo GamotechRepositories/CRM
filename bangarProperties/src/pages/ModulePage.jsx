@@ -4,6 +4,10 @@ import { MODULE_META } from '../config/moduleMeta'
 import PerformanceModuleView from '../components/views/PerformanceModuleView'
 import ChatPortalView from '../components/views/ChatPortalView'
 import AssetsModuleView from '../components/views/AssetsModuleView'
+import MilestonesModuleView from '../components/views/MilestonesModuleView'
+import TimesheetsModuleView from '../components/views/TimesheetsModuleView'
+import DepartmentsModuleView from '../components/views/DepartmentsModuleView'
+import DesignationsModuleView from '../components/views/DesignationsModuleView'
 
 const ModulePage = () => {
   const { slug } = useParams()
@@ -19,6 +23,22 @@ const ModulePage = () => {
 
   if (slug === 'assets') {
     return <AssetsModuleView />
+  }
+
+  if (slug === 'milestones') {
+    return <MilestonesModuleView />
+  }
+
+  if (slug === 'timesheets') {
+    return <TimesheetsModuleView />
+  }
+
+  if (slug === 'departments') {
+    return <DepartmentsModuleView />
+  }
+
+  if (slug === 'designations') {
+    return <DesignationsModuleView />
   }
 
   const meta = MODULE_META[slug] || {

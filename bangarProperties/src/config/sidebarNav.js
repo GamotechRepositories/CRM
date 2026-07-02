@@ -36,7 +36,6 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
         { id: 'leads', label: 'Leads', path: '/leads' },
         { id: 'contacts', label: 'Contacts', path: '/collaborators', requiresFullAccess: true },
         { id: 'companies', label: 'Companies', path: '/companies', requiresFullAccess: true },
-        { id: 'deals', label: 'Deals', path: '/module/deals', requiresFullAccess: true },
         { id: 'quotations', label: 'Quotations', path: '/module/quotations', requiresFullAccess: true },
       ],
     },
@@ -184,10 +183,8 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       requiresFullAccess: true,
       children: [
         { id: 'users', label: 'Users', path: '/employees' },
-        { id: 'roles', label: 'Roles & Permissions', path: '/module/roles' },
         { id: 'departments', label: 'Departments', path: '/module/departments' },
         { id: 'designations', label: 'Designations', path: '/module/designations' },
-        { id: 'branches', label: 'Branches', path: '/module/branches' },
         { id: 'settings', label: 'Settings', path: '/settings' },
         { id: 'audit-logs', label: 'Audit Logs', path: '/module/audit-logs' },
       ],

@@ -219,6 +219,42 @@ export const getDefaultDesignationMeta = (title) => {
     };
   }
 
+  if (t === 'operations head') {
+    return {
+      ...base,
+      department: 'Operations',
+      level: 'Manager',
+      accessRole: 'manager',
+      sortOrder: 12,
+      permissions: {
+        ...base.permissions,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: true,
+      },
+    };
+  }
+
+  if (['video editor', 'web developer', 'tele caller', 'personal assistant'].includes(t)) {
+    return {
+      ...base,
+      department:
+        t === 'video editor'
+          ? 'Creative'
+          : t === 'web developer'
+            ? 'Engineering'
+            : t === 'tele caller'
+              ? 'Sales'
+              : 'Administration',
+      level: 'Mid',
+      accessRole: 'employee',
+      permissions: {
+        ...base.permissions,
+        canViewProjects: true,
+      },
+    };
+  }
+
   if (['chief executive officer', 'chief technology officer', 'chief operating officer', 'chief financial officer'].includes(t)) {
     return {
       ...base,

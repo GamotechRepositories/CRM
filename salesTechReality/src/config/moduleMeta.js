@@ -23,9 +23,7 @@ export const MODULE_META = {
   approvals: { title: 'Approvals', section: 'Approvals', description: 'Review pending leave, expense, and workflow approvals.' },
   chat: { title: 'Chat', section: 'Communication', description: 'Team chat and direct messaging.' },
   announcements: { title: 'Announcements', section: 'Communication', description: 'Company-wide announcements and notices.' },
-  roles: { title: 'Roles & Permissions', section: 'Administration', description: 'Configure roles, access levels, and permissions.' },
   departments: { title: 'Departments', section: 'Administration', description: 'Organize teams and department hierarchy.' },
   designations: { title: 'Designations', section: 'Administration', description: 'Manage job titles and designation profiles.' },
-  branches: { title: 'Branches', section: 'Administration', description: 'Manage office branches and locations.' },
   'audit-logs': { title: 'Audit Logs', section: 'Administration', description: 'View system activity and audit trail history.' },
 }

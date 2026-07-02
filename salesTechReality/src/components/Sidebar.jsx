@@ -39,40 +39,28 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   )
 
   const defaultExpanded = useMemo(() => {
-    const open = {}
-    sections.forEach((s) => {
-      if (s.type === 'group') {
-        const hasActive = s.children.some((c) => isPathActive(location.pathname, c.path))
-        if (hasActive) open[s.id] = true
-      }
-    })
-    if (!Object.keys(open).length) {
-      open.workspace = true
-      if (fullAccess) open.crm = true
-    }
-    return open
+    const activeGroup = sections.find(
+      (s) => s.type === 'group' && s.children.some((c) => isPathActive(location.pathname, c.path))
+    )
+    if (activeGroup) return { [activeGroup.id]: true }
+    return fullAccess ? { crm: true } : { workspace: true }
   }, [sections, location.pathname, fullAccess])
 
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   useEffect(() => {
+    const activeGroup = sections.find(
+      (s) => s.type === 'group' && s.children.some((c) => isPathActive(location.pathname, c.path))
+    )
+    if (!activeGroup) return
     setExpanded((prev) => {
-      let changed = false
-      const next = { ...prev }
-      sections.forEach((s) => {
-        if (s.type === 'group' && s.children.some((c) => isPathActive(location.pathname, c.path))) {
-          if (!prev[s.id]) {
-            next[s.id] = true
-            changed = true
-          }
-        }
-      })
-      return changed ? next : prev
+      if (prev[activeGroup.id] && Object.keys(prev).length === 1) return prev
+      return { [activeGroup.id]: true }
     })
   }, [location.pathname, sections])
 
   const toggleSection = (id) => {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+    setExpanded((prev) => (prev[id] ? {} : { [id]: true }))
   }
 
   const renderChild = (child, pl = 'pl-9') => {
@@ -125,7 +113,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         )}
       </div>
 
-      <nav className={`flex-1 py-3 overflow-y-auto overflow-x-hidden ${isOpen ? 'px-3' : 'px-2'}`}>
+      <nav className={`sidebar-scrollbar-desktop-hide flex-1 py-3 overflow-y-auto overflow-x-hidden ${isOpen ? 'px-3' : 'px-2'}`}>
         <div className='space-y-1'>
           {sections.map((section) => {
             if (section.type === 'link') {

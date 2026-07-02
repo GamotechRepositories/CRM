@@ -35,6 +35,8 @@ const AssignTask = () => {
   const { user, canAssignTask } = useAuth()
   const [searchParams] = useSearchParams()
   const projectIdFromUrl = searchParams.get('projectId')
+  const scopeFromUrl = searchParams.get('scope')
+  const selfFromUrl = searchParams.get('self')
   const navigate = useNavigate()
 
   const [projects, setProjects] = useState([])
@@ -46,6 +48,7 @@ const AssignTask = () => {
     title: '',
     description: '',
     assignedTo: '',
+    assignedToList: [],
     priority: 'Medium',
     dueDate: '',
     durationHours: '',
@@ -60,11 +63,16 @@ const AssignTask = () => {
   const [error, setError] = useState(null)
 
   const availabilityDate = form.dueDate || form.recurrenceStartDate || new Date().toISOString().slice(0, 10)
+  const isSelfTaskMode = !canAssignTask()
+  const restrictProjectsToMyMembership =
+    isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1'
 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await api.get('/projects')
+        const endpoint = restrictProjectsToMyMembership ? '/projects/my-projects' : '/projects'
+        const params = restrictProjectsToMyMembership && user?._id ? { employeeId: user._id } : undefined
+        const res = await api.get(endpoint, { params })
         const list = Array.isArray(res.data) ? res.data : res.data?.data || res.data?.projects || []
         setProjects(Array.isArray(list) ? list : [])
       } catch (err) {
@@ -82,11 +90,19 @@ const AssignTask = () => {
     }
     fetchProjects()
     fetchEmployees()
-  }, [])
+  }, [restrictProjectsToMyMembership, user?._id])
 
   useEffect(() => {
     if (projectIdFromUrl) setForm((f) => ({ ...f, project: projectIdFromUrl }))
   }, [projectIdFromUrl])
+
+  useEffect(() => {
+    if (!form.project) return
+    const exists = projects.some((p) => String(p._id) === String(form.project))
+    if (!exists) {
+      setForm((f) => ({ ...f, project: '' }))
+    }
+  }, [projects, form.project])
 
   useEffect(() => {
     let cancelled = false
@@ -113,7 +129,15 @@ const AssignTask = () => {
     }
   }, [availabilityDate])
 
-  const selectedAvailability = form.assignedTo ? availabilityMap[String(form.assignedTo)] : null
+  const selectedAssignees = isSelfTaskMode
+    ? (user?._id ? [user._id] : [])
+    : (form.assignedToList.length ? form.assignedToList : (form.assignedTo ? [form.assignedTo] : []))
+  const selectedAvailabilityCards = selectedAssignees
+    .map((employeeId) => availabilityMap[String(employeeId)])
+    .filter(Boolean)
+  const selectedAssigneeDetails = selectedAssignees
+    .map((id) => employees.find((emp) => String(emp._id) === String(id)))
+    .filter(Boolean)
 
   useEffect(() => {
     if (!form.assignedTo) return
@@ -122,6 +146,15 @@ const AssignTask = () => {
       setForm((f) => ({ ...f, assignedTo: '' }))
     }
   }, [availabilityMap, form.assignedTo])
+
+  useEffect(() => {
+    if (!isSelfTaskMode || !user?._id) return
+    setForm((f) => ({
+      ...f,
+      assignedTo: user._id,
+      assignedToList: [user._id],
+    }))
+  }, [isSelfTaskMode, user?._id])
 
   const totalDurationMinutes = useMemo(() => {
     const hours = Number(form.durationHours) || 0
@@ -136,7 +169,7 @@ const AssignTask = () => {
       setError('You must be logged in to assign tasks')
       return
     }
-    if (!form.project || !form.title || !form.assignedTo) {
+    if (!form.project || !form.title || !selectedAssignees.length) {
       setError('Project, title, and assignee are required')
       return
     }
@@ -144,8 +177,10 @@ const AssignTask = () => {
       setError('Please enter a time duration for this task')
       return
     }
-    if (selectedAvailability && selectedAvailability.isAssignable === false) {
-      setError('Selected employee is not available. They already have an open task assigned.')
+    const blockedAssignee = selectedAssignees.find((employeeId) => availabilityMap[String(employeeId)]?.isAssignable === false)
+    if (blockedAssignee) {
+      const name = employees.find((emp) => String(emp._id) === String(blockedAssignee))?.name || 'Selected employee'
+      setError(`${name} is not available. They already have an open task assigned.`)
       return
     }
     setLoading(true)
@@ -155,7 +190,8 @@ const AssignTask = () => {
         project: form.project,
         title: form.title,
         description: form.description || undefined,
-        assignedTo: form.assignedTo,
+        assignedTo: selectedAssignees[0],
+        assignedToList: selectedAssignees,
         assignedBy: user._id,
         priority: form.priority,
         dueDate: form.dueDate || undefined,
@@ -175,22 +211,15 @@ const AssignTask = () => {
     }
   }
 
-  if (!canAssignTask()) {
-    return (
-      <div className='p-8'>
-        <p className='text-red-600'>You do not have permission to assign tasks.</p>
-        <button onClick={() => navigate(-1)} className='mt-4 text-blue-600 hover:underline'>
-          Go back
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className='p-8 w-full'>
       <div className='mb-8'>
-        <h1 className='text-2xl font-bold text-gray-900'>Assign Task</h1>
-        <p className='text-gray-600 mt-1 text-sm'>Assign a task with duration and check employee availability before assigning.</p>
+        <h1 className='text-2xl font-bold text-gray-900'>{isSelfTaskMode ? 'Create My Task' : 'Assign Task'}</h1>
+        <p className='text-gray-600 mt-1 text-sm'>
+          {isSelfTaskMode
+            ? 'Create and manage your own task timeline.'
+            : 'Assign a task with duration and check employee availability before assigning.'}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className='bg-white rounded-xl shadow-lg border border-gray-100 p-6 space-y-4'>
@@ -236,100 +265,146 @@ const AssignTask = () => {
 
         <div>
           <div className='flex items-center justify-between gap-2 mb-1'>
-            <label className='block text-sm font-medium text-gray-700'>Assign To *</label>
+            <label className='block text-sm font-medium text-gray-700'>
+              {isSelfTaskMode ? 'Assignee' : 'Assign To *'}
+            </label>
             <span className='text-xs text-gray-500'>
               {availabilityLoading ? 'Checking availability…' : `Availability for ${availabilityDate}`}
             </span>
           </div>
-          <select
-            value={form.assignedTo}
-            onChange={(e) => setForm((f) => ({ ...f, assignedTo: e.target.value }))}
-            required
-            className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            <option value=''>Select employee</option>
-            {employees.map((emp) => {
-              const avail = availabilityMap[String(emp._id)]
-              const unavailable = avail?.isAssignable === false
-              const remaining = avail?.remainingTimeLabel
-              const suffix = avail
-                ? unavailable
-                  ? ` — ${avail.availabilityLabel}${remaining ? ` (${remaining} left)` : ''}`
-                  : ` — ${avail.availabilityLabel}`
-                : ''
-              return (
-                <option key={emp._id} value={emp._id} disabled={unavailable}>
-                  {emp.name}
-                  {emp.designation?.title ? ` (${emp.designation.title})` : ''}
-                  {suffix}
-                  {unavailable ? ' [Unavailable]' : ''}
-                </option>
-              )
-            })}
-          </select>
-
-          {selectedAvailability && (
-            <div className={`mt-3 rounded-lg border p-4 ${AVAILABILITY_STYLES[selectedAvailability.availabilityStatus] || AVAILABILITY_STYLES.available}`}>
-              <div className='flex flex-wrap items-start justify-between gap-2'>
-                <div>
-                  <p className='text-sm font-semibold'>{selectedAvailability.name}</p>
-                  <p className='text-xs mt-0.5 opacity-90'>{selectedAvailability.availabilityLabel}</p>
-                </div>
-                <span className='text-xs font-medium px-2 py-1 rounded-full bg-white/70 border border-current/20'>
-                  {selectedAvailability.openTaskCount} open task{selectedAvailability.openTaskCount === 1 ? '' : 's'}
-                </span>
+          {isSelfTaskMode ? (
+            <div className='w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700'>
+              {user?.name || 'Current user'}
+            </div>
+          ) : (
+            <>
+              <select
+                value={form.assignedTo}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setForm((f) => ({
+                    ...f,
+                    assignedTo: value,
+                    assignedToList: value ? Array.from(new Set([...f.assignedToList, value])) : f.assignedToList,
+                  }))
+                }}
+                className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+              >
+                <option value=''>Pick employee to add</option>
+                {employees.map((emp) => {
+                  const avail = availabilityMap[String(emp._id)]
+                  const unavailable = avail?.isAssignable === false
+                  const remaining = avail?.remainingTimeLabel
+                  const suffix = avail
+                    ? unavailable
+                      ? ` — ${avail.availabilityLabel}${remaining ? ` (${remaining} left)` : ''}`
+                      : ` — ${avail.availabilityLabel}`
+                    : ''
+                  return (
+                    <option key={emp._id} value={emp._id} disabled={unavailable}>
+                      {emp.name}
+                      {emp.designation?.title ? ` (${emp.designation.title})` : ''}
+                      {suffix}
+                      {unavailable ? ' [Unavailable]' : ''}
+                    </option>
+                  )
+                })}
+              </select>
+              <div className='mt-2 flex flex-wrap gap-2'>
+                {selectedAssigneeDetails.length === 0 ? (
+                  <span className='text-xs text-gray-500'>No assignees selected yet.</span>
+                ) : (
+                  selectedAssigneeDetails.map((emp) => (
+                    <span key={emp._id} className='inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs border border-indigo-200'>
+                      {emp.name}
+                      <button
+                        type='button'
+                        onClick={() => setForm((f) => ({
+                          ...f,
+                          assignedToList: f.assignedToList.filter((id) => String(id) !== String(emp._id)),
+                          assignedTo: String(f.assignedTo) === String(emp._id) ? '' : f.assignedTo,
+                        }))}
+                        className='text-indigo-700 hover:text-indigo-900'
+                        aria-label={`Remove ${emp.name}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
               </div>
-              <dl className='mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs'>
-                <div>
-                  <dt className='opacity-75'>Working hours</dt>
-                  <dd className='font-medium mt-0.5'>{selectedAvailability.workingHours || '—'}</dd>
-                </div>
-                <div>
-                  <dt className='opacity-75'>Task time left</dt>
-                  <dd className='font-medium mt-0.5'>
-                    {selectedAvailability.remainingTimeLabel || formatDuration(selectedAvailability.remainingMinutes) || '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='opacity-75'>Attendance</dt>
-                  <dd className='font-medium mt-0.5'>
-                    {selectedAvailability.attendanceToday?.status || (selectedAvailability.onLeave ? 'On leave' : 'Not checked in')}
-                  </dd>
-                </div>
-                <div>
-                  <dt className='opacity-75'>Assignable</dt>
-                  <dd className='font-medium mt-0.5'>
-                    {selectedAvailability.isAssignable === false ? 'No — open task exists' : 'Yes'}
-                  </dd>
-                </div>
-              </dl>
-              {selectedAvailability.activeTask && (
-                <div className='mt-3 pt-3 border-t border-current/20'>
-                  <p className='text-xs font-semibold mb-1.5'>Current task</p>
-                  <div className='flex justify-between gap-2 text-xs'>
-                    <span className='truncate'>{selectedAvailability.activeTask.title}</span>
-                    <span className='shrink-0 font-medium'>
-                      {selectedAvailability.activeTask.remainingTimeLabel || formatDuration(selectedAvailability.activeTask.remainingMinutes)} left
+            </>
+          )}
+
+          {selectedAvailabilityCards.length > 0 && (
+            <div className='mt-3 space-y-3'>
+              {selectedAvailabilityCards.map((selectedAvailability) => (
+                <div
+                  key={selectedAvailability.employeeId || selectedAvailability.name}
+                  className={`rounded-lg border p-4 ${AVAILABILITY_STYLES[selectedAvailability.availabilityStatus] || AVAILABILITY_STYLES.available}`}
+                >
+                  <div className='flex flex-wrap items-start justify-between gap-2'>
+                    <div>
+                      <p className='text-sm font-semibold'>{selectedAvailability.name}</p>
+                      <p className='text-xs mt-0.5 opacity-90'>{selectedAvailability.availabilityLabel}</p>
+                    </div>
+                    <span className='text-xs font-medium px-2 py-1 rounded-full bg-white/70 border border-current/20'>
+                      {selectedAvailability.openTaskCount} open task{selectedAvailability.openTaskCount === 1 ? '' : 's'}
                     </span>
                   </div>
-                  <p className='text-[10px] mt-1 opacity-80'>Status: {selectedAvailability.activeTask.status}</p>
-                </div>
-              )}
-              {selectedAvailability.openTasks?.length > 0 && (
-                <div className='mt-3 pt-3 border-t border-current/20'>
-                  <p className='text-xs font-semibold mb-1.5'>Open tasks</p>
-                  <ul className='space-y-1 text-xs'>
-                    {selectedAvailability.openTasks.slice(0, 4).map((t) => (
-                      <li key={t._id} className='flex justify-between gap-2'>
-                        <span className='truncate'>{t.title}</span>
-                        <span className='shrink-0 opacity-80'>
-                          {t.remainingTimeLabel || formatDuration(t.remainingMinutes)} left
+                  <dl className='mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs'>
+                    <div>
+                      <dt className='opacity-75'>Working hours</dt>
+                      <dd className='font-medium mt-0.5'>{selectedAvailability.workingHours || '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className='opacity-75'>Task time left</dt>
+                      <dd className='font-medium mt-0.5'>
+                        {selectedAvailability.remainingTimeLabel || formatDuration(selectedAvailability.remainingMinutes) || '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='opacity-75'>Attendance</dt>
+                      <dd className='font-medium mt-0.5'>
+                        {selectedAvailability.attendanceToday?.status || (selectedAvailability.onLeave ? 'On leave' : 'Not checked in')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className='opacity-75'>Assignable</dt>
+                      <dd className='font-medium mt-0.5'>
+                        {selectedAvailability.isAssignable === false ? 'No — open task exists' : 'Yes'}
+                      </dd>
+                    </div>
+                  </dl>
+                  {selectedAvailability.activeTask && (
+                    <div className='mt-3 pt-3 border-t border-current/20'>
+                      <p className='text-xs font-semibold mb-1.5'>Current task</p>
+                      <div className='flex justify-between gap-2 text-xs'>
+                        <span className='truncate'>{selectedAvailability.activeTask.title}</span>
+                        <span className='shrink-0 font-medium'>
+                          {selectedAvailability.activeTask.remainingTimeLabel || formatDuration(selectedAvailability.activeTask.remainingMinutes)} left
                         </span>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+                      <p className='text-[10px] mt-1 opacity-80'>Status: {selectedAvailability.activeTask.status}</p>
+                    </div>
+                  )}
+                  {selectedAvailability.openTasks?.length > 0 && (
+                    <div className='mt-3 pt-3 border-t border-current/20'>
+                      <p className='text-xs font-semibold mb-1.5'>Open tasks</p>
+                      <ul className='space-y-1 text-xs'>
+                        {selectedAvailability.openTasks.slice(0, 4).map((t) => (
+                          <li key={t._id} className='flex justify-between gap-2'>
+                            <span className='truncate'>{t.title}</span>
+                            <span className='shrink-0 opacity-80'>
+                              {t.remainingTimeLabel || formatDuration(t.remainingMinutes)} left
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>
@@ -469,7 +544,11 @@ const AssignTask = () => {
             disabled={loading}
             className='bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed'
           >
-            {loading ? 'Saving...' : form.isRecurring ? 'Assign Auto Task' : 'Assign Task'}
+            {loading
+              ? 'Saving...'
+              : form.isRecurring
+                ? (selectedAssignees.length > 1 ? 'Assign Auto Tasks' : 'Assign Auto Task')
+                : (selectedAssignees.length > 1 ? 'Assign Tasks' : (isSelfTaskMode ? 'Create Task' : 'Assign Task'))}
           </button>
           <button
             type='button'

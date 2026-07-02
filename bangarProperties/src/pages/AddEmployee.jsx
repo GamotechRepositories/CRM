@@ -1,8 +1,28 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useMemo, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
+import {
+  buildDepartmentOptions,
+  CUSTOM_DEPARTMENTS_STORAGE_KEY,
+  normalizeDepartment,
+  readCustomDepartments,
+} from '../utils/departmentOptions'
+import {
+  getEmployeeCodeFormatHint,
+  getEmployeeCodePlaceholder,
+  getNextEmployeeCode,
+  isValidEmployeeCode,
+} from '../utils/employeeCode'
+
+const isManagerOrLeader = (employee) => {
+  const accessRole = String(employee?.designation?.accessRole || '').toLowerCase()
+  if (['admin', 'hr', 'manager', 'technical_lead'].includes(accessRole)) return true
+
+  const title = String(employee?.designation?.title || employee?.designation?.name || '').toLowerCase()
+  return ['manager', 'lead', 'head'].some((keyword) => title.includes(keyword))
+}
 
 const emptyForm = {
   name: '',
@@ -170,6 +190,7 @@ const AddEmployee = () => {
   const [form, setForm] = useState(emptyForm)
   const [designations, setDesignations] = useState([])
   const [employees, setEmployees] = useState([])
+  const [customDepartments, setCustomDepartments] = useState(() => readCustomDepartments())
   const [designationSearch, setDesignationSearch] = useState('')
   const [designationOpen, setDesignationOpen] = useState(false)
   const [designationLoading, setDesignationLoading] = useState(true)
@@ -201,6 +222,40 @@ const AddEmployee = () => {
     }
     fetchMeta()
   }, [id])
+
+  useEffect(() => {
+    const syncCustomDepartments = () => setCustomDepartments(readCustomDepartments())
+    const onStorage = (event) => {
+      if (event.key === CUSTOM_DEPARTMENTS_STORAGE_KEY) syncCustomDepartments()
+    }
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', syncCustomDepartments)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', syncCustomDepartments)
+    }
+  }, [])
+
+  const departmentOptions = useMemo(() => {
+    const base = buildDepartmentOptions({ employees, designations, customDepartments })
+    const current = normalizeDepartment(form.department)
+    if (current && !base.some((d) => d.toLowerCase() === current.toLowerCase())) {
+      return [...base, current].sort((a, b) => a.localeCompare(b))
+    }
+    return base
+  }, [employees, designations, customDepartments, form.department])
+
+  const reportingManagerOptions = useMemo(() => {
+    const managers = employees.filter(isManagerOrLeader)
+    const selectedId = String(form.reportingManager || '')
+    if (selectedId && !managers.some((emp) => String(emp._id) === selectedId)) {
+      const selected = employees.find((emp) => String(emp._id) === selectedId)
+      if (selected) return [selected, ...managers]
+    }
+    return managers
+  }, [employees, form.reportingManager])
+
+  const nextEmployeeCode = useMemo(() => getNextEmployeeCode(employees), [employees])
 
   useEffect(() => {
     if (!id) return
@@ -271,11 +326,16 @@ const AddEmployee = () => {
       setError('Password is required and must be at least 6 characters')
       return
     }
+    if (form.employeeCode?.trim() && !isValidEmployeeCode(form.employeeCode)) {
+      setError(getEmployeeCodeFormatHint())
+      return
+    }
     setLoading(true)
     setError(null)
     try {
       const payload = {
         ...form,
+        employeeCode: form.employeeCode?.trim() ? form.employeeCode.trim().toUpperCase() : '',
         salary: form.salary === '' ? 0 : Number(form.salary),
         documents: {
           resume: form.resume,
@@ -345,7 +405,26 @@ const AddEmployee = () => {
 
       <form onSubmit={handleSubmit} className='space-y-6'>
         <Section title='1. Basic Information'>
-          <Field label='Employee ID'><input name='employeeCode' value={form.employeeCode} onChange={handleChange} className={inputClass} placeholder='Auto-assigned (e.g. EMP20001)' /></Field>
+          <Field label='Employee ID'>
+            <input
+              name='employeeCode'
+              value={form.employeeCode}
+              onChange={handleChange}
+              className={inputClass}
+              placeholder={getEmployeeCodePlaceholder()}
+            />
+            <p className='mt-1 text-xs text-gray-500'>
+              {getEmployeeCodeFormatHint()}
+              {!isEdit && !form.employeeCode.trim() && (
+                <>
+                  {' '}
+                  Next auto-assigned ID:
+                  {' '}
+                  <span className='font-medium text-gray-700'>{nextEmployeeCode}</span>
+                </>
+              )}
+            </p>
+          </Field>
           <Field label='Full Name *'><input name='name' value={form.name} onChange={handleChange} required className={inputClass} /></Field>
           <Field label='Profile Photo URL'><input name='profilePhoto' value={form.profilePhoto} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Gender'>
@@ -384,7 +463,16 @@ const AddEmployee = () => {
               )}
             </div>
           </Field>
-          <Field label='Department *'><input name='department' value={form.department} onChange={handleChange} required className={inputClass} /></Field>
+          <Field label='Department *'>
+            <select name='department' value={form.department} onChange={handleChange} required className={inputClass}>
+              <option value=''>Select department</option>
+              {departmentOptions.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label='Employee Type'>
             <select name='employeeType' value={form.employeeType} onChange={handleChange} className={inputClass}>
               <option value='Permanent'>Permanent</option>
@@ -405,7 +493,12 @@ const AddEmployee = () => {
           <Field label='Reporting Manager'>
             <select name='reportingManager' value={form.reportingManager} onChange={handleChange} className={inputClass}>
               <option value=''>Select manager</option>
-              {employees.map((emp) => <option key={emp._id} value={emp._id}>{emp.name}</option>)}
+              {reportingManagerOptions.map((emp) => (
+                <option key={emp._id} value={emp._id}>
+                  {emp.name}
+                  {emp.designation?.title ? ` (${emp.designation.title})` : ''}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label='Work Location / Branch'><input name='workLocation' value={form.workLocation} onChange={handleChange} className={inputClass} /></Field>

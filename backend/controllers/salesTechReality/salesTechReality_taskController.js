@@ -21,6 +21,15 @@ const normalizeDateStart = (value) => {
 const shouldCreateRecurringTemplate = (payload) =>
   payload?.recurrenceEnabled === true || payload?.isRecurring === true;
 
+const resolveAssigneeIds = (body = {}) => {
+  const rawList = Array.isArray(body.assignedToList)
+    ? body.assignedToList
+    : Array.isArray(body.assignedTo)
+      ? body.assignedTo
+      : [body.assignedTo];
+  return [...new Set(rawList.map((id) => String(id || '').trim()).filter(Boolean))];
+};
+
 export const createTask = async (req, res) => {
   try {
     const body = normalizeTaskPayload(req.body);
@@ -29,6 +38,7 @@ export const createTask = async (req, res) => {
       title,
       description,
       assignedTo,
+      assignedToList,
       assignedBy,
       status,
       priority,
@@ -42,11 +52,13 @@ export const createTask = async (req, res) => {
       isRecurring,
     } = body;
 
-    if (!project || !title || !assignedTo || !assignedBy) {
+    const assigneeIds = resolveAssigneeIds({ assignedTo, assignedToList });
+
+    if (!project || !title || !assignedBy || !assigneeIds.length) {
       return res.status(400).json({ message: 'Project, title, assignedTo, and assignedBy are required' });
     }
 
-    await assertEmployeeAvailableForTask(Task, assignedTo);
+    await Promise.all(assigneeIds.map((employeeId) => assertEmployeeAvailableForTask(Task, employeeId)));
 
     if (shouldCreateRecurringTemplate({ recurrenceEnabled, isRecurring })) {
       if (!recurrenceType || !['daily', 'weekly', 'monthly'].includes(recurrenceType)) {
@@ -61,84 +73,105 @@ export const createTask = async (req, res) => {
         return res.status(400).json({ message: 'recurrenceEndDate must be on or after recurrenceStartDate' });
       }
 
-      const firstTask = new Task({
-        project,
-        title,
-        description,
-        assignedTo,
-        assignedBy,
-        status: 'Pending',
-        priority: priority || 'Medium',
-        dueDate: firstRunDate,
-        estimatedDurationMinutes: estimatedDurationMinutes || null,
-        isRecurringTemplate: false,
-        recurrenceEnabled: false,
-        recurringScheduledFor: firstRunDate,
-        startedAt: null,
-      });
-      await firstTask.save();
+      const createdTasks = [];
+      const recurringTemplateIds = [];
+      for (const employeeId of assigneeIds) {
+        const firstTask = new Task({
+          project,
+          title,
+          description,
+          assignedTo: employeeId,
+          assignedBy,
+          status: 'Pending',
+          priority: priority || 'Medium',
+          dueDate: firstRunDate,
+          estimatedDurationMinutes: estimatedDurationMinutes || null,
+          isRecurringTemplate: false,
+          recurrenceEnabled: false,
+          recurringScheduledFor: firstRunDate,
+          startedAt: null,
+        });
+        await firstTask.save();
+        createdTasks.push(firstTask);
 
-      const templateTask = new Task({
-        project,
-        title,
-        description,
-        assignedTo,
-        assignedBy,
-        status: status || 'Pending',
-        priority: priority || 'Medium',
-        dueDate: firstRunDate,
-        estimatedDurationMinutes: estimatedDurationMinutes || null,
-        isRecurringTemplate: true,
-        recurrenceEnabled: true,
-        recurrenceType,
-        recurrenceInterval: interval,
-        recurrenceStartDate: firstRunDate,
-        recurrenceEndDate: endDate || undefined,
-        nextRunAt: getNextRecurringDate(firstRunDate, recurrenceType, interval),
-        lastGeneratedAt: new Date(),
-      });
-      await templateTask.save();
+        const templateTask = new Task({
+          project,
+          title,
+          description,
+          assignedTo: employeeId,
+          assignedBy,
+          status: status || 'Pending',
+          priority: priority || 'Medium',
+          dueDate: firstRunDate,
+          estimatedDurationMinutes: estimatedDurationMinutes || null,
+          isRecurringTemplate: true,
+          recurrenceEnabled: true,
+          recurrenceType,
+          recurrenceInterval: interval,
+          recurrenceStartDate: firstRunDate,
+          recurrenceEndDate: endDate || undefined,
+          nextRunAt: getNextRecurringDate(firstRunDate, recurrenceType, interval),
+          lastGeneratedAt: new Date(),
+        });
+        await templateTask.save();
+        recurringTemplateIds.push(templateTask._id);
+      }
 
       await syncClientProfileByProjectId(project);
 
-      const populated = await Task.findById(firstTask._id)
+      const populatedTasks = await Task.find({ _id: { $in: createdTasks.map((t) => t._id) } })
         .populate('project')
         .populate('assignedTo')
-        .populate('assignedBy');
-
-      await runTaskNotificationSideEffects({ notificationService, updated: populated });
+        .populate('assignedBy')
+        .sort({ createdAt: -1 });
+      await Promise.all(
+        populatedTasks.map((task) => runTaskNotificationSideEffects({ notificationService, updated: task }))
+      );
+      const firstCreated = populatedTasks[0] || null;
 
       return res.status(201).json({
-        message: 'Auto task created successfully',
-        task: populated,
-        recurringTemplateId: templateTask._id,
+        message: assigneeIds.length > 1 ? 'Auto tasks created successfully' : 'Auto task created successfully',
+        task: firstCreated,
+        tasks: populatedTasks,
+        recurringTemplateIds,
       });
     }
 
     const initialStatus = status || 'Pending';
-    const task = new Task({
-      project,
-      title,
-      description,
-      assignedTo,
-      assignedBy,
-      status: initialStatus,
-      priority: priority || 'Medium',
-      dueDate: dueDate ? new Date(dueDate) : undefined,
-      estimatedDurationMinutes: estimatedDurationMinutes || null,
-      completedAt: initialStatus === 'Completed' ? new Date() : null,
-      isRecurringTemplate: false,
-      recurrenceEnabled: false,
-      ...applyTaskStatusTiming({ existingStatus: null, nextStatus: initialStatus }),
-    });
-    await task.save();
+    const createdTasks = [];
+    for (const employeeId of assigneeIds) {
+      const task = new Task({
+        project,
+        title,
+        description,
+        assignedTo: employeeId,
+        assignedBy,
+        status: initialStatus,
+        priority: priority || 'Medium',
+        dueDate: dueDate ? new Date(dueDate) : undefined,
+        estimatedDurationMinutes: estimatedDurationMinutes || null,
+        completedAt: initialStatus === 'Completed' ? new Date() : null,
+        isRecurringTemplate: false,
+        recurrenceEnabled: false,
+        ...applyTaskStatusTiming({ existingStatus: null, nextStatus: initialStatus }),
+      });
+      await task.save();
+      createdTasks.push(task);
+    }
     await syncClientProfileByProjectId(project);
-    const populated = await Task.findById(task._id)
+    const populatedTasks = await Task.find({ _id: { $in: createdTasks.map((t) => t._id) } })
       .populate('project')
       .populate('assignedTo')
-      .populate('assignedBy');
-    await runTaskNotificationSideEffects({ notificationService, updated: populated });
-    return res.status(201).json({ message: 'Task assigned successfully', task: populated });
+      .populate('assignedBy')
+      .sort({ createdAt: -1 });
+    await Promise.all(
+      populatedTasks.map((task) => runTaskNotificationSideEffects({ notificationService, updated: task }))
+    );
+    return res.status(201).json({
+      message: assigneeIds.length > 1 ? 'Tasks assigned successfully' : 'Task assigned successfully',
+      task: populatedTasks[0] || null,
+      tasks: populatedTasks,
+    });
   } catch (error) {
     if (error?.statusCode === 409) {
       return res.status(409).json({ message: error.message });

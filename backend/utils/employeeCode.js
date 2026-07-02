@@ -1,77 +1,61 @@
-/** Company digit in employee ID: EMP{digit}{sequence} e.g. EMP10001, EMP20001 */
-export const COMPANY_EMPLOYEE_DIGIT = {
-  adsResearchGlobal: 1,
-  bangarProperties: 2,
-  mahaProperties: 3,
-  salesTechReality: 4,
-};
+/** Employee ID format: EMP + sequence (min 3 digits), e.g. EMP001, EMP002 */
+export const EMPLOYEE_CODE_PREFIX = 'EMP';
+const EMPLOYEE_SEQUENCE_MIN_DIGITS = 3;
 
-export const COMPANY_KEYS = Object.keys(COMPANY_EMPLOYEE_DIGIT);
+export const COMPANY_KEYS = [
+  'adsResearchGlobal',
+  'bangarProperties',
+  'mahaProperties',
+  'salesTechReality',
+];
 
-export const getCompanyEmployeeDigit = (companyKey) => COMPANY_EMPLOYEE_DIGIT[companyKey];
+export const buildEmployeeCode = (_companyKey, sequence) =>
+  `${EMPLOYEE_CODE_PREFIX}${String(sequence).padStart(EMPLOYEE_SEQUENCE_MIN_DIGITS, '0')}`;
 
-export const getEmployeeCodePrefix = (companyKey) => {
-  const digit = getCompanyEmployeeDigit(companyKey);
-  if (!digit) return null;
-  return `EMP${digit}`;
-};
+export const employeeCodePattern = () =>
+  new RegExp(`^${EMPLOYEE_CODE_PREFIX}\\d{${EMPLOYEE_SEQUENCE_MIN_DIGITS},}$`, 'i');
 
-export const buildEmployeeCode = (companyKey, sequence) => {
-  const prefix = getEmployeeCodePrefix(companyKey);
-  if (!prefix) throw new Error(`Unknown company: ${companyKey}`);
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
-};
-
-export const employeeCodePattern = (companyKey) => {
-  const digit = getCompanyEmployeeDigit(companyKey);
-  if (!digit) return null;
-  return new RegExp(`^EMP${digit}\\d{4}$`, 'i');
-};
-
-export const isValidEmployeeCodeForCompany = (code, companyKey) => {
+export const isValidEmployeeCodeForCompany = (code) => {
   if (!code || typeof code !== 'string') return false;
-  const pattern = employeeCodePattern(companyKey);
-  return pattern ? pattern.test(code.trim()) : false;
+  return employeeCodePattern().test(code.trim());
 };
 
-export const parseEmployeeCodeSequence = (code, companyKey) => {
-  const prefix = getEmployeeCodePrefix(companyKey);
-  if (!prefix || !code) return null;
+export const parseEmployeeCodeSequence = (code) => {
+  if (!code) return null;
   const normalized = code.trim().toUpperCase();
-  if (!normalized.startsWith(prefix) || normalized.length !== prefix.length + 4) return null;
-  const seq = parseInt(normalized.slice(prefix.length), 10);
+  if (
+    !normalized.startsWith(EMPLOYEE_CODE_PREFIX)
+    || normalized.length < EMPLOYEE_CODE_PREFIX.length + EMPLOYEE_SEQUENCE_MIN_DIGITS
+  ) return null;
+  const seq = parseInt(normalized.slice(EMPLOYEE_CODE_PREFIX.length), 10);
   return Number.isNaN(seq) ? null : seq;
 };
 
-export async function getMaxEmployeeCodeSequence(Employee, companyKey) {
-  const prefix = getEmployeeCodePrefix(companyKey);
-  const pattern = employeeCodePattern(companyKey);
-  if (!prefix || !pattern) return 0;
-
+export async function getMaxEmployeeCodeSequence(Employee) {
+  const pattern = employeeCodePattern();
   const employees = await Employee.find({ employeeCode: pattern }).select('employeeCode').lean();
   let maxSeq = 0;
   for (const emp of employees) {
-    const seq = parseEmployeeCodeSequence(emp.employeeCode, companyKey);
+    const seq = parseEmployeeCodeSequence(emp.employeeCode);
     if (seq != null && seq > maxSeq) maxSeq = seq;
   }
   return maxSeq;
 }
 
 export async function generateNextEmployeeCode(Employee, companyKey) {
-  const maxSeq = await getMaxEmployeeCodeSequence(Employee, companyKey);
+  void companyKey;
+  const maxSeq = await getMaxEmployeeCodeSequence(Employee);
   return buildEmployeeCode(companyKey, maxSeq + 1);
 }
 
-const formatCodeError = (companyKey) => {
-  const digit = getCompanyEmployeeDigit(companyKey);
-  return `Employee ID must match format EMP${digit}0001 (e.g. EMP${digit}0001)`;
-};
+const formatCodeError = () =>
+  'Employee ID must match format EMP001 or higher (e.g. EMP001, EMP002)';
 
 export async function assignEmployeeCodeOnCreate(Employee, companyKey, payload) {
   const trimmed = (payload.employeeCode || '').trim().toUpperCase();
   if (trimmed) {
-    if (!isValidEmployeeCodeForCompany(trimmed, companyKey)) {
-      const err = new Error(formatCodeError(companyKey));
+    if (!isValidEmployeeCodeForCompany(trimmed)) {
+      const err = new Error(formatCodeError());
       err.status = 400;
       throw err;
     }
@@ -90,6 +74,7 @@ export async function assignEmployeeCodeOnCreate(Employee, companyKey, payload) 
 }
 
 export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employeeId, payload) {
+  void companyKey;
   const raw = payload.employeeCode;
   if (raw == null || String(raw).trim() === '') {
     delete payload.employeeCode;
@@ -97,8 +82,8 @@ export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employe
   }
 
   const trimmed = String(raw).trim().toUpperCase();
-  if (!isValidEmployeeCodeForCompany(trimmed, companyKey)) {
-    const err = new Error(formatCodeError(companyKey));
+  if (!isValidEmployeeCodeForCompany(trimmed)) {
+    const err = new Error(formatCodeError());
     err.status = 400;
     throw err;
   }
@@ -117,21 +102,20 @@ export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employe
   return payload;
 }
 
-/** Assign EMP{digit}#### codes to employees missing a valid code (oldest first). */
+/** Renumber all employees to EMP001, EMP002, … (oldest first). */
 export async function backfillEmployeeCodes(Employee, companyKey) {
-  const pattern = employeeCodePattern(companyKey);
-  if (!pattern) throw new Error(`Unknown company: ${companyKey}`);
-
+  void companyKey;
   const employees = await Employee.find().sort({ createdAt: 1, _id: 1 });
-  let maxSeq = await getMaxEmployeeCodeSequence(Employee, companyKey);
   let updated = 0;
 
-  for (const emp of employees) {
-    if (pattern.test(emp.employeeCode || '')) continue;
-    maxSeq += 1;
-    emp.employeeCode = buildEmployeeCode(companyKey, maxSeq);
-    await emp.save();
-    updated += 1;
+  for (let index = 0; index < employees.length; index += 1) {
+    const emp = employees[index];
+    const nextCode = buildEmployeeCode(companyKey, index + 1);
+    if (emp.employeeCode !== nextCode) {
+      emp.employeeCode = nextCode;
+      await emp.save();
+      updated += 1;
+    }
   }
 
   return updated;
