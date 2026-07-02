@@ -71,43 +71,45 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         type='button'
         onClick={() => navigate(child.path)}
         className={`w-full flex items-center gap-2 py-2 rounded-lg text-sm transition-colors ${
-          active ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800/70 hover:text-white'
+          active
+            ? 'bg-[#2563EB] text-[#E5E7EB] hover:bg-[#3B82F6]'
+            : 'text-[#94A3B8] hover:bg-[#111827] hover:text-[#E5E7EB]'
         } ${isOpen ? `${pl} pr-3` : 'px-3 justify-center'}`}
         title={!isOpen ? child.label : undefined}
       >
         {isOpen ? (
           <>
-            <span className='text-gray-500'>•</span>
+            <span className='text-[#94A3B8]'>•</span>
             <span className='truncate'>{child.label}</span>
           </>
         ) : (
-          <span className='w-1.5 h-1.5 rounded-full bg-gray-500' />
+          <span className='w-1.5 h-1.5 rounded-full bg-[#94A3B8]' />
         )}
       </button>
     )
   }
 
   return (
-    <aside className={`bg-gray-900 text-white text-sm h-screen flex flex-col shadow-2xl border-r border-gray-800 transition-all duration-200 flex-shrink-0 ${isOpen ? 'w-64' : 'w-16'}`}>
-      <div className='px-3 py-4 border-b border-gray-800 flex items-center justify-center shrink-0'>
+    <aside className={`bg-[#0F172A] text-[#E5E7EB] text-sm h-screen flex flex-col shadow-2xl border-r border-[#1E293B] transition-all duration-200 flex-shrink-0 ${isOpen ? 'w-64' : 'w-16'}`}>
+      <div className='px-3 py-4 border-b border-[#1E293B] flex items-center justify-center shrink-0'>
         {isOpen ? (
           <div className='w-full flex items-center justify-between px-2'>
             <button
               type='button'
               onClick={() => navigate(dashboardPath)}
-              className='flex cursor-pointer items-center gap-3 min-w-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400'
+              className='flex cursor-pointer items-center gap-3 min-w-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]'
               title='Dashboard'
             >
               <div className='h-10 rounded-lg flex-shrink-0 overflow-hidden'>
                 <img src={Logo} alt='CRM' className='w-full h-full object-contain' />
               </div>
             </button>
-            <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-colors flex-shrink-0' title='Collapse menu'>
+            <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-[#111827] text-[#94A3B8] hover:text-[#E5E7EB] transition-colors flex-shrink-0' title='Collapse menu'>
               <MenuToggleIcon />
             </button>
           </div>
         ) : (
-          <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-gray-800 text-gray-300 hover:text-white transition-colors' title='Expand menu'>
+          <button type='button' onClick={onToggle} className='p-2 rounded-lg hover:bg-[#111827] text-[#94A3B8] hover:text-[#E5E7EB] transition-colors' title='Expand menu'>
             <MenuToggleIcon />
           </button>
         )}
@@ -124,7 +126,9 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
                   type='button'
                   onClick={() => navigate(section.path)}
                   className={`w-full flex items-center gap-3 py-2.5 rounded-lg transition-colors ${
-                    active ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    active
+                      ? 'bg-[#2563EB] text-[#E5E7EB] hover:bg-[#3B82F6]'
+                      : 'text-[#E5E7EB] hover:bg-[#111827]'
                   } ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
                   title={!isOpen ? section.label : undefined}
                 >
@@ -143,7 +147,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
                   type='button'
                   onClick={() => (isOpen ? toggleSection(section.id) : navigate(section.children[0]?.path))}
                   className={`w-full flex items-center gap-3 py-2.5 rounded-lg transition-colors ${
-                    groupActive ? 'text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    groupActive ? 'text-[#E5E7EB]' : 'text-[#94A3B8] hover:bg-[#111827] hover:text-[#E5E7EB]'
                   } ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
                   title={!isOpen ? section.label : undefined}
                 >
@@ -166,11 +170,11 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         </div>
       </nav>
 
-      <div className={`border-t border-gray-800 py-3 shrink-0 ${isOpen ? 'px-3' : 'px-2'}`}>
+      <div className={`border-t border-[#1E293B] py-3 shrink-0 ${isOpen ? 'px-3' : 'px-2'}`}>
         {isOpen && user?.name && (
-          <div className='px-3 py-2 mb-2 rounded-lg bg-gray-800/50'>
-            <p className='text-xs font-semibold text-white truncate'>{user.name}</p>
-            <p className='text-[10px] text-gray-400 truncate'>{user.designation?.title || 'Employee'}</p>
+          <div className='px-3 py-2 mb-2 rounded-lg bg-[#111827]'>
+            <p className='text-xs font-semibold text-[#E5E7EB] truncate'>{user.name}</p>
+            <p className='text-[10px] text-[#94A3B8] truncate'>{user.designation?.title || 'Employee'}</p>
           </div>
         )}
         <div className='space-y-1'>
@@ -178,7 +182,9 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
             type='button'
             onClick={() => navigate('/settings')}
             className={`w-full flex items-center gap-3 py-2.5 rounded-lg transition-colors ${
-              location.pathname === '/settings' ? 'bg-gray-800 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+              location.pathname === '/settings'
+                ? 'bg-[#2563EB] text-[#E5E7EB] hover:bg-[#3B82F6]'
+                : 'text-[#E5E7EB] hover:bg-[#111827]'
             } ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
             title={!isOpen ? 'Settings' : undefined}
           >
@@ -188,7 +194,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
           <button
             type='button'
             onClick={() => { logout(); navigate('/login') }}
-            className={`w-full flex items-center gap-3 py-2.5 text-gray-300 hover:bg-red-900/40 hover:text-red-200 rounded-lg transition-colors ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
+            className={`w-full flex items-center gap-3 py-2.5 text-[#94A3B8] hover:bg-red-900/40 hover:text-red-200 rounded-lg transition-colors ${isOpen ? 'px-3' : 'px-2 justify-center'}`}
             title={!isOpen ? 'Logout' : undefined}
           >
             <span className='text-lg'><LogoutIcon /></span>
