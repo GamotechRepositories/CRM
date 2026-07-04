@@ -100,7 +100,6 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
       availabilityLabel = inProgressTask
         ? `On task — ${remainingLabel || 'in progress'} remaining`
         : `Allocated — ${openTaskCount} open task${openTaskCount === 1 ? '' : 's'}`;
-      isAssignable = false;
     } else if (openTaskCount >= 6 || scheduledMinutes >= 480) {
       availabilityStatus = 'busy';
       availabilityLabel = 'Heavily loaded';

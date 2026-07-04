@@ -180,7 +180,7 @@ const AssignTask = () => {
     const blockedAssignee = selectedAssignees.find((employeeId) => availabilityMap[String(employeeId)]?.isAssignable === false)
     if (blockedAssignee) {
       const name = employees.find((emp) => String(emp._id) === String(blockedAssignee))?.name || 'Selected employee'
-      setError(`${name} is not available. They already have an open task assigned.`)
+      setError(`${name} is not available for assignment right now.`)
       return
     }
     setLoading(true)
@@ -218,7 +218,7 @@ const AssignTask = () => {
         <p className='text-gray-600 mt-1 text-sm'>
           {isSelfTaskMode
             ? 'Create and manage your own task timeline.'
-            : 'Assign a task with duration and check employee availability before assigning.'}
+            : 'Assign a task with duration. Employees can handle multiple tasks at once.'}
         </p>
       </div>
 
@@ -372,7 +372,7 @@ const AssignTask = () => {
                     <div>
                       <dt className='opacity-75'>Assignable</dt>
                       <dd className='font-medium mt-0.5'>
-                        {selectedAvailability.isAssignable === false ? 'No — open task exists' : 'Yes'}
+                        {selectedAvailability.isAssignable === false ? 'No — unavailable today' : 'Yes'}
                       </dd>
                     </div>
                   </dl>
