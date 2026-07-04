@@ -9,12 +9,12 @@ import {
   locationErrorMessage,
   resolveAddressFromCoords,
 } from '../../utils/geolocation'
+import { getLateAfterLabel, isLateCheckIn } from '../../utils/attendanceLate'
 
 const getDesignationTitle = (employee) =>
   employee?.designation?.title || employee?.designation?.name || employee?.designation || employee?.department || '—'
 
-const LATE_AFTER_HOUR = 9
-const LATE_AFTER_MINUTE = 30
+const LATE_AFTER_LABEL = getLateAfterLabel()
 const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#3b82f6']
 
 const formatTime = (ms) => {
@@ -111,12 +111,6 @@ const durationMsFromRow = (row, nowMs = Date.now()) => {
 const hoursFromAttendanceRow = (row, nowMs = Date.now()) => {
   const ms = durationMsFromRow(row, nowMs)
   return ms == null ? 0 : ms / (1000 * 60 * 60)
-}
-
-const isLateCheckIn = (checkIn) => {
-  if (!checkIn) return false
-  const d = new Date(checkIn)
-  return d.getHours() > LATE_AFTER_HOUR || (d.getHours() === LATE_AFTER_HOUR && d.getMinutes() > LATE_AFTER_MINUTE)
 }
 
 const deriveLiveStatus = (attendance, onLeave) => {
@@ -1359,7 +1353,7 @@ const AttendanceView = () => {
             {canViewTeam && (
             <div className='grid grid-cols-2 lg:grid-cols-5 gap-4'>
               <SummaryCard title='Present' value={stats.present} trend='Checked in' icon='✓' iconBg='bg-emerald-100 text-emerald-600' />
-              <SummaryCard title='Late Arrivals' value={stats.late} trend='After 9:30 AM' icon='⏰' iconBg='bg-amber-100 text-amber-600' />
+              <SummaryCard title='Late Arrivals' value={stats.late} trend={`After ${LATE_AFTER_LABEL}`} icon='⏰' iconBg='bg-amber-100 text-amber-600' />
               <SummaryCard title='Absent' value={stats.absent} trend='No check-in' icon='✕' iconBg='bg-red-100 text-red-600' />
               <SummaryCard title='On Leave' value={stats.onLeave} trend='Approved leave' icon='🌴' iconBg='bg-violet-100 text-violet-600' />
               <SummaryCard title='Working Remote' value={stats.remote} trend='Location based' icon='🏠' iconBg='bg-blue-100 text-blue-600' />
@@ -1373,7 +1367,7 @@ const AttendanceView = () => {
             {canViewTeam && (
               <div className='grid grid-cols-2 lg:grid-cols-5 gap-4'>
                 <SummaryCard title='Present' value={monthlyStats.present} trend='This month' icon='✓' iconBg='bg-emerald-100 text-emerald-600' />
-                <SummaryCard title='Late' value={monthlyStats.late} trend='After 9:30 AM' icon='⏰' iconBg='bg-amber-100 text-amber-600' />
+                <SummaryCard title='Late' value={monthlyStats.late} trend={`After ${LATE_AFTER_LABEL}`} icon='⏰' iconBg='bg-amber-100 text-amber-600' />
                 <SummaryCard title='Absent' value={monthlyStats.absent} trend='No check-in' icon='✕' iconBg='bg-red-100 text-red-600' />
                 <SummaryCard title='On Leave' value={monthlyStats.onLeave} trend='Approved leave' icon='🌴' iconBg='bg-violet-100 text-violet-600' />
                 <SummaryCard title='Total Hours' value={monthlyStats.totalHours.toFixed(1)} trend='Worked' icon='⏱' iconBg='bg-blue-100 text-blue-600' />

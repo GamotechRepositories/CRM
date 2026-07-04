@@ -1,3 +1,5 @@
+import { isLateCheckIn } from './attendanceLate.js';
+
 export const buildEmployeeProfile = async ({ employeeId, models }) => {
   const { Employee, Project, Task, Attendance, Leave, Salary } = models;
 
@@ -30,11 +32,7 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
 
   const presentDays = attendance.filter((a) => ['Full Day', 'Half Day'].includes(a.status)).length;
   const absentDays = attendance.filter((a) => a.status === 'Absent').length;
-  const lateMarks = attendance.filter((a) => {
-    if (!a.checkIn) return false;
-    const checkInHour = new Date(a.checkIn).getHours();
-    return checkInHour >= 10;
-  }).length;
+  const lateMarks = attendance.filter((a) => isLateCheckIn(a.checkIn)).length;
 
   const leaveBalance = {
     sick: 12 - leaves.filter((l) => l.leaveType === 'Sick' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
