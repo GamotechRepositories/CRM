@@ -226,6 +226,43 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
     }
   };
 
+  const enrichConversation = async (conv, employeeId, { isTeam = false } = {}) => {
+    const convObj = typeof conv.toObject === 'function' ? conv.toObject() : conv;
+    let joinedAt;
+
+    if (isTeam || convObj.type === 'team') {
+      joinedAt = await ensureTeamMemberJoined(conv, employeeId);
+    } else {
+      joinedAt = getMemberJoinedAt(conv, employeeId) || convObj.createdAt || new Date();
+    }
+
+    const unreadCount = await Message.countDocuments(
+      buildUnreadMessageFilter(convObj._id, employeeId, joinedAt)
+    );
+
+    let peer = null;
+    let title = convObj.title || 'Team Chat';
+
+    if (convObj.type === 'direct') {
+      const populated = await Conversation.findById(convObj._id)
+        .populate('participants.employee', 'name email department')
+        .lean();
+      const peerParticipant = (populated?.participants || []).find(
+        (participant) => String(participant.employee?._id || participant.employee) !== String(employeeId)
+      );
+      peer = peerParticipant?.employee || null;
+      title = peer?.name || 'Direct Chat';
+    }
+
+    return {
+      ...convObj,
+      peer,
+      title,
+      joinedAt,
+      unreadCount,
+    };
+  };
+
   const getConversations = async (req, res) => {
     try {
       const { employeeId } = req.query;
@@ -233,21 +270,21 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         return res.status(400).json({ message: 'employeeId is required' });
       }
 
-      const conversation = await ensureTeamConversation();
-      const joinedAt = await ensureTeamMemberJoined(conversation, employeeId);
-      const unreadCount = await Message.countDocuments(
-        buildUnreadMessageFilter(conversation._id, employeeId, joinedAt)
+      const teamConversation = await ensureTeamConversation();
+      const teamItem = await enrichConversation(teamConversation, employeeId, { isTeam: true });
+      teamItem.title = 'Team Chat';
+
+      const directConversations = await Conversation.find({
+        type: 'direct',
+        'participants.employee': employeeId,
+      }).sort({ lastMessageAt: -1 });
+
+      const directItems = await Promise.all(
+        directConversations.map((conversation) => enrichConversation(conversation, employeeId))
       );
 
       res.status(200).json({
-        conversations: [
-          {
-            ...conversation.toObject(),
-            title: conversation.title || 'Team Chat',
-            joinedAt,
-            unreadCount,
-          },
-        ],
+        conversations: [teamItem, ...directItems],
       });
     } catch (error) {
       res.status(500).json({ message: 'Error fetching conversations', error: error?.message });
@@ -292,7 +329,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
 
       res.status(200).json({
         conversation: {
-          ...conversation.toObject(),
+          ...(await enrichConversation(conversation, employeeId)),
           peer,
         },
       });

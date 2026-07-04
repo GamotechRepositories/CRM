@@ -264,14 +264,23 @@ const ChatPortalView = () => {
   const currentUserId = getCurrentEmployeeId(user)
 
   const [integration, setIntegration] = useState(null)
-  const [room, setRoom] = useState(null)
+  const [conversations, setConversations] = useState([])
+  const [activeConversationId, setActiveConversationId] = useState(null)
   const [messages, setMessages] = useState([])
   const [draft, setDraft] = useState('')
   const [pendingMentions, setPendingMentions] = useState([])
-  const [loadingRoom, setLoadingRoom] = useState(true)
+  const [loadingConversations, setLoadingConversations] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+
+  const [showNewChat, setShowNewChat] = useState(false)
+  const [newChatSearch, setNewChatSearch] = useState('')
+  const [chatSearch, setChatSearch] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [newChatEmployees, setNewChatEmployees] = useState([])
+  const [loadingNewChat, setLoadingNewChat] = useState(false)
+  const [startingChatId, setStartingChatId] = useState(null)
 
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
@@ -303,7 +312,22 @@ const ChatPortalView = () => {
   const [hasOlderDays, setHasOlderDays] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
 
-  const roomId = room?._id
+  const activeConversation = useMemo(
+    () => conversations.find((conversation) => String(conversation._id) === String(activeConversationId)) || null,
+    [conversations, activeConversationId]
+  )
+  const isTeamChat = activeConversation?.type === 'team'
+  const roomId = activeConversation?._id
+  const chatHeaderTitle = activeConversation
+    ? (isTeamChat
+      ? (activeConversation?.title || 'Team Chat')
+      : (activeConversation?.peer?.name || activeConversation?.title || 'Direct Chat'))
+    : 'Chats'
+  const chatHeaderSubtitle = activeConversation
+    ? (isTeamChat
+      ? 'Team channel · Type @ to tag someone'
+      : `Private chat${activeConversation?.peer?.department ? ` · ${activeConversation.peer.department}` : ''}`)
+    : 'Use the sidebar toggle to browse conversations'
 
   const scrollToBottom = () => {
     const container = scrollContainerRef.current
@@ -323,15 +347,21 @@ const ChatPortalView = () => {
     }
   }, [])
 
-  const loadTeamRoom = useCallback(async () => {
+  const loadConversations = useCallback(async ({ selectId } = {}) => {
     if (!currentUserId) return
     try {
-      const res = await api.get('/chat/team', { params: { employeeId: currentUserId } })
-      setRoom(res.data?.conversation || null)
+      const res = await api.get('/chat/conversations', { params: { employeeId: currentUserId } })
+      const list = res.data?.conversations || []
+      setConversations(list)
+      setActiveConversationId((prev) => {
+        if (selectId) return selectId
+        if (prev && list.some((conversation) => String(conversation._id) === String(prev))) return prev
+        return list[0]?._id || null
+      })
     } catch (e) {
-      setError(e.response?.data?.message || 'Failed to load team chat')
+      setError(e.response?.data?.message || 'Failed to load conversations')
     } finally {
-      setLoadingRoom(false)
+      setLoadingConversations(false)
     }
   }, [currentUserId])
 
@@ -348,13 +378,14 @@ const ChatPortalView = () => {
         setOldestLoadedDay(res.data?.day || toDateKey())
         setHasOlderDays(Boolean(res.data?.hasOlder))
         await api.patch(`/chat/conversations/${conversationId}/read`, { employeeId: currentUserId })
+        loadConversations()
       } catch (e) {
         if (!silent) setError(e.response?.data?.message || 'Failed to load messages')
       } finally {
         if (!silent) setLoadingMessages(false)
       }
     },
-    [currentUserId]
+    [currentUserId, loadConversations]
   )
 
   const loadOlderMessages = useCallback(async () => {
@@ -405,7 +436,7 @@ const ChatPortalView = () => {
   }, [loadingOlder, hasOlderDays, loadOlderMessages])
 
   useEffect(() => {
-    if (!hasOlderDays || loadingOlder || loadingMessages || loadingRoom) return undefined
+    if (!hasOlderDays || loadingOlder || loadingMessages || loadingConversations) return undefined
 
     const sentinel = topSentinelRef.current
     const root = scrollContainerRef.current
@@ -422,7 +453,7 @@ const ChatPortalView = () => {
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [hasOlderDays, loadingOlder, loadingMessages, loadingRoom, loadOlderMessages, messages.length])
+  }, [hasOlderDays, loadingOlder, loadingMessages, loadingConversations, loadOlderMessages, messages.length])
 
   const pollNewMessages = useCallback(async () => {
     if (!currentUserId || !roomId) return
@@ -444,11 +475,59 @@ const ChatPortalView = () => {
           return [...prev, ...unique]
         })
         await api.patch(`/chat/conversations/${roomId}/read`, { employeeId: currentUserId })
+        loadConversations()
       }
     } catch {
       /* ignore poll errors */
     }
-  }, [currentUserId, roomId, messages, loadTodayMessages])
+  }, [currentUserId, roomId, messages, loadTodayMessages, loadConversations])
+
+  const searchNewChatEmployees = useCallback(async (query) => {
+    setLoadingNewChat(true)
+    try {
+      const res = await api.get('/chat/employees', { params: { search: query } })
+      setNewChatEmployees(res.data?.employees || [])
+    } catch {
+      setNewChatEmployees([])
+    } finally {
+      setLoadingNewChat(false)
+    }
+  }, [])
+
+  const startDirectChat = async (peerId) => {
+    if (!currentUserId || !peerId || startingChatId) return
+    setStartingChatId(peerId)
+    setError('')
+    try {
+      const res = await api.post('/chat/conversations', {
+        employeeId: currentUserId,
+        peerId,
+      })
+      const conversation = res.data?.conversation
+      if (conversation?._id) {
+        await loadConversations({ selectId: conversation._id })
+        setShowNewChat(false)
+        setNewChatSearch('')
+      }
+    } catch (e) {
+      setError(e.response?.data?.message || 'Failed to start chat')
+    } finally {
+      setStartingChatId(null)
+    }
+  }
+
+  const selectConversation = (conversationId) => {
+    if (String(conversationId) === String(activeConversationId)) return
+    setActiveConversationId(conversationId)
+    setDraft('')
+    setPendingMentions([])
+    setMentionOpen(false)
+    setAttachMenuOpen(false)
+    setShowNewChat(false)
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      setSidebarOpen(false)
+    }
+  }
 
   const searchMentionEmployees = useCallback(async (query) => {
     setLoadingMentions(true)
@@ -514,6 +593,7 @@ const ChatPortalView = () => {
         setDraft('')
         setPendingMentions([])
         setMentionOpen(false)
+        loadConversations()
       }
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to send message')
@@ -574,6 +654,12 @@ const ChatPortalView = () => {
       setShowPollModal(true)
       return
     }
+    if (optionId === 'contact') {
+      setShowNewChat(true)
+      setNewChatSearch('')
+      searchNewChatEmployees('')
+      return
+    }
     const label = ATTACH_OPTIONS.find((o) => o.id === optionId)?.label || 'Option'
     showAttachNotice(`${label} — coming soon`)
   }
@@ -617,6 +703,7 @@ const ChatPortalView = () => {
         stickToBottomRef.current = true
         setMessages((prev) => [...prev, msg])
         resetPollModal()
+        loadConversations()
       }
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to create poll')
@@ -660,8 +747,8 @@ const ChatPortalView = () => {
   }, [loadIntegration])
 
   useEffect(() => {
-    loadTeamRoom()
-  }, [loadTeamRoom])
+    loadConversations()
+  }, [loadConversations])
 
   useEffect(() => {
     if (roomId) {
@@ -690,15 +777,44 @@ const ChatPortalView = () => {
     return () => clearTimeout(timer)
   }, [mentionOpen, mentionQuery, searchMentionEmployees])
 
+  useEffect(() => {
+    if (!showNewChat) return undefined
+    const timer = setTimeout(() => searchNewChatEmployees(newChatSearch), 200)
+    return () => clearTimeout(timer)
+  }, [showNewChat, newChatSearch, searchNewChatEmployees])
+
   const mentionSuggestions = useMemo(() => {
     if (!mentionOpen) return []
     return mentionEmployees.filter((emp) => String(emp._id) !== String(currentUserId)).slice(0, 8)
   }, [mentionOpen, mentionEmployees, currentUserId])
 
+  const newChatSuggestions = useMemo(() => {
+    if (!showNewChat) return []
+    return newChatEmployees.filter((emp) => String(emp._id) !== String(currentUserId))
+  }, [showNewChat, newChatEmployees, currentUserId])
+
+  const filteredConversations = useMemo(() => {
+    const query = chatSearch.trim().toLowerCase()
+    if (!query) return conversations
+
+    return conversations.filter((conversation) => {
+      const isTeam = conversation.type === 'team'
+      const fields = [
+        conversation.title,
+        conversation.lastMessagePreview,
+        conversation.peer?.name,
+        conversation.peer?.email,
+        conversation.peer?.department,
+        isTeam ? 'team chat general' : 'private direct personal',
+      ]
+      return fields.some((field) => String(field || '').toLowerCase().includes(query))
+    })
+  }, [conversations, chatSearch])
+
   const chatItems = useMemo(() => buildChatItems(messages), [messages])
 
   if (!user) {
-    return <div className='p-8 text-center text-gray-600'>Please log in to use team chat.</div>
+    return <div className='p-8 text-center text-gray-600'>Please log in to use chat.</div>
   }
 
   if (!currentUserId) {
@@ -717,11 +833,168 @@ const ChatPortalView = () => {
         </div>
       )}
 
-      <div className='flex flex-1 min-h-0'>
+      <div className='flex flex-1 min-h-0 relative'>
+        <aside
+          className={`border-r border-[#d1d7db] bg-white flex flex-col shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+            sidebarOpen ? 'w-full sm:w-80 lg:w-96 opacity-100' : 'w-0 opacity-0 border-r-0 pointer-events-none'
+          }`}
+        >
+          <div className='px-4 py-3 border-b border-[#e9edef] bg-[#f0f2f5] flex items-center justify-between gap-2'>
+            <div>
+              <p className='font-semibold text-[#111b21]'>Chats</p>
+              <p className='text-xs text-[#667781]'>Team and personal messages</p>
+            </div>
+            <button
+              type='button'
+              onClick={() => {
+                setShowNewChat((open) => !open)
+                setNewChatSearch('')
+                if (!showNewChat) searchNewChatEmployees('')
+              }}
+              className='shrink-0 rounded-full bg-[#128c7e] text-white w-9 h-9 flex items-center justify-center hover:bg-[#075e54]'
+              title='New chat'
+            >
+              +
+            </button>
+          </div>
+
+          <div className='px-3 py-2 border-b border-[#e9edef] bg-white'>
+            <div className='relative'>
+              <span className='absolute left-3 top-1/2 -translate-y-1/2 text-[#8696a0] pointer-events-none'>
+                <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor' className='w-4 h-4'>
+                  <path fillRule='evenodd' d='M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A6.966 6.966 0 0 1 2 9Z' clipRule='evenodd' />
+                </svg>
+              </span>
+              <input
+                type='text'
+                value={chatSearch}
+                onChange={(e) => setChatSearch(e.target.value)}
+                placeholder='Search chats…'
+                className='w-full rounded-lg border border-[#d1d7db] bg-[#f0f2f5] pl-9 pr-8 py-2 text-sm text-[#111b21] placeholder:text-[#8696a0] focus:outline-none focus:ring-1 focus:ring-[#128c7e] focus:bg-white'
+              />
+              {chatSearch && (
+                <button
+                  type='button'
+                  onClick={() => setChatSearch('')}
+                  className='absolute right-2 top-1/2 -translate-y-1/2 text-[#8696a0] hover:text-[#111b21] w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#e9edef]'
+                  aria-label='Clear search'
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showNewChat && (
+            <div className='p-3 border-b border-[#e9edef] bg-[#fafafa]'>
+              <input
+                type='text'
+                value={newChatSearch}
+                onChange={(e) => setNewChatSearch(e.target.value)}
+                placeholder='Search employee to message…'
+                className='w-full rounded-lg border border-[#d1d7db] px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#128c7e]'
+                autoFocus
+              />
+              <div className='mt-2 max-h-48 overflow-y-auto'>
+                {loadingNewChat ? (
+                  <p className='text-xs text-[#667781] px-1 py-2'>Searching…</p>
+                ) : newChatSuggestions.length === 0 ? (
+                  <p className='text-xs text-[#667781] px-1 py-2'>No employees found</p>
+                ) : (
+                  newChatSuggestions.map((emp) => (
+                    <button
+                      key={emp._id}
+                      type='button'
+                      disabled={startingChatId === emp._id}
+                      onClick={() => startDirectChat(emp._id)}
+                      className='w-full text-left px-2 py-2 rounded-lg hover:bg-white border border-transparent hover:border-[#e9edef] disabled:opacity-60'
+                    >
+                      <p className='text-sm font-medium text-[#111b21]'>{emp.name}</p>
+                      <p className='text-xs text-[#667781] truncate'>
+                        {emp.department ? `${emp.department} · ` : ''}
+                        {emp.email}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className='flex-1 overflow-y-auto'>
+            {loadingConversations ? (
+              <p className='text-sm text-[#667781] text-center py-8'>Loading chats…</p>
+            ) : conversations.length === 0 ? (
+              <p className='text-sm text-[#667781] text-center py-8'>No conversations yet</p>
+            ) : filteredConversations.length === 0 ? (
+              <p className='text-sm text-[#667781] text-center py-8 px-4'>
+                No chats match &quot;{chatSearch.trim()}&quot;
+              </p>
+            ) : (
+              filteredConversations.map((conversation) => {
+                const active = String(conversation._id) === String(activeConversationId)
+                const isTeam = conversation.type === 'team'
+                const preview = conversation.lastMessagePreview || (isTeam ? 'Team channel' : 'Start a private chat')
+                const initials = isTeam
+                  ? 'TC'
+                  : (conversation.peer?.name || conversation.title || '?').charAt(0).toUpperCase()
+                return (
+                  <button
+                    key={conversation._id}
+                    type='button'
+                    onClick={() => selectConversation(conversation._id)}
+                    className={`w-full text-left px-4 py-3 border-b border-[#f0f2f5] hover:bg-[#f5f6f6] transition ${
+                      active ? 'bg-[#f0f2f5]' : ''
+                    }`}
+                  >
+                    <div className='flex items-start gap-3'>
+                      <div className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                        isTeam ? 'bg-[#075e54] text-white' : 'bg-[#dfe5e7] text-[#111b21]'
+                      }`}
+                      >
+                        {initials}
+                      </div>
+                      <div className='min-w-0 flex-1'>
+                        <div className='flex items-center justify-between gap-2'>
+                          <p className='font-medium text-[#111b21] truncate'>{conversation.title}</p>
+                          {conversation.unreadCount > 0 && (
+                            <span className='shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#25d366] text-white text-[11px] font-semibold flex items-center justify-center'>
+                              {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <p className='text-xs text-[#667781] truncate mt-0.5'>{preview}</p>
+                        <p className='text-[10px] text-[#8696a0] mt-1'>
+                          {isTeam ? 'General chat' : 'Private message'}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </aside>
+
         <div className='flex-1 flex flex-col bg-white overflow-hidden min-w-0'>
-          <div className='px-5 py-3 border-b border-[#d1d7db] bg-[#075e54] text-white'>
-            <p className='font-semibold'>{room?.title || 'Team Chat'}</p>
-            <p className='text-xs text-white/80'>Messages visible from when you joined · Type @ to tag someone</p>
+          <div className='px-4 sm:px-5 py-3 border-b border-[#d1d7db] bg-[#075e54] text-white flex items-center gap-3'>
+            <button
+              type='button'
+              onClick={() => setSidebarOpen((open) => !open)}
+              className='shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white/90 hover:text-white hover:bg-white/15 transition'
+              title={sidebarOpen ? 'Hide chat list' : 'Show chat list'}
+              aria-label={sidebarOpen ? 'Hide chat list' : 'Show chat list'}
+              aria-expanded={sidebarOpen}
+            >
+              <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.75' className='w-5 h-5'>
+                <rect x='3' y='4' width='7' height='16' rx='1.5' />
+                <path strokeLinecap='round' d='M14 8h7M14 12h7M14 16h5' />
+              </svg>
+            </button>
+            <div className='min-w-0'>
+              <p className='font-semibold truncate'>{chatHeaderTitle}</p>
+              <p className='text-xs text-white/80 truncate'>{chatHeaderSubtitle}</p>
+            </div>
           </div>
 
           <div
@@ -730,7 +1003,13 @@ const ChatPortalView = () => {
             className='flex-1 overflow-y-auto px-4 py-3 space-y-1'
             style={{ backgroundColor: '#e5ddd5' }}
           >
-            {loadingRoom || loadingMessages ? (
+            {!activeConversation ? (
+              <p className='text-sm text-gray-600 text-center py-8 px-4'>
+                {sidebarOpen
+                  ? 'Select a conversation from the list to start messaging.'
+                  : 'Open the chat list using the toggle above to pick a conversation.'}
+              </p>
+            ) : loadingConversations || loadingMessages ? (
               <p className='text-sm text-gray-600 text-center py-8'>Loading messages…</p>
             ) : (
               <>
@@ -751,7 +1030,9 @@ const ChatPortalView = () => {
                   <>
                     <DateDivider label={formatDayLabel(new Date())} />
                     <p className='text-sm text-gray-600 text-center py-8'>
-                      No messages since you joined the chat. Say hello to the team!
+                      {isTeamChat
+                        ? 'No messages since you joined the team chat. Say hello!'
+                        : 'No messages yet. Start your private conversation.'}
                     </p>
                   </>
                 ) : (
@@ -776,7 +1057,7 @@ const ChatPortalView = () => {
                           : 'bg-white text-[#111b21] rounded-lg rounded-tl-none'
                       } ${isPoll ? 'pb-6' : ''}`}
                     >
-                      {!mine && (
+                      {!mine && isTeamChat && (
                         <p className='text-[12.5px] font-semibold text-[#128c7e] mb-0.5 leading-tight'>
                           {msg.sender?.name || 'User'}
                         </p>
@@ -945,7 +1226,7 @@ const ChatPortalView = () => {
                 type='text'
                 value={draft}
                 onChange={handleDraftChange}
-                placeholder='Type a message'
+                placeholder={isTeamChat ? 'Type a message' : 'Type a private message'}
                 className='flex-1 rounded-full border border-[#d1d7db] bg-white px-4 py-2.5 text-sm text-[#111b21] focus:outline-none focus:ring-1 focus:ring-[#128c7e]'
                 disabled={sending || !roomId}
               />
