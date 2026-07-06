@@ -6,6 +6,7 @@ import {
   formatCoords,
   getCurrentLocation,
   getMapsUrl,
+  isCoordOnlyAddress,
   locationErrorMessage,
   resolveAddressFromCoords,
 } from '../../utils/geolocation'
@@ -267,6 +268,7 @@ const AttendanceView = () => {
   const timerRef = useRef(null)
   const lastGeocodeRef = useRef({ lat: null, lon: null, at: 0 })
   const lastTimelinePushRef = useRef({ lat: null, lon: null, at: 0 })
+  const addressBackfillRef = useRef(new Set())
 
   const isToday = selectedDate === getTodayDateKey()
 
@@ -512,7 +514,7 @@ const AttendanceView = () => {
           error: locationErrorMessage(err?.code === 1 ? 'permission_denied' : err?.code === 3 ? 'timeout' : 'unavailable'),
         }))
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 10000 }
     )
 
     return () => navigator.geolocation.clearWatch(watchId)
@@ -545,7 +547,7 @@ const AttendanceView = () => {
     setRefreshingLocation(false)
   }
 
-  const getLocation = getCurrentLocation
+  const getLocation = () => getCurrentLocation({ skipGeocode: true })
 
   const pushLocationTimeline = useCallback(async (location) => {
     if (!selectedEmployee || !isSessionActive) return
@@ -578,6 +580,77 @@ const AttendanceView = () => {
     if (currentLocation.latitude == null || currentLocation.longitude == null) return
     pushLocationTimeline(currentLocation)
   }, [isSessionActive, currentLocation.latitude, currentLocation.longitude, currentLocation.address, pushLocationTimeline])
+
+  const backfillAttendanceAddress = useCallback(async (type, employeeId, latitude, longitude) => {
+    const lat = Number(latitude)
+    const lon = Number(longitude)
+    if (!employeeId || Number.isNaN(lat) || Number.isNaN(lon)) return
+
+    const key = `${type}:${employeeId}:${lat.toFixed(6)}:${lon.toFixed(6)}`
+    if (addressBackfillRef.current.has(key)) return
+    addressBackfillRef.current.add(key)
+
+    try {
+      const address = await resolveAddressFromCoords(lat, lon)
+      if (!address?.trim()) {
+        addressBackfillRef.current.delete(key)
+        return
+      }
+
+      const endpoint =
+        type === 'check-in' ? '/attendance/check-in-address' : '/attendance/check-out-address'
+      await api.post(endpoint, {
+        employee: employeeId,
+        latitude: lat,
+        longitude: lon,
+        address: address.trim(),
+      })
+      fetchDayAttendance()
+      fetchMonthAttendance()
+    } catch {
+      addressBackfillRef.current.delete(key)
+    }
+  }, [fetchDayAttendance, fetchMonthAttendance])
+
+  const backfillCheckInAddress = useCallback(
+    (employeeId, latitude, longitude) =>
+      backfillAttendanceAddress('check-in', employeeId, latitude, longitude),
+    [backfillAttendanceAddress]
+  )
+
+  const backfillCheckOutAddress = useCallback(
+    (employeeId, latitude, longitude) =>
+      backfillAttendanceAddress('check-out', employeeId, latitude, longitude),
+    [backfillAttendanceAddress]
+  )
+
+  useEffect(() => {
+    if (!selectedEmployee || !myDayAttendance) return
+
+    const att = myDayAttendance
+    if (
+      att.checkIn &&
+      att.checkInLatitude != null &&
+      att.checkInLongitude != null &&
+      isCoordOnlyAddress(att.checkInAddress)
+    ) {
+      void backfillCheckInAddress(selectedEmployee, att.checkInLatitude, att.checkInLongitude)
+    }
+
+    if (
+      att.checkOut &&
+      att.checkOutLatitude != null &&
+      att.checkOutLongitude != null &&
+      isCoordOnlyAddress(att.checkOutAddress)
+    ) {
+      void backfillCheckOutAddress(selectedEmployee, att.checkOutLatitude, att.checkOutLongitude)
+    }
+  }, [
+    selectedEmployee,
+    myDayAttendance,
+    backfillCheckInAddress,
+    backfillCheckOutAddress,
+  ])
 
   const handleCheckIn = async () => {
     if (!selectedEmployee) {
@@ -614,6 +687,7 @@ const AttendanceView = () => {
       await fetchDayAttendance()
       await syncActiveSessionFromServer()
       fetchMonthAttendance()
+      void backfillCheckInAddress(selectedEmployee, location.latitude, location.longitude)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking in')
     } finally {
@@ -630,20 +704,32 @@ const AttendanceView = () => {
     setError(null)
     try {
       const location = await getLocation()
-      const payload = { employee: selectedEmployee }
-      if (!location.failed && location.latitude != null && location.longitude != null) {
-        payload.latitude = Number(location.latitude)
-        payload.longitude = Number(location.longitude)
-        payload.address =
-          location.address?.trim() || formatCoords(location.latitude, location.longitude)
+      const hasValidLocation =
+        !location.failed &&
+        location.latitude != null &&
+        location.longitude != null &&
+        !Number.isNaN(Number(location.latitude)) &&
+        !Number.isNaN(Number(location.longitude))
+      if (!hasValidLocation) {
+        setError(locationErrorMessage(location.reason || 'unavailable'))
+        setLoading(false)
+        return
       }
-      await api.post('/attendance/check-out', payload)
+      const address =
+        location.address?.trim() || formatCoords(location.latitude, location.longitude)
+      await api.post('/attendance/check-out', {
+        employee: selectedEmployee,
+        latitude: Number(location.latitude),
+        longitude: Number(location.longitude),
+        address,
+      })
       setCheckInTime(null)
       setElapsedMs(0)
       if (timerRef.current) clearInterval(timerRef.current)
       await fetchDayAttendance()
       await syncActiveSessionFromServer()
       fetchMonthAttendance()
+      void backfillCheckOutAddress(selectedEmployee, location.latitude, location.longitude)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking out')
     } finally {

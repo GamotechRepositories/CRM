@@ -3,6 +3,10 @@ const NOMINATIM_HEADERS = {
   'User-Agent': 'MultiCRM-Attendance/1.0',
 }
 
+const GPS_FAST = { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }
+const GPS_RETRY = { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 }
+const GEOCODE_TIMEOUT_MS = 2000
+
 export const buildAddressFromNominatim = (data) => {
   const a = data?.address || {}
   const parts = [
@@ -45,6 +49,14 @@ export const formatCoords = (latitude, longitude) => {
   return `${lat.toFixed(6)}, ${lon.toFixed(6)}`
 }
 
+const COORD_ONLY_ADDRESS_RE = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/
+
+export const isCoordOnlyAddress = (address) => {
+  const trimmed = String(address || '').trim()
+  if (!trimmed) return false
+  return COORD_ONLY_ADDRESS_RE.test(trimmed)
+}
+
 export const getMapsUrl = (latitude, longitude) => {
   const lat = Number(latitude)
   const lon = Number(longitude)
@@ -52,22 +64,32 @@ export const getMapsUrl = (latitude, longitude) => {
   return `https://www.google.com/maps?q=${lat},${lon}`
 }
 
-export const getCurrentLocation = () =>
-  new Promise((resolve) => {
+export const getCurrentLocation = (options = {}) => {
+  const skipGeocode = Boolean(options.skipGeocode)
+
+  return new Promise((resolve) => {
     if (!navigator.geolocation) {
       resolve({ failed: true, reason: 'unsupported' })
       return
     }
 
-    const onPosition = async (pos, done) => {
+    const finish = async (pos) => {
       const latitude = Number(pos.coords.latitude)
       const longitude = Number(pos.coords.longitude)
       if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-        done({ failed: true, reason: 'unavailable' })
+        resolve({ failed: true, reason: 'unavailable' })
         return
       }
-      const address = await resolveAddressFromCoords(latitude, longitude)
-      done({
+
+      let address = ''
+      if (!skipGeocode) {
+        address = await Promise.race([
+          resolveAddressFromCoords(latitude, longitude),
+          new Promise((r) => setTimeout(() => r(''), GEOCODE_TIMEOUT_MS)),
+        ])
+      }
+
+      resolve({
         latitude,
         longitude,
         address,
@@ -75,14 +97,14 @@ export const getCurrentLocation = () =>
       })
     }
 
-    const onError = (err, tryFallback) => {
+    const onError = (err, retry) => {
       const reason =
         err?.code === 1 ? 'permission_denied' : err?.code === 3 ? 'timeout' : 'unavailable'
-      if (tryFallback && reason !== 'permission_denied') {
+      if (retry && reason !== 'permission_denied') {
         navigator.geolocation.getCurrentPosition(
-          (pos) => onPosition(pos, resolve),
+          finish,
           () => resolve({ failed: true, reason }),
-          { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 }
+          GPS_RETRY
         )
         return
       }
@@ -90,11 +112,12 @@ export const getCurrentLocation = () =>
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => onPosition(pos, resolve),
+      finish,
       (err) => onError(err, true),
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      GPS_FAST
     )
   })
+}
 
 export const locationErrorMessage = (reason) => {
   if (reason === 'permission_denied') {

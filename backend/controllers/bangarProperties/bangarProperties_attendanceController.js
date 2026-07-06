@@ -1,4 +1,8 @@
 import Attendance from '../../models/bangarProperties/bangarProperties_attendance.js';
+import {
+  createUpdateCheckInAddress,
+  createUpdateCheckOutAddress,
+} from '../../utils/attendanceLocationHandlers.js';
 
 const getStatus = (durationHours) => {
   if (durationHours >= 8) return 'Full Day';
@@ -340,3 +344,6 @@ export const updateLocationTimeline = async (req, res) => {
     res.status(500).json({ message: 'Error updating location timeline', error });
   }
 };
+
+export const updateCheckInAddress = createUpdateCheckInAddress(Attendance);
+export const updateCheckOutAddress = createUpdateCheckOutAddress(Attendance);
