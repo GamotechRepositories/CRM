@@ -115,6 +115,7 @@ const routeFiles = [
   'leaveRoute',
   'billingRoute',
   'quotationRoute',
+  'documentRoute',
   'companyRoute',
   'expenseRoute',
   'clientProfileRoute',
@@ -122,6 +123,7 @@ const routeFiles = [
   'chatRoute',
   'assetRoute',
   'notificationRoute',
+  'announcementRoute',
 ];
 
 for (const company of companies) {

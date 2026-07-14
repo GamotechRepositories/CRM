@@ -320,13 +320,31 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
 
   return (
     <div className='p-4 md:p-8 w-full'>
-      <button
-        type='button'
-        onClick={() => navigate(listPath)}
-        className='mb-6 text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1'
-      >
-        <span aria-hidden='true'>←</span> Back to tasks
-      </button>
+      <div className='mb-6 flex flex-wrap items-center justify-between gap-3'>
+        <button
+          type='button'
+          onClick={() => navigate(listPath)}
+          className='text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1'
+        >
+          <span aria-hidden='true'>←</span> Back to tasks
+        </button>
+        {task.source !== 'social_media' && (
+          <button
+            type='button'
+            onClick={() => {
+              const params = new URLSearchParams({ taskId: String(task._id) })
+              if (isMyTasks) {
+                params.set('from', 'my-tasks')
+                params.set('self', '1')
+              }
+              navigate(`/assign-task?${params.toString()}`)
+            }}
+            className='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700'
+          >
+            Edit Task
+          </button>
+        )}
+      </div>
 
       <div className='bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden'>
         <div className='px-4 py-3 md:px-6 border-b border-blue-700 bg-blue-600'>

@@ -36,7 +36,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
         { id: 'leads', label: 'Leads', path: '/leads' },
         { id: 'contacts', label: 'Contacts', path: '/collaborators', requiresFullAccess: true },
         { id: 'companies', label: 'Companies', path: '/companies', requiresFullAccess: true },
-        { id: 'quotations', label: 'Quotations', path: '/module/quotations', requiresFullAccess: true },
+        { id: 'quotations', label: 'Quotations', path: '/quotations', requiresFullAccess: true },
       ],
     },
     {
@@ -73,7 +73,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       children: [
         { id: 'invoices', label: 'Invoices', path: '/billings' },
         { id: 'expenses', label: 'Expenses', path: '/expenses' },
-        { id: 'payments', label: 'Payments', path: '/revenue' },
+        { id: 'payments', label: 'Revenue', path: '/revenue' },
         { id: 'payroll', label: 'Payroll', path: '/salaries' },
         { id: 'gst', label: 'GST / Taxes', path: '/module/gst' },
       ],
@@ -103,18 +103,6 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       ],
     },
     {
-      id: 'support',
-      label: 'Support',
-      icon: '🛠',
-      type: 'group',
-      requiresFullAccess: true,
-      children: [
-        { id: 'tickets', label: 'Tickets', path: '/module/tickets' },
-        { id: 'knowledge-base', label: 'Knowledge Base', path: '/module/knowledge-base' },
-        { id: 'customer-feedback', label: 'Customer Feedback', path: '/module/customer-feedback' },
-      ],
-    },
-    {
       id: 'marketing',
       label: 'Marketing',
       icon: '📢',
@@ -134,9 +122,9 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       type: 'group',
       requiresFullAccess: true,
       children: [
-        { id: 'files', label: 'Files', path: '/module/files' },
-        { id: 'contracts', label: 'Contracts', path: '/module/contracts' },
-        { id: 'policies', label: 'Policies', path: '/module/policies' },
+        { id: 'files', label: 'Files', path: '/files' },
+        { id: 'contracts', label: 'Contracts', path: '/contracts' },
+        { id: 'policies', label: 'Policies', path: '/policies' },
       ],
     },
     {
@@ -155,14 +143,6 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       icon: '📊',
       type: 'link',
       path: '/reports',
-      requiresFullAccess: true,
-    },
-    {
-      id: 'approvals',
-      label: 'Approvals',
-      icon: '✅',
-      type: 'link',
-      path: '/module/approvals',
       requiresFullAccess: true,
     },
     {
@@ -186,7 +166,6 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
         { id: 'departments', label: 'Departments', path: '/module/departments' },
         { id: 'designations', label: 'Designations', path: '/module/designations' },
         { id: 'settings', label: 'Settings', path: '/settings' },
-        { id: 'audit-logs', label: 'Audit Logs', path: '/module/audit-logs' },
       ],
     },
     {

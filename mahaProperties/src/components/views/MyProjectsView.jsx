@@ -42,14 +42,14 @@ const MyProjectsView = () => {
       error={error}
       showExport={false}
       canAddProject={false}
-      canAssignTask={false}
+      canAssignTask={Boolean(user?._id)}
       canEditProject={false}
       onAddProject={() => navigate('/my-projects')}
       onOpenProject={(p) => navigate(`/my-projects/${p._id}/dashboard`)}
       onEditProject={() => {}}
       onDeleteProject={() => {}}
       onDashboard={(p) => navigate(`/my-projects/${p._id}/dashboard`)}
-      onAssignTask={() => {}}
+      onAssignTask={(p) => navigate(`/assign-task?projectId=${p._id}&scope=my-projects`)}
     />
   )
 }

@@ -67,7 +67,11 @@ export const canEditProjectForUser = (user) => {
   return ['engineering manager', 'project manager'].includes(title)
 }
 
-export const canAssignTaskForUser = (user) => {
+/** Any logged-in employee can assign tasks to other employees. */
+export const canAssignTaskForUser = (user) => Boolean(user?._id)
+
+/** Rating stays limited to admins / designations with assign permission historically. */
+export const canRateTaskForUser = (user) => {
   if (isAdminUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canAssignTask')
   if (fromDesignation !== null) return fromDesignation
@@ -83,8 +87,6 @@ export const canAssignTaskForUser = (user) => {
     'engineering manager',
   ].includes(title)
 }
-
-export const canRateTaskForUser = (user) => canAssignTaskForUser(user)
 
 export const canApproveLeaveForUser = (user) => {
   if (isAdminUser(user)) return true

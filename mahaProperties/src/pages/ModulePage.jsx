@@ -8,6 +8,7 @@ import MilestonesModuleView from '../components/views/MilestonesModuleView'
 import TimesheetsModuleView from '../components/views/TimesheetsModuleView'
 import DepartmentsModuleView from '../components/views/DepartmentsModuleView'
 import DesignationsModuleView from '../components/views/DesignationsModuleView'
+import AnnouncementsModuleView from '../components/views/AnnouncementsModuleView'
 
 const ModulePage = () => {
   const { slug } = useParams()
@@ -39,6 +40,10 @@ const ModulePage = () => {
 
   if (slug === 'designations') {
     return <DesignationsModuleView />
+  }
+
+  if (slug === 'announcements') {
+    return <AnnouncementsModuleView />
   }
 
   const meta = MODULE_META[slug] || {

@@ -35,6 +35,11 @@ import ExpensesView from '../components/views/ExpensesView'
 import AddExpense from '../pages/AddExpense'
 import AddBilling from '../pages/AddBilling'
 import InvoicePage from '../pages/InvoicePage'
+import QuotationsView from '../components/views/QuotationsView'
+import AddQuotation from '../pages/AddQuotation'
+import QuotationPage from '../pages/QuotationPage'
+import DocumentsView from '../components/views/DocumentsView'
+import AddDocument from '../pages/AddDocument'
 import CompaniesView from '../components/views/CompaniesView'
 import AddCompany from '../pages/AddCompany'
 import CompanyProfilePage from '../pages/CompanyProfilePage'
@@ -106,6 +111,19 @@ const router = createBrowserRouter([
             { path: 'add-billing', element: <AddBilling /> },
             { path: 'billings/edit/:id', element: <AddBilling /> },
             { path: 'billings/:id/invoice', element: <InvoicePage /> },
+            { path: 'quotations', element: <QuotationsView /> },
+            { path: 'add-quotation', element: <AddQuotation /> },
+            { path: 'quotations/edit/:id', element: <AddQuotation /> },
+            { path: 'quotations/:id', element: <QuotationPage /> },
+            { path: 'files', element: <DocumentsView documentType='File' /> },
+            { path: 'add-file', element: <AddDocument documentType='File' /> },
+            { path: 'files/edit/:id', element: <AddDocument documentType='File' /> },
+            { path: 'contracts', element: <DocumentsView documentType='Contract' /> },
+            { path: 'add-contract', element: <AddDocument documentType='Contract' /> },
+            { path: 'contracts/edit/:id', element: <AddDocument documentType='Contract' /> },
+            { path: 'policies', element: <DocumentsView documentType='Policy' /> },
+            { path: 'add-policy', element: <AddDocument documentType='Policy' /> },
+            { path: 'policies/edit/:id', element: <AddDocument documentType='Policy' /> },
             { path: 'attendance', element: <AttendanceView /> },
             { path: 'leave', element: <LeaveView /> },
             { path: 'lead-management', element: <LeadsView /> },

@@ -41,10 +41,10 @@ const formatShortName = (name) => {
   if (!name || typeof name !== 'string') return '—'
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return '—'
-  if (parts.length === 1) return `${parts[0][0].toUpperCase()}.`
-  const firstInitial = parts[0][0].toUpperCase()
+  if (parts.length === 1) return parts[0]
+  const firstName = parts[0]
   const surname = parts[parts.length - 1]
-  return `${firstInitial}. ${surname}`
+  return `${firstName} ${surname}`
 }
 
 const PersonShortName = ({ name }) => (
@@ -809,6 +809,22 @@ const TasksView = ({ isMyTasks = false }) => {
               >
                 Open full page
               </button>
+              {viewTask.source !== 'social_media' && (
+                <button
+                  type='button'
+                  onClick={() => {
+                    const params = new URLSearchParams({ taskId: String(viewTask._id) })
+                    if (isMyTasks) {
+                      params.set('from', 'my-tasks')
+                      params.set('self', '1')
+                    }
+                    navigate(`/assign-task?${params.toString()}`)
+                  }}
+                  className='flex-1 py-2 px-4 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700'
+                >
+                  Edit Task
+                </button>
+              )}
               <button
                 type='button'
                 onClick={closeTaskModal}

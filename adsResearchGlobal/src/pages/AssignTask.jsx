@@ -37,6 +37,8 @@ const AssignTask = () => {
   const projectIdFromUrl = searchParams.get('projectId')
   const scopeFromUrl = searchParams.get('scope')
   const selfFromUrl = searchParams.get('self')
+  const taskIdFromUrl = searchParams.get('taskId')
+  const fromMyTasks = searchParams.get('from') === 'my-tasks'
   const navigate = useNavigate()
 
   const [projects, setProjects] = useState([])
@@ -60,12 +62,15 @@ const AssignTask = () => {
     recurrenceEndDate: '',
   })
   const [loading, setLoading] = useState(false)
+  const [loadingTask, setLoadingTask] = useState(Boolean(taskIdFromUrl))
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState('')
 
+  const isEditMode = Boolean(taskIdFromUrl)
   const availabilityDate = form.dueDate || form.recurrenceStartDate || new Date().toISOString().slice(0, 10)
   const isSelfTaskMode = !canAssignTask()
   const restrictProjectsToMyMembership =
-    isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1'
+    isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -97,12 +102,83 @@ const AssignTask = () => {
   }, [projectIdFromUrl])
 
   useEffect(() => {
-    if (!form.project) return
+    if (!taskIdFromUrl) {
+      setLoadingTask(false)
+      return
+    }
+    let cancelled = false
+    const loadTask = async () => {
+      try {
+        setLoadingTask(true)
+        setError(null)
+        const res = await api.get(`/tasks/${taskIdFromUrl}`)
+        const task = res.data?.task || res.data
+        if (cancelled || !task?._id) {
+          if (!cancelled) setError('Task not found')
+          return
+        }
+        if (task.source === 'social_media') {
+          if (!cancelled) setError('Social media tasks cannot be edited here')
+          return
+        }
+
+        const mins = Number(task.estimatedDurationMinutes) || 0
+        const projectId = task.project?._id || task.project || ''
+        const assigneeId = task.assignedTo?._id || task.assignedTo || ''
+        if (task.project && typeof task.project === 'object' && task.project._id) {
+          setProjects((prev) => {
+            if (prev.some((p) => String(p._id) === String(task.project._id))) return prev
+            return [task.project, ...prev]
+          })
+        }
+        if (task.assignedTo && typeof task.assignedTo === 'object' && task.assignedTo._id) {
+          setEmployees((prev) => {
+            if (prev.some((e) => String(e._id) === String(task.assignedTo._id))) return prev
+            return [task.assignedTo, ...prev]
+          })
+        }
+
+        if (!cancelled) {
+          setForm({
+            project: projectId ? String(projectId) : '',
+            title: task.title || '',
+            description: task.description || '',
+            assignedTo: assigneeId ? String(assigneeId) : '',
+            assignedToList: assigneeId ? [String(assigneeId)] : [],
+            priority: task.priority || 'Medium',
+            dueDate: task.dueDate ? String(task.dueDate).slice(0, 10) : '',
+            durationHours: mins ? String(Math.floor(mins / 60)) : '',
+            durationMinutes: mins ? String(mins % 60) : '',
+            isRecurring: Boolean(task.isRecurring || task.recurrenceEnabled),
+            recurrenceType: task.recurrenceType || 'daily',
+            recurrenceInterval: task.recurrenceInterval || 1,
+            recurrenceStartDate: task.recurrenceStartDate
+              ? String(task.recurrenceStartDate).slice(0, 10)
+              : new Date().toISOString().slice(0, 10),
+            recurrenceEndDate: task.recurrenceEndDate ? String(task.recurrenceEndDate).slice(0, 10) : '',
+          })
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.response?.data?.message || err.message || 'Failed to load task')
+        }
+      } finally {
+        if (!cancelled) setLoadingTask(false)
+      }
+    }
+    loadTask()
+    return () => {
+      cancelled = true
+    }
+  }, [taskIdFromUrl])
+
+  useEffect(() => {
+    if (!form.project || loadingTask || isEditMode) return
     const exists = projects.some((p) => String(p._id) === String(form.project))
-    if (!exists) {
+    if (!exists && projects.length) {
       setForm((f) => ({ ...f, project: '' }))
     }
-  }, [projects, form.project])
+  }, [projects, form.project, loadingTask, isEditMode])
 
   useEffect(() => {
     let cancelled = false
@@ -140,21 +216,21 @@ const AssignTask = () => {
     .filter(Boolean)
 
   useEffect(() => {
-    if (!form.assignedTo) return
+    if (isEditMode || !form.assignedTo) return
     const avail = availabilityMap[String(form.assignedTo)]
     if (avail?.isAssignable === false) {
       setForm((f) => ({ ...f, assignedTo: '' }))
     }
-  }, [availabilityMap, form.assignedTo])
+  }, [availabilityMap, form.assignedTo, isEditMode])
 
   useEffect(() => {
-    if (!isSelfTaskMode || !user?._id) return
+    if (!isSelfTaskMode || !user?._id || isEditMode) return
     setForm((f) => ({
       ...f,
       assignedTo: user._id,
       assignedToList: [user._id],
     }))
-  }, [isSelfTaskMode, user?._id])
+  }, [isSelfTaskMode, user?._id, isEditMode])
 
   const totalDurationMinutes = useMemo(() => {
     const hours = Number(form.durationHours) || 0
@@ -177,7 +253,13 @@ const AssignTask = () => {
       setError('Please enter a time duration for this task')
       return
     }
-    const blockedAssignee = selectedAssignees.find((employeeId) => availabilityMap[String(employeeId)]?.isAssignable === false)
+    const blockedAssignee = selectedAssignees.find((employeeId) => {
+      const avail = availabilityMap[String(employeeId)]
+      if (!avail || avail.isAssignable !== false) return false
+      // Allow keeping the same assignee when editing even if currently marked busy
+      if (isEditMode && form.assignedToList.includes(String(employeeId))) return false
+      return true
+    })
     if (blockedAssignee) {
       const name = employees.find((emp) => String(emp._id) === String(blockedAssignee))?.name || 'Selected employee'
       setError(`${name} is not available for assignment right now.`)
@@ -185,14 +267,13 @@ const AssignTask = () => {
     }
     setLoading(true)
     setError(null)
+    setSuccess('')
     try {
-      await api.post('/tasks', {
+      const payload = {
         project: form.project,
         title: form.title,
         description: form.description || undefined,
         assignedTo: selectedAssignees[0],
-        assignedToList: selectedAssignees,
-        assignedBy: user._id,
         priority: form.priority,
         dueDate: form.dueDate || undefined,
         estimatedDurationMinutes: totalDurationMinutes,
@@ -202,23 +283,63 @@ const AssignTask = () => {
         recurrenceInterval: form.isRecurring ? Number(form.recurrenceInterval) || 1 : undefined,
         recurrenceStartDate: form.isRecurring ? form.recurrenceStartDate || form.dueDate || undefined : undefined,
         recurrenceEndDate: form.isRecurring ? form.recurrenceEndDate || undefined : undefined,
-      })
-      navigate(projectIdFromUrl ? '/projects' : '/tasks')
+      }
+
+      if (isEditMode) {
+        await api.put(`/tasks/${taskIdFromUrl}`, payload)
+        setSuccess('Task updated successfully.')
+      } else {
+        await api.post('/tasks', {
+          ...payload,
+          assignedToList: selectedAssignees,
+          assignedBy: user._id,
+        })
+        setSuccess(isSelfTaskMode ? 'Task created successfully.' : 'Task assigned successfully.')
+        setForm((f) => ({
+          ...f,
+          project: projectIdFromUrl || f.project,
+          title: '',
+          description: '',
+          assignedTo: isSelfTaskMode && user?._id ? user._id : '',
+          assignedToList: isSelfTaskMode && user?._id ? [user._id] : [],
+          priority: 'Medium',
+          dueDate: '',
+          durationHours: '',
+          durationMinutes: '',
+          isRecurring: false,
+          recurrenceType: 'daily',
+          recurrenceInterval: 1,
+          recurrenceStartDate: new Date().toISOString().slice(0, 10),
+          recurrenceEndDate: '',
+        }))
+      }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Error assigning task')
+      setError(err.response?.data?.message || err.message || (isEditMode ? 'Error updating task' : 'Error assigning task'))
     } finally {
       setLoading(false)
     }
   }
 
+  if (loadingTask) {
+    return <div className='p-8 text-sm text-gray-600'>Loading task…</div>
+  }
+
   return (
     <div className='p-8 w-full'>
       <div className='mb-8'>
-        <h1 className='text-2xl font-bold text-gray-900'>{isSelfTaskMode ? 'Create My Task' : 'Assign Task'}</h1>
+        <h1 className='text-2xl font-bold text-gray-900'>
+          {isEditMode
+            ? 'Edit Task'
+            : isSelfTaskMode
+              ? 'Create My Task'
+              : 'Assign Task'}
+        </h1>
         <p className='text-gray-600 mt-1 text-sm'>
-          {isSelfTaskMode
-            ? 'Create and manage your own task timeline.'
-            : 'Assign a task with duration. Employees can handle multiple tasks at once.'}
+          {isEditMode
+            ? 'Update task details. Changes are saved for everyone working on this task.'
+            : isSelfTaskMode
+              ? 'Create and manage your own task timeline.'
+              : 'Assign a task with duration. Employees can handle multiple tasks at once.'}
         </p>
       </div>
 
@@ -537,6 +658,7 @@ const AssignTask = () => {
         </div>
 
         {error && <p className='text-red-600 text-sm'>{error}</p>}
+        {success && <p className='text-emerald-600 text-sm'>{success}</p>}
 
         <div className='flex gap-3 pt-2'>
           <button
@@ -546,9 +668,11 @@ const AssignTask = () => {
           >
             {loading
               ? 'Saving...'
-              : form.isRecurring
-                ? (selectedAssignees.length > 1 ? 'Assign Auto Tasks' : 'Assign Auto Task')
-                : (selectedAssignees.length > 1 ? 'Assign Tasks' : (isSelfTaskMode ? 'Create Task' : 'Assign Task'))}
+              : isEditMode
+                ? 'Save Changes'
+                : form.isRecurring
+                  ? (selectedAssignees.length > 1 ? 'Assign Auto Tasks' : 'Assign Auto Task')
+                  : (selectedAssignees.length > 1 ? 'Assign Tasks' : (isSelfTaskMode ? 'Create Task' : 'Assign Task'))}
           </button>
           <button
             type='button'

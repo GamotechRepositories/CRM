@@ -244,6 +244,7 @@ const EmployeeDashboardView = () => {
   const [loading, setLoading] = useState(true)
   const [tasks, setTasks] = useState([])
   const [myLeads, setMyLeads] = useState([])
+  const [announcements, setAnnouncements] = useState([])
   const now = new Date()
   const firstName = (user?.name || 'there').split(' ')[0]
   const designation = user?.designation?.title || user?.designation?.name || 'Employee'
@@ -253,9 +254,10 @@ const EmployeeDashboardView = () => {
       if (!user?._id) return
       try {
         setLoading(true)
-        const [tasksRes, leadsRes] = await Promise.all([
+        const [tasksRes, leadsRes, announcementsRes] = await Promise.all([
           api.get('/tasks', { params: { employeeId: user._id } }),
           api.get('/leads').catch(() => ({ data: [] })),
+          api.get('/announcements', { params: { active: 'true' } }).catch(() => ({ data: [] })),
         ])
         setTasks(Array.isArray(tasksRes.data) ? tasksRes.data : [])
         const allLeads = Array.isArray(leadsRes.data) ? leadsRes.data : []
@@ -266,6 +268,8 @@ const EmployeeDashboardView = () => {
           return String(generatedById) === String(user._id) || (meetingPerson && meetingPerson === userName)
         })
         setMyLeads(related)
+        const list = Array.isArray(announcementsRes.data) ? announcementsRes.data : []
+        setAnnouncements(list.slice(0, 5))
       } finally {
         setLoading(false)
       }
@@ -346,11 +350,7 @@ const EmployeeDashboardView = () => {
     }
   }, [tasks, myLeads, now])
 
-  const announcements = [
-    { icon: '📢', title: 'Use My Tasks to track daily work', desc: 'Check pending items and mark them complete on time.', date: formatDate(now) },
-    { icon: '📅', title: 'Keep your meetings updated', desc: 'Schedule client meetings from Lead Management.', date: formatDate(now) },
-    { icon: '✅', title: 'Mark attendance daily', desc: 'Check in from the Attendance page each working day.', date: formatDate(now) },
-  ]
+  const announcementIcons = { urgent: '🚨', high: '📢', normal: 'ℹ️' }
 
   if (loading) {
     return <div className='p-8 text-sm text-gray-600'>Loading your dashboard...</div>
@@ -495,18 +495,27 @@ const EmployeeDashboardView = () => {
           </div>
         </Panel>
 
-        <Panel title='Announcements'>
+        <Panel title='Announcements' actionLabel='View All' onAction={() => navigate('/module/announcements')}>
           <div className='space-y-4'>
-            {announcements.map((item) => (
-              <div key={item.title} className='flex gap-3 pb-3 border-b border-gray-50 last:border-0 last:pb-0'>
-                <span className='text-xl shrink-0'>{item.icon}</span>
-                <div>
-                  <p className='text-sm font-semibold text-gray-900'>{item.title}</p>
-                  <p className='text-xs text-gray-500 mt-0.5'>{item.desc}</p>
-                  <p className='text-[10px] text-gray-400 mt-1'>{item.date}</p>
+            {announcements.length ? announcements.map((item) => (
+              <button
+                key={item._id}
+                type='button'
+                onClick={() => navigate('/module/announcements')}
+                className='w-full flex gap-3 pb-3 border-b border-gray-50 last:border-0 last:pb-0 text-left hover:bg-gray-50 rounded-lg -mx-1 px-1'
+              >
+                <span className='text-xl shrink-0'>{announcementIcons[item.priority] || '📢'}</span>
+                <div className='min-w-0'>
+                  <p className='text-sm font-semibold text-gray-900 truncate'>
+                    {item.pinned ? '📌 ' : ''}{item.title}
+                  </p>
+                  <p className='text-xs text-gray-500 mt-0.5 line-clamp-2'>{item.message}</p>
+                  <p className='text-[10px] text-gray-400 mt-1'>{formatDate(item.publishedAt || item.createdAt)}</p>
                 </div>
-              </div>
-            ))}
+              </button>
+            )) : (
+              <p className='text-sm text-gray-500 py-6 text-center'>No announcements right now</p>
+            )}
           </div>
         </Panel>
       </div>

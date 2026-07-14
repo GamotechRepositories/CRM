@@ -1,0 +1,38 @@
+import { Router } from 'express';
+import {
+  getFiles,
+  createFile,
+  updateFile,
+  deleteFile,
+  getContracts,
+  createContract,
+  updateContract,
+  deleteContract,
+  getPolicies,
+  createPolicy,
+  updatePolicy,
+  deletePolicy,
+  getDocumentById,
+} from '../../controllers/salesTechReality/salesTechReality_documentController.js';
+
+const router = Router();
+
+router.get('/files', getFiles);
+router.post('/files', createFile);
+router.get('/files/:id', getDocumentById);
+router.put('/files/:id', updateFile);
+router.delete('/files/:id', deleteFile);
+
+router.get('/contracts', getContracts);
+router.post('/contracts', createContract);
+router.get('/contracts/:id', getDocumentById);
+router.put('/contracts/:id', updateContract);
+router.delete('/contracts/:id', deleteContract);
+
+router.get('/policies', getPolicies);
+router.post('/policies', createPolicy);
+router.get('/policies/:id', getDocumentById);
+router.put('/policies/:id', updatePolicy);
+router.delete('/policies/:id', deletePolicy);
+
+export default router;

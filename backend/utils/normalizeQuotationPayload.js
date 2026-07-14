@@ -10,21 +10,28 @@ const toDate = (value) => {
   return Number.isNaN(date.getTime()) ? undefined : date;
 };
 
+/**
+ * Accepts either project shape (lineItems) or domain aliases (items).
+ * Item aliases: name, tax → taxRate, total → amount (recomputed).
+ */
 const normalizeLineItems = (items = []) => {
   if (!Array.isArray(items)) return [];
 
   return items
     .map((item) => {
-      const quantity = toNumber(item.quantity, 1);
-      const unitPrice = toNumber(item.unitPrice, 0);
-      const discount = toNumber(item.discount, 0);
-      const taxRate = toNumber(item.taxRate, 0);
+      const name = String(item.name || '').trim();
+      const description = String(item.description || item.name || '').trim();
+      const quantity = Math.max(1, toNumber(item.quantity, 1));
+      const unitPrice = Math.max(0, toNumber(item.unitPrice, 0));
+      const discount = Math.max(0, toNumber(item.discount, 0));
+      const taxRate = Math.max(0, toNumber(item.taxRate ?? item.tax, 0));
       const base = Math.max(0, quantity * unitPrice - discount);
-      const tax = base * (taxRate / 100);
-      const amount = Math.max(0, base + tax);
+      const taxAmount = base * (taxRate / 100);
+      const amount = Math.max(0, base + taxAmount);
 
       return {
-        description: String(item.description || '').trim(),
+        name: name || description,
+        description,
         quantity,
         unit: String(item.unit || 'Nos').trim() || 'Nos',
         unitPrice,
@@ -49,23 +56,28 @@ const computeTotals = (lineItems) => {
 };
 
 export const normalizeQuotationPayload = (body = {}) => {
-  const lineItems = normalizeLineItems(body.lineItems);
+  const rawItems = body.lineItems ?? body.items ?? [];
+  const lineItems = normalizeLineItems(rawItems);
   const totals = computeTotals(lineItems);
 
   return {
-    subject: String(body.subject || '').trim(),
-    client: body.client || undefined,
+    subject: String(body.subject || body.scopeOfWork || 'Quotation').trim(),
+    client: body.client || body.customer || undefined,
     lead: body.lead || null,
     project: body.project || null,
-    preparedBy: body.preparedBy || undefined,
-    quotationDate: toDate(body.quotationDate),
-    validUntil: toDate(body.validUntil),
+    preparedBy: body.preparedBy || body.salesExecutive || undefined,
+    quotationDate: toDate(body.quotationDate) || new Date(),
+    validUntil: toDate(body.validUntil || body.expiryDate),
     status: body.status || 'Draft',
     currency: String(body.currency || 'INR').trim() || 'INR',
     lineItems,
     ...totals,
+    paymentTerms: body.paymentTerms ?? '',
+    scopeOfWork: body.scopeOfWork ?? '',
     termsAndConditions: body.termsAndConditions ?? '',
     notes: body.notes ?? '',
+    quotationUrl: String(body.quotationUrl || '').trim(),
+    quotationFileName: String(body.quotationFileName || '').trim(),
     clientContact: {
       name: body.clientContact?.name ?? body.clientName ?? '',
       email: body.clientContact?.email ?? body.clientEmail ?? '',

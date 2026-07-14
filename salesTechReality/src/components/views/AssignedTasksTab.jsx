@@ -272,13 +272,22 @@ const AssignedTasksTab = () => {
           <div className='px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-2'>
             <h2 className='text-sm font-semibold text-gray-900'>Task details</h2>
             {selectedTask?._id && (
-              <button
-                type='button'
-                onClick={() => navigate(`/tasks/${selectedTask._id}`)}
-                className='text-xs font-medium text-blue-600 hover:text-blue-700'
-              >
-                Open full page
-              </button>
+              <div className='flex items-center gap-3'>
+                <button
+                  type='button'
+                  onClick={() => navigate(`/assign-task?taskId=${selectedTask._id}`)}
+                  className='text-xs font-medium text-indigo-600 hover:text-indigo-700'
+                >
+                  Edit Task
+                </button>
+                <button
+                  type='button'
+                  onClick={() => navigate(`/tasks/${selectedTask._id}`)}
+                  className='text-xs font-medium text-blue-600 hover:text-blue-700'
+                >
+                  Open full page
+                </button>
+              </div>
             )}
           </div>
 
