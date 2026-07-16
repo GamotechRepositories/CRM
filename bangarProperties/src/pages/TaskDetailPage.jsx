@@ -130,6 +130,15 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
     [user?._id, canAssignTask]
   )
 
+  const isPendingAssigneeAcceptance = useCallback(
+    (t) => {
+      if (!t || !user?._id || t.source === 'social_media') return false
+      const assigneeId = t.assignedTo?._id || t.assignedTo
+      return String(assigneeId) === String(user._id) && normalizeTaskStatus(t.status) === 'Pending'
+    },
+    [user?._id]
+  )
+
   useEffect(() => {
     let cancelled = false
     const idStr = taskId ? decodeURIComponent(taskId) : ''
@@ -505,7 +514,16 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
             </div>
             <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
               <span className='text-sm text-gray-500'>Status</span>
-              {canUpdateTaskStatus(task) ? (
+              {isPendingAssigneeAcceptance(task) ? (
+                <button
+                  type='button'
+                  onClick={() => handleStatusChange(task, 'In Progress')}
+                  disabled={updatingStatus}
+                  className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
+                >
+                  {updatingStatus ? 'Accepting...' : 'Accept Task'}
+                </button>
+              ) : canUpdateTaskStatus(task) ? (
                 <select
                   value={normalizeTaskStatus(task.status) || task.status}
                   onChange={(e) => handleStatusChange(task, e.target.value)}

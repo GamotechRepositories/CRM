@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Logo from '../assets/logo.jpg'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import api from '../api/axios'
 import { getSidebarNav } from '../config/sidebarNav'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
@@ -47,6 +48,18 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   }, [sections, location.pathname, fullAccess])
 
   const [expanded, setExpanded] = useState(defaultExpanded)
+  const [pendingMyTasksCount, setPendingMyTasksCount] = useState(0)
+  const [hasTaskSoundPermission, setHasTaskSoundPermission] = useState(false)
+  const taskNotifyAudioRef = useRef(null)
+
+  useEffect(() => {
+    const audio = new Audio('/butty_notify.mp3')
+    audio.preload = 'auto'
+    taskNotifyAudioRef.current = audio
+    return () => {
+      taskNotifyAudioRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     const activeGroup = sections.find(
@@ -58,6 +71,69 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       return { [activeGroup.id]: true }
     })
   }, [location.pathname, sections])
+
+  useEffect(() => {
+    const unlockSound = () => setHasTaskSoundPermission(true)
+    window.addEventListener('click', unlockSound, { once: true })
+    window.addEventListener('keydown', unlockSound, { once: true })
+    return () => {
+      window.removeEventListener('click', unlockSound)
+      window.removeEventListener('keydown', unlockSound)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    let timerId = null
+    let previousPendingCount = null
+
+    const playTaskAllocatedSound = () => {
+      if (!hasTaskSoundPermission) return
+      const audio = taskNotifyAudioRef.current
+      if (!audio) return
+      try {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      } catch {
+        // Ignore audio errors silently.
+      }
+    }
+
+    const fetchPendingMyTasks = async () => {
+      if (!user?._id) {
+        if (!cancelled) setPendingMyTasksCount(0)
+        return
+      }
+      try {
+        const res = await api.get('/tasks', { params: { employeeId: user._id } })
+        const list = Array.isArray(res.data) ? res.data : []
+        const pendingCount = list.filter((task) => String(task?.status || '').trim() === 'Pending').length
+        if (previousPendingCount !== null && pendingCount > previousPendingCount) {
+          playTaskAllocatedSound()
+        }
+        previousPendingCount = pendingCount
+        if (!cancelled) setPendingMyTasksCount(pendingCount)
+      } catch {
+        if (!cancelled) setPendingMyTasksCount(0)
+      }
+    }
+
+    const handleVisibilityOrFocus = () => {
+      if (!document.hidden) fetchPendingMyTasks()
+    }
+
+    fetchPendingMyTasks()
+    timerId = window.setInterval(fetchPendingMyTasks, 5000)
+    window.addEventListener('focus', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+
+    return () => {
+      cancelled = true
+      if (timerId) window.clearInterval(timerId)
+      window.removeEventListener('focus', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+    }
+  }, [user?._id, hasTaskSoundPermission])
 
   const toggleSection = (id) => {
     setExpanded((prev) => (prev[id] ? {} : { [id]: true }))
@@ -80,7 +156,12 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         {isOpen ? (
           <>
             <span className='text-[#94A3B8]'>•</span>
-            <span className='truncate'>{child.label}</span>
+            <span className='truncate flex-1 text-left'>{child.label}</span>
+            {child.id === 'my-tasks' && pendingMyTasksCount > 0 && (
+              <span className='ml-auto inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-semibold text-white'>
+                {pendingMyTasksCount > 99 ? '99+' : pendingMyTasksCount}
+              </span>
+            )}
           </>
         ) : (
           <span className='w-1.5 h-1.5 rounded-full bg-[#94A3B8]' />

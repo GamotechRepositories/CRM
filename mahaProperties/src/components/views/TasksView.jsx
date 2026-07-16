@@ -257,6 +257,12 @@ const TasksView = ({ isMyTasks = false }) => {
     return assigneeId === user._id || canAssignTask()
   }
 
+  const isPendingAssigneeAcceptance = (task) => {
+    if (!task || !user?._id || task.source === 'social_media') return false
+    const assigneeId = task.assignedTo?._id || task.assignedTo
+    return String(assigneeId) === String(user._id) && normalizeTaskStatus(task.status) === 'Pending'
+  }
+
   const hiddenByFilters = !loading && filteredTasks.length === 0 && tasksForStats.length > 0
   const hasActiveFilters = filterStatus !== 'All' || filterDate || filterProject || filterAssignee
 
@@ -758,7 +764,16 @@ const TasksView = ({ isMyTasks = false }) => {
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Status</span>
-                {canUpdateTaskStatus(viewTask) ? (
+                {isPendingAssigneeAcceptance(viewTask) ? (
+                  <button
+                    type='button'
+                    onClick={() => handleStatusChange(viewTask, 'In Progress')}
+                    disabled={updatingStatus}
+                    className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
+                  >
+                    {updatingStatus ? 'Accepting...' : 'Accept Task'}
+                  </button>
+                ) : canUpdateTaskStatus(viewTask) ? (
                   <select
                     value={normalizeTaskStatus(viewTask.status) || viewTask.status}
                     onChange={(e) => handleStatusChange(viewTask, e.target.value)}
