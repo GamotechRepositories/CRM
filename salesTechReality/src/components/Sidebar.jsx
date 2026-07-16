@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Logo from '../assets/logo.jpg'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -6,6 +6,11 @@ import api from '../api/axios'
 import { getSidebarNav } from '../config/sidebarNav'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
+import {
+  enableTaskAssignmentAlerts,
+  initTaskAssignmentAudio,
+  notifyNewTaskAssigned,
+} from '../utils/taskAssignmentAlert'
 
 const MenuToggleIcon = () => (
   <svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' strokeWidth={1.5} stroke='currentColor' className='size-6'>
@@ -49,16 +54,10 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
 
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [pendingMyTasksCount, setPendingMyTasksCount] = useState(0)
-  const [hasTaskSoundPermission, setHasTaskSoundPermission] = useState(false)
-  const taskNotifyAudioRef = useRef(null)
+  const [alertsEnabled, setAlertsEnabled] = useState(false)
 
   useEffect(() => {
-    const audio = new Audio('/butty_notify.mp3')
-    audio.preload = 'auto'
-    taskNotifyAudioRef.current = audio
-    return () => {
-      taskNotifyAudioRef.current = null
-    }
+    initTaskAssignmentAudio()
   }, [])
 
   useEffect(() => {
@@ -73,12 +72,15 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   }, [location.pathname, sections])
 
   useEffect(() => {
-    const unlockSound = () => setHasTaskSoundPermission(true)
-    window.addEventListener('click', unlockSound, { once: true })
-    window.addEventListener('keydown', unlockSound, { once: true })
+    const unlockAlerts = () => {
+      setAlertsEnabled(true)
+      enableTaskAssignmentAlerts()
+    }
+    window.addEventListener('click', unlockAlerts, { once: true })
+    window.addEventListener('keydown', unlockAlerts, { once: true })
     return () => {
-      window.removeEventListener('click', unlockSound)
-      window.removeEventListener('keydown', unlockSound)
+      window.removeEventListener('click', unlockAlerts)
+      window.removeEventListener('keydown', unlockAlerts)
     }
   }, [])
 
@@ -86,18 +88,6 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
     let cancelled = false
     let timerId = null
     let previousPendingCount = null
-
-    const playTaskAllocatedSound = () => {
-      if (!hasTaskSoundPermission) return
-      const audio = taskNotifyAudioRef.current
-      if (!audio) return
-      try {
-        audio.currentTime = 0
-        audio.play().catch(() => {})
-      } catch {
-        // Ignore audio errors silently.
-      }
-    }
 
     const fetchPendingMyTasks = async () => {
       if (!user?._id) {
@@ -108,8 +98,11 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         const res = await api.get('/tasks', { params: { employeeId: user._id } })
         const list = Array.isArray(res.data) ? res.data : []
         const pendingCount = list.filter((task) => String(task?.status || '').trim() === 'Pending').length
-        if (previousPendingCount !== null && pendingCount > previousPendingCount) {
-          playTaskAllocatedSound()
+        if (alertsEnabled && previousPendingCount !== null && pendingCount > previousPendingCount) {
+          notifyNewTaskAssigned({
+            pendingCount,
+            navigate,
+          })
         }
         previousPendingCount = pendingCount
         if (!cancelled) setPendingMyTasksCount(pendingCount)
@@ -119,21 +112,32 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
     }
 
     const handleVisibilityOrFocus = () => {
-      if (!document.hidden) fetchPendingMyTasks()
+      fetchPendingMyTasks()
+    }
+
+    const schedulePolling = () => {
+      if (timerId) window.clearInterval(timerId)
+      const intervalMs = document.hidden ? 3000 : 5000
+      timerId = window.setInterval(fetchPendingMyTasks, intervalMs)
+    }
+
+    const handleVisibilityChange = () => {
+      schedulePolling()
+      fetchPendingMyTasks()
     }
 
     fetchPendingMyTasks()
-    timerId = window.setInterval(fetchPendingMyTasks, 5000)
+    schedulePolling()
     window.addEventListener('focus', handleVisibilityOrFocus)
-    document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
       if (timerId) window.clearInterval(timerId)
       window.removeEventListener('focus', handleVisibilityOrFocus)
-      document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [user?._id, hasTaskSoundPermission])
+  }, [user?._id, alertsEnabled, navigate])
 
   const toggleSection = (id) => {
     setExpanded((prev) => (prev[id] ? {} : { [id]: true }))
