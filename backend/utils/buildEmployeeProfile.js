@@ -12,11 +12,11 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
 
   const [managedProjects, teamProjects, tasks, attendance, leaves, salaries] = await Promise.all([
     Project.find({ projectManager: employeeId })
-      .populate('client', 'name companyName')
+      .populate('client', 'clientName name companyName mailId clientNumber businessType city')
       .select('projectName status priority progress startDate endDate deadline client department')
       .lean(),
     Project.find({ teamMembers: employeeId })
-      .populate('client', 'name companyName')
+      .populate('client', 'clientName name companyName mailId clientNumber businessType city')
       .select('projectName status priority progress startDate endDate deadline client department projectManager')
       .lean(),
     Task.find({ assignedTo: employeeId, isRecurringTemplate: { $ne: true } })

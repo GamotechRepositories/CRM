@@ -75,6 +75,7 @@ const DEFAULT_CORS_ORIGINS = [
   'http://localhost:5174',
   'http://localhost:5175',
   'http://localhost:5176',
+  'http://localhost:5177',
 ];
 
 const corsOrigins = (process.env.CORS_ORIGINS || '')
@@ -132,6 +133,10 @@ for (const company of companies) {
     app.use(`/api/v1/${company}`, routeModule.default);
   }
 }
+
+// Centralized admin panel: /api/v1/admin/*
+const centralAdminRoute = await import('./routes/centralAdminRoute.js');
+app.use('/api/v1/admin', centralAdminRoute.default);
 
 // Server start
 app.listen(PORT, '0.0.0.0', () => {
