@@ -8,6 +8,7 @@ import CampaignsView from '../components/views/CampaignsView'
 import LeadsView from '../components/views/LeadsView'
 import ProjectsView from '../components/views/ProjectsView'
 import MyProjectsView from '../components/views/MyProjectsView'
+import MyTeamView from '../components/views/MyTeamView'
 import ReportsView from '../components/views/ReportsView'
 import TasksView from '../components/views/TasksView'
 import CalendarView from '../components/views/CalendarView'
@@ -63,6 +64,7 @@ const router = createBrowserRouter([
             { path: 'admin-dashboard', element: <DashboardView /> },
             { path: 'hr-dashboard', element: <DashboardView /> },
             { path: 'manager-dashboard', element: <DashboardView /> },
+            { path: 'team-leader-dashboard', element: <DashboardView /> },
             { path: 'clients', element: <ClientsView /> },
             { path: 'clients/:clientId/dashboard', element: <ClientDashboardView /> },
             { path: 'client-profiles', element: <ClientProfilesView /> },
@@ -85,6 +87,7 @@ const router = createBrowserRouter([
             { path: 'projects', element: <ProjectsView /> },
             { path: 'projects/edit/:id', element: <AddProject /> },
             { path: 'projects/:projectId/dashboard', element: <ProjectDashboardView /> },
+            { path: 'my-team', element: <MyTeamView /> },
             { path: 'my-projects', element: <MyProjectsView /> },
             { path: 'my-projects/:projectId/dashboard', element: <ProjectDashboardView /> },
             { path: 'add-project', element: <AddProject /> },

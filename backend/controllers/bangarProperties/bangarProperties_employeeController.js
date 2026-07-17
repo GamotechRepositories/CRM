@@ -5,6 +5,7 @@ import Task from "../../models/bangarProperties/bangarProperties_task.js";
 import Attendance from "../../models/bangarProperties/bangarProperties_attendance.js";
 import Leave from "../../models/bangarProperties/bangarProperties_leave.js";
 import Salary from "../../models/bangarProperties/bangarProperties_salary.js";
+import Company from "../../models/bangarProperties/bangarProperties_company.js";
 import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
 import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployeeAvailability.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
@@ -121,5 +122,6 @@ export const getEmployeesAvailability = createGetEmployeesAvailabilityHandler({
   Task,
   Attendance,
   Leave,
+  Company,
 });
 

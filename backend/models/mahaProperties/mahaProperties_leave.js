@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { getLeaveWorkflowFields } from '../../utils/leaveFields.js';
 
 const leaveSchema = new mongoose.Schema({
   employee: {
@@ -45,6 +46,7 @@ const leaveSchema = new mongoose.Schema({
     type: Number,
     default: null,
   },
+  ...getLeaveWorkflowFields('mahaProperties_Employee'),
 }, { timestamps: true });
 
 const Leave = mongoose.model('mahaProperties_Leave', leaveSchema);

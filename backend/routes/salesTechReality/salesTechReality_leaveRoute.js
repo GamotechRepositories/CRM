@@ -1,12 +1,8 @@
 import { Router } from 'express';
-import {
-  createLeave,
-  getLeaves,
-  getLeaveById,
-  updateLeaveStatus,
-} from '../../controllers/salesTechReality/salesTechReality_leaveController.js';
+import { leaveHandlers } from '../../controllers/salesTechReality/salesTechReality_leaveController.js';
 
 const router = Router();
+const { createLeave, getLeaves, getLeaveById, updateLeaveStatus } = leaveHandlers;
 
 router.get('/leave', getLeaves);
 router.post('/leave', createLeave);

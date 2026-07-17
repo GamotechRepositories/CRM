@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import CentralAdminUser, {
   CENTRAL_TENANTS,
   CENTRAL_TEAM_ROLES,
@@ -584,6 +585,110 @@ const importTenantModel = async (tenantId, suffix) => {
     return (await import(`../models/${tenantId}/${tenantId}_${suffix}.js`)).default;
   } catch {
     return null;
+  }
+};
+
+export const updateTenantLeaveFinalDecision = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const tenant = COMPANIES.find((company) => company.id === tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company tenant not found' });
+
+    const action = String(req.body?.action || '').trim();
+    const centralAdminId = String(req.body?.centralAdminId || '').trim();
+    const comment = String(req.body?.comment || '').trim();
+    if (!['Approve', 'Reject'].includes(action)) {
+      return res.status(400).json({ message: 'Action must be Approve or Reject' });
+    }
+    if (!centralAdminId) {
+      return res.status(400).json({ message: 'Centralized Admin identity is required' });
+    }
+
+    // Stored sessions may predate the DB-backed user model (legacy ids like "central-admin-root"),
+    // so resolve by ObjectId when possible and fall back to email otherwise.
+    const centralAdminEmail = String(req.body?.centralAdminEmail || '').trim().toLowerCase();
+    let centralAdmin = null;
+    if (mongoose.isValidObjectId(centralAdminId)) {
+      centralAdmin = await CentralAdminUser.findById(centralAdminId).lean();
+    }
+    if (!centralAdmin && centralAdminEmail) {
+      centralAdmin = await CentralAdminUser.findOne({ email: centralAdminEmail }).lean();
+    }
+    if (!centralAdmin) {
+      return res.status(401).json({ message: 'Your admin session is outdated. Please log out and log in again.' });
+    }
+    if (centralAdmin.status !== 'Active') {
+      return res.status(403).json({ message: 'Centralized Admin account is not active' });
+    }
+    if (!centralAdmin.isRoot && !centralAdmin.tenants?.includes(tenantId)) {
+      return res.status(403).json({ message: 'You do not have access to this company' });
+    }
+
+    const [Leave, Notification] = await Promise.all([
+      importTenantModel(tenantId, 'leave'),
+      importTenantModel(tenantId, 'notification'),
+    ]);
+    if (!Leave) return res.status(404).json({ message: 'Leaves not available' });
+
+    const leave = await Leave.findById(req.params.leaveId);
+    if (!leave) return res.status(404).json({ message: 'Leave not found' });
+    if (leave.status !== 'Pending' || leave.approvalStage !== 'central_admin') {
+      return res.status(400).json({ message: 'This leave is not awaiting the Centralized Admin decision' });
+    }
+
+    const approved = action === 'Approve';
+    const actedAt = new Date();
+    leave.status = approved ? 'Approved' : 'Rejected';
+    leave.approvalStage = 'completed';
+    leave.approvedAt = actedAt;
+    leave.rejectionReason = approved ? '' : comment;
+    leave.finalDecisionBy = {
+      id: String(centralAdmin._id),
+      name: centralAdmin.name || '',
+      role: centralAdmin.role || 'Centralized Admin',
+    };
+    leave.approvalHistory.push({
+      stage: 'central_admin',
+      action: approved ? 'Approved' : 'Rejected',
+      actor: null,
+      actorName: centralAdmin.name || '',
+      actorRole: centralAdmin.role || 'Centralized Admin',
+      comment,
+      actedAt,
+    });
+    await leave.save();
+
+    if (Notification) {
+      try {
+        await Notification.create({
+          recipient: leave.employee,
+          type: 'leave_status',
+          title: approved ? 'Leave request approved' : 'Leave request rejected',
+          message: approved
+            ? 'Your leave request received final approval.'
+            : (comment ? `Your leave request was rejected: ${comment}` : 'Your leave request was rejected.'),
+          link: '/leave',
+          priority: 'high',
+          metadata: {
+            entityType: 'leave',
+            entityId: leave._id,
+            extra: { stage: 'central_admin', finalDecision: true },
+          },
+        });
+      } catch {
+        // The final decision remains valid if notification delivery fails.
+      }
+    }
+
+    const populated = await Leave.findById(leave._id)
+      .populate({ path: 'employee', populate: { path: 'designation' } })
+      .populate('approvalHistory.actor');
+    return res.status(200).json({
+      message: approved ? 'Leave approved (final decision)' : 'Leave rejected (final decision)',
+      leave: populated,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to update leave', error: error?.message || error });
   }
 };
 

@@ -198,6 +198,7 @@ const CompaniesView = () => {
               ) : null}
               <dl>
                 <DetailRow label='Company name'>{viewCompany.companyName}</DetailRow>
+                <DetailRow label='Working hours'>{viewCompany.workingHours}</DetailRow>
                 <DetailRow label='Address'>{viewCompany.address}</DetailRow>
                 <DetailRow label='Website'>{viewCompany.website}</DetailRow>
                 <DetailRow label='Email'>{viewCompany.email}</DetailRow>

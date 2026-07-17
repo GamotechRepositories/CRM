@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import api from '../api/axios'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import WorkingHoursTimelinePicker from '../components/WorkingHoursTimelinePicker'
 
 const PRIORITY_OPTIONS = ['Low', 'Medium', 'High', 'Urgent']
 const RECURRENCE_TYPES = [
@@ -31,6 +32,23 @@ const formatDuration = (minutes) => {
   return `${m}m`
 }
 
+const minutesFromDate = (value) => {
+  if (!value) return null
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+const buildScheduledStartAt = (dateStr, startMinutes) => {
+  if (!dateStr || startMinutes == null) return undefined
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return undefined
+  const hours = Math.floor(startMinutes / 60)
+  const minutes = startMinutes % 60
+  d.setHours(hours, minutes, 0, 0)
+  return d.toISOString()
+}
+
 const AssignTask = () => {
   const { user, canAssignTask } = useAuth()
   const [searchParams] = useSearchParams()
@@ -53,8 +71,8 @@ const AssignTask = () => {
     assignedToList: [],
     priority: 'Medium',
     dueDate: '',
-    durationHours: '',
-    durationMinutes: '',
+    scheduledStartMinutes: null,
+    selectedDurationMinutes: null,
     isRecurring: false,
     recurrenceType: 'daily',
     recurrenceInterval: 1,
@@ -147,8 +165,8 @@ const AssignTask = () => {
             assignedToList: assigneeId ? [String(assigneeId)] : [],
             priority: task.priority || 'Medium',
             dueDate: task.dueDate ? String(task.dueDate).slice(0, 10) : '',
-            durationHours: mins ? String(Math.floor(mins / 60)) : '',
-            durationMinutes: mins ? String(mins % 60) : '',
+            scheduledStartMinutes: minutesFromDate(task.scheduledStartAt),
+            selectedDurationMinutes: mins || null,
             isRecurring: Boolean(task.isRecurring || task.recurrenceEnabled),
             recurrenceType: task.recurrenceType || 'daily',
             recurrenceInterval: task.recurrenceInterval || 1,
@@ -185,7 +203,12 @@ const AssignTask = () => {
     const fetchAvailability = async () => {
       setAvailabilityLoading(true)
       try {
-        const res = await api.get('/employees/availability', { params: { date: availabilityDate } })
+        const res = await api.get('/employees/availability', {
+          params: {
+            date: availabilityDate,
+            ...(taskIdFromUrl ? { excludeTaskId: taskIdFromUrl } : {}),
+          },
+        })
         const list = Array.isArray(res.data) ? res.data : []
         const map = {}
         list.forEach((item) => {
@@ -203,11 +226,17 @@ const AssignTask = () => {
     return () => {
       cancelled = true
     }
-  }, [availabilityDate])
+  }, [availabilityDate, taskIdFromUrl])
 
   const selectedAssignees = isSelfTaskMode
     ? (user?._id ? [user._id] : [])
     : (form.assignedToList.length ? form.assignedToList : (form.assignedTo ? [form.assignedTo] : []))
+  const primaryAssigneeId = isSelfTaskMode
+    ? user?._id
+    : (form.assignedTo || selectedAssignees[0] || '')
+  const primaryAvailability = primaryAssigneeId
+    ? availabilityMap[String(primaryAssigneeId)]
+    : null
   const selectedAvailabilityCards = selectedAssignees
     .map((employeeId) => availabilityMap[String(employeeId)])
     .filter(Boolean)
@@ -232,12 +261,37 @@ const AssignTask = () => {
     }))
   }, [isSelfTaskMode, user?._id, isEditMode])
 
-  const totalDurationMinutes = useMemo(() => {
-    const hours = Number(form.durationHours) || 0
-    const minutes = Number(form.durationMinutes) || 0
-    const total = hours * 60 + minutes
-    return total > 0 ? total : null
-  }, [form.durationHours, form.durationMinutes])
+  const totalDurationMinutes = Number(form.selectedDurationMinutes) || null
+
+  const handleTimelineSlotSelect = (slotStartMinutes) => {
+    const slotMinutes = Number(primaryAvailability?.timeline?.slotMinutes) || 15
+    setForm((current) => {
+      const currentStart = current.scheduledStartMinutes
+      const currentDuration = Number(current.selectedDurationMinutes) || 0
+
+      if (currentStart == null) {
+        return {
+          ...current,
+          scheduledStartMinutes: slotStartMinutes,
+          selectedDurationMinutes: slotMinutes,
+        }
+      }
+
+      const currentEnd = currentStart + currentDuration
+      if (slotStartMinutes < currentStart) {
+        return {
+          ...current,
+          scheduledStartMinutes: slotStartMinutes,
+          selectedDurationMinutes: currentEnd - slotStartMinutes,
+        }
+      }
+
+      return {
+        ...current,
+        selectedDurationMinutes: slotStartMinutes + slotMinutes - currentStart,
+      }
+    })
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -250,7 +304,24 @@ const AssignTask = () => {
       return
     }
     if (!totalDurationMinutes) {
-      setError('Please enter a time duration for this task')
+      setError('Please select one or more timeline slots')
+      return
+    }
+    if (form.scheduledStartMinutes == null) {
+      setError('Please select a start time on the working timeline')
+      return
+    }
+    const timelineSlot = primaryAvailability?.timeline?.slots?.find(
+      (slot) => slot.startMinutes === form.scheduledStartMinutes
+    )
+    if (timelineSlot?.disabled) {
+      setError('Selected time is no longer available. Pick another slot.')
+      return
+    }
+    const scheduledEndMinutes = form.scheduledStartMinutes + totalDurationMinutes
+    const workingEnd = primaryAvailability?.timeline?.endMinutes
+    if (workingEnd != null && scheduledEndMinutes > workingEnd) {
+      setError('Task duration extends past working hours. Shorten duration or pick an earlier slot.')
       return
     }
     const blockedAssignee = selectedAssignees.find((employeeId) => {
@@ -269,13 +340,18 @@ const AssignTask = () => {
     setError(null)
     setSuccess('')
     try {
+      const scheduleDate = form.isRecurring
+        ? (form.recurrenceStartDate || form.dueDate || availabilityDate)
+        : (form.dueDate || availabilityDate)
+      const scheduledStartAt = buildScheduledStartAt(scheduleDate, form.scheduledStartMinutes)
       const payload = {
         project: form.project,
         title: form.title,
         description: form.description || undefined,
         assignedTo: selectedAssignees[0],
         priority: form.priority,
-        dueDate: form.dueDate || undefined,
+        dueDate: form.dueDate || scheduleDate || undefined,
+        scheduledStartAt,
         estimatedDurationMinutes: totalDurationMinutes,
         isRecurring: form.isRecurring,
         recurrenceEnabled: form.isRecurring,
@@ -304,8 +380,8 @@ const AssignTask = () => {
           assignedToList: isSelfTaskMode && user?._id ? [user._id] : [],
           priority: 'Medium',
           dueDate: '',
-          durationHours: '',
-          durationMinutes: '',
+          scheduledStartMinutes: null,
+          selectedDurationMinutes: null,
           isRecurring: false,
           recurrenceType: 'daily',
           recurrenceInterval: 1,
@@ -407,6 +483,8 @@ const AssignTask = () => {
                     ...f,
                     assignedTo: value,
                     assignedToList: value ? Array.from(new Set([...f.assignedToList, value])) : f.assignedToList,
+                    scheduledStartMinutes: null,
+                    selectedDurationMinutes: null,
                   }))
                 }}
                 className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -548,45 +626,29 @@ const AssignTask = () => {
             <input
               type='date'
               value={form.dueDate}
-              onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+              onChange={(e) => setForm((f) => ({
+                ...f,
+                dueDate: e.target.value,
+                scheduledStartMinutes: null,
+                selectedDurationMinutes: null,
+              }))}
               className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
             />
           </div>
         </div>
 
-        <div>
-          <label className='block text-sm font-medium text-gray-700 mb-1'>Time Duration *</label>
-          <p className='text-xs text-gray-500 mb-2'>How long should this task take to complete?</p>
-          <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 items-end'>
-            <div>
-              <label className='block text-xs text-gray-500 mb-1'>Hours</label>
-              <input
-                type='number'
-                min='0'
-                max='999'
-                value={form.durationHours}
-                onChange={(e) => setForm((f) => ({ ...f, durationHours: e.target.value }))}
-                placeholder='0'
-                className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
-            </div>
-            <div>
-              <label className='block text-xs text-gray-500 mb-1'>Minutes</label>
-              <input
-                type='number'
-                min='0'
-                max='59'
-                value={form.durationMinutes}
-                onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))}
-                placeholder='0'
-                className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-              />
-            </div>
-            <div className='text-sm text-gray-600 pb-2'>
-              Total: <span className='font-semibold text-gray-900'>{totalDurationMinutes ? formatDuration(totalDurationMinutes) : '—'}</span>
-            </div>
+        {primaryAvailability?.timeline && (
+          <div>
+            <label className='block text-sm font-medium text-gray-700 mb-2'>Schedule on timeline *</label>
+            <WorkingHoursTimelinePicker
+              timeline={primaryAvailability.timeline}
+              selectedStartMinutes={form.scheduledStartMinutes}
+              durationMinutes={totalDurationMinutes}
+              disabled={availabilityLoading || primaryAvailability.isAssignable === false}
+              onSelectSlot={handleTimelineSlotSelect}
+            />
           </div>
-        </div>
+        )}
 
         <div className='rounded-lg border border-gray-200 p-4 bg-gray-50'>
           <div className='flex items-center justify-between gap-3'>
@@ -640,7 +702,12 @@ const AssignTask = () => {
                 <input
                   type='date'
                   value={form.recurrenceStartDate}
-                  onChange={(e) => setForm((f) => ({ ...f, recurrenceStartDate: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    recurrenceStartDate: e.target.value,
+                    scheduledStartMinutes: null,
+                    selectedDurationMinutes: null,
+                  }))}
                   className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
                 />
               </div>

@@ -132,10 +132,7 @@ const CompaniesDashboard = () => {
 
       <main className='max-w-7xl mx-auto px-4 sm:px-6 py-8'>
         <div className='flex flex-wrap items-center justify-between gap-3 mb-6'>
-          <div>
-            <h2 className='text-lg font-semibold text-gray-900'>Companies</h2>
-            <p className='text-sm text-gray-500'>{displayCompanies.length} company{displayCompanies.length === 1 ? '' : 'ies'}</p>
-          </div>
+          <h2 className='text-lg font-semibold text-gray-900'>Companies</h2>
           <input
             type='search'
             value={search}

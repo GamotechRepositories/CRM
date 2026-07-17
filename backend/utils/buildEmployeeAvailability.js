@@ -1,4 +1,9 @@
 import { getTaskRemainingMinutes } from './taskTiming.js';
+import {
+  buildWorkingTimeline,
+  getTaskScheduledRange,
+  parseWorkingHours,
+} from './workingHoursTimeline.js';
 
 const startOfDay = (value) => {
   const d = value ? new Date(value) : new Date();
@@ -24,10 +29,32 @@ const isOnApprovedLeave = (leave, dayStart, dayEnd) => {
   return leave.status === 'Approved' && start < dayEnd && end >= dayStart;
 };
 
-export const buildEmployeeAvailability = async ({ models, date, employeeIds }) => {
-  const { Employee, Task, Attendance, Leave } = models;
+const isTaskScheduledOnDay = (task, dayStart) => {
+  const range = getTaskScheduledRange(task);
+  if (range) {
+    const taskDay = new Date(range.start);
+    taskDay.setHours(0, 0, 0, 0);
+    return taskDay.getTime() === dayStart.getTime();
+  }
+  if (!task?.dueDate) return false;
+  const dueDay = new Date(task.dueDate);
+  dueDay.setHours(0, 0, 0, 0);
+  return dueDay.getTime() === dayStart.getTime();
+};
+
+export const buildEmployeeAvailability = async ({
+  models,
+  date,
+  employeeIds,
+  excludeTaskId,
+  now = new Date(),
+}) => {
+  const { Employee, Task, Attendance, Leave, Company } = models;
   const dayStart = startOfDay(date);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  const company = Company ? await Company.findOne().sort({ createdAt: 1 }).select('workingHours').lean() : null;
+  const companyWorkingHours = String(company?.workingHours || '').trim() || null;
 
   const empFilter = { status: 'Active' };
   if (employeeIds?.length) {
@@ -57,7 +84,9 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
       assignedTo: { $in: ids },
       status: { $in: ['Pending', 'In Progress'] },
       isRecurringTemplate: { $ne: true },
-    }).select('assignedTo estimatedDurationMinutes dueDate status title startedAt'),
+    }).select(
+      'assignedTo estimatedDurationMinutes dueDate status title startedAt scheduledStartAt scheduledEndAt'
+    ),
   ]);
 
   return employees.map((emp) => {
@@ -65,14 +94,42 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
     const empLeaves = leaves.filter((l) => String(l.employee) === id);
     const onLeave = empLeaves.some((l) => isOnApprovedLeave(l, dayStart, dayEnd));
     const attendance = attendances.find((a) => String(a.employee) === id);
-    const tasks = openTasks.filter((t) => String(t.assignedTo) === id);
-    const openTaskCount = tasks.length;
-    const scheduledMinutes = tasks.reduce((sum, t) => sum + (t.estimatedDurationMinutes || 0), 0);
-    const inProgressTask = tasks.find((t) => t.status === 'In Progress') || null;
-    const activeTask = inProgressTask || tasks[0] || null;
-    const remainingMinutes = tasks.reduce((sum, t) => sum + (getTaskRemainingMinutes(t) || 0), 0);
+    const tasks = openTasks
+      .filter((t) => String(t.assignedTo) === id)
+      .filter((t) => !excludeTaskId || String(t._id) !== String(excludeTaskId));
+    const dayTasks = tasks.filter((t) => isTaskScheduledOnDay(t, dayStart));
+    const openTaskCount = dayTasks.length;
+    const scheduledMinutes = dayTasks.reduce((sum, t) => sum + (t.estimatedDurationMinutes || 0), 0);
+    const inProgressTask = dayTasks.find((t) => t.status === 'In Progress') || null;
+    const activeTask = inProgressTask || dayTasks[0] || null;
+    const remainingMinutes = dayTasks.reduce((sum, t) => sum + (getTaskRemainingMinutes(t, now.getTime()) || 0), 0);
     const activeTaskRemainingMinutes = activeTask ? getTaskRemainingMinutes(activeTask) : null;
     const isAllocated = openTaskCount > 0;
+
+    const occupiedRanges = dayTasks
+      .map((task) => {
+        const range = getTaskScheduledRange(task);
+        if (!range) return null;
+        const taskDay = new Date(range.start);
+        taskDay.setHours(0, 0, 0, 0);
+        if (taskDay.getTime() !== dayStart.getTime()) return null;
+        return {
+          startMinutes: range.start.getHours() * 60 + range.start.getMinutes(),
+          endMinutes: range.end.getHours() * 60 + range.end.getMinutes(),
+          title: task.title,
+        };
+      })
+      .filter(Boolean);
+
+    // Company working hours define the timeline; employee workingHours is a legacy fallback.
+    const effectiveWorkingHours = companyWorkingHours || emp.workingHours;
+
+    const timeline = buildWorkingTimeline({
+      workingHours: effectiveWorkingHours,
+      date: dayStart,
+      occupiedRanges,
+      now,
+    });
 
     let availabilityStatus = 'available';
     let availabilityLabel = 'Available';
@@ -112,7 +169,11 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
       employeeId: emp._id,
       name: emp.name,
       designation: emp.designation?.title || '',
-      workingHours: emp.workingHours || '',
+      workingHours: effectiveWorkingHours || '',
+      workingHoursParsed: parseWorkingHours(effectiveWorkingHours),
+      workingHoursSource: companyWorkingHours ? 'company' : 'employee',
+      timeline,
+      serverNow: now.toISOString(),
       availabilityStatus,
       availabilityLabel,
       isAssignable,
@@ -143,7 +204,7 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
             durationHours: attendance.durationHours,
           }
         : null,
-      openTasks: tasks.map((t) => ({
+      openTasks: dayTasks.map((t) => ({
         _id: t._id,
         title: t.title,
         status: t.status,
@@ -159,9 +220,16 @@ export const buildEmployeeAvailability = async ({ models, date, employeeIds }) =
 
 export const createGetEmployeesAvailabilityHandler = (models) => async (req, res) => {
   try {
-    const { date, employeeId } = req.query;
+    const { date, employeeId, excludeTaskId } = req.query;
     const employeeIds = employeeId?.trim() ? [employeeId.trim()] : undefined;
-    const list = await buildEmployeeAvailability({ models, date, employeeIds });
+    const now = new Date();
+    const list = await buildEmployeeAvailability({
+      models,
+      date,
+      employeeIds,
+      excludeTaskId: excludeTaskId?.trim() || undefined,
+      now,
+    });
     if (employeeId?.trim()) {
       const match = list.find((item) => String(item.employeeId) === employeeId.trim());
       return res.status(200).json(match || null);

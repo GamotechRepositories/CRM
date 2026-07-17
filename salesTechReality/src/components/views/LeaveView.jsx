@@ -27,6 +27,32 @@ const statusStyles = {
   Rejected: 'bg-red-50 text-red-700 border-red-200',
 }
 
+const STAGE_LABELS = {
+  team_leader: 'Team Leader / Reporting Manager',
+  hr: 'HR Manager',
+  admin: 'Admin',
+  central_admin: 'Centralized Admin',
+  completed: 'Completed',
+}
+
+const getUserApprovalRole = (user) => {
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  const title = String(user?.designation?.title || '').toLowerCase()
+  if (title === 'team leader' || title.includes('team lead')) return 'team_leader'
+  if (title === 'hr manager' || title === 'hr') return 'hr'
+  if (title === 'admin') return 'admin'
+  if (title.includes('manager')) return 'manager'
+  if (accessRole) return accessRole
+  return 'employee'
+}
+
+const canRoleActAtStage = (role, stage) => {
+  if (stage === 'team_leader') return role === 'team_leader' || role === 'manager'
+  if (stage === 'hr') return role === 'hr'
+  if (stage === 'admin') return role === 'admin'
+  return false
+}
+
 const startOfDay = (d) => {
   const x = new Date(d)
   if (Number.isNaN(x.getTime())) return NaN
@@ -145,6 +171,7 @@ const buildPageNumbers = (page, totalPages) => {
 const LeaveView = () => {
   const { user, canApproveLeave } = useAuth()
   const isApprover = canApproveLeave()
+  const approvalRole = getUserApprovalRole(user)
 
   const [leaves, setLeaves] = useState([])
   const [loading, setLoading] = useState(true)
@@ -271,13 +298,13 @@ const LeaveView = () => {
     }
   }
 
-  const handleApprove = async (id) => {
+  const handleForward = async (id) => {
     try {
-      await api.patch(`/leave/${id}/status`, { status: 'Approved', approvedBy: user._id })
+      await api.patch(`/leave/${id}/status`, { action: 'Forward', actorId: user._id })
       setOpenMenuId(null)
       fetchLeaves()
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Error approving leave')
+      setError(err.response?.data?.message || err.message || 'Error forwarding leave')
     }
   }
 
@@ -290,9 +317,9 @@ const LeaveView = () => {
     }
     try {
       await api.patch(`/leave/${id}/status`, {
-        status: 'Rejected',
-        approvedBy: user._id,
-        rejectionReason: rejectReason || '',
+        action: 'Reject',
+        actorId: user._id,
+        comment: rejectReason || '',
       })
       setRejectingId(null)
       setRejectReason('')
@@ -508,6 +535,7 @@ const LeaveView = () => {
                           <th className='px-5 py-3'>Days</th>
                           <th className='px-5 py-3'>Reason</th>
                           <th className='px-5 py-3'>Status</th>
+                          <th className='px-5 py-3'>Approval Stage</th>
                           <th className='px-5 py-3'>Applied On</th>
                           <th className='px-5 py-3 w-12'>Actions</th>
                         </tr>
@@ -515,7 +543,7 @@ const LeaveView = () => {
                       <tbody className='divide-y divide-gray-100'>
                         {paginatedLeaves.length === 0 ? (
                           <tr>
-                            <td colSpan={isApprover && activeTab === 'list' ? 9 : 8} className='px-5 py-14 text-center text-gray-500'>
+                            <td colSpan={isApprover && activeTab === 'list' ? 10 : 9} className='px-5 py-14 text-center text-gray-500'>
                               No leave applications found.
                             </td>
                           </tr>
@@ -541,6 +569,11 @@ const LeaveView = () => {
                                 {leave.reason || '—'}
                               </td>
                               <td className='px-5 py-3'><StatusBadge status={leave.status} /></td>
+                              <td className='px-5 py-3 whitespace-nowrap text-xs text-gray-600'>
+                                {leave.status === 'Pending'
+                                  ? STAGE_LABELS[leave.approvalStage || 'team_leader']
+                                  : STAGE_LABELS.completed}
+                              </td>
                               <td className='px-5 py-3 whitespace-nowrap text-gray-600 text-xs'>
                                 {formatAppliedOn(leave.createdAt)}
                               </td>
@@ -565,14 +598,17 @@ const LeaveView = () => {
                                     >
                                       View Details
                                     </button>
-                                    {isApprover && leave.status === 'Pending' && (
+                                    {isApprover &&
+                                      leave.status === 'Pending' &&
+                                      canRoleActAtStage(approvalRole, leave.approvalStage || 'team_leader') &&
+                                      String(leave.employee?._id || leave.employee) !== String(user?._id) && (
                                       <>
                                         <button
                                           type='button'
-                                          onClick={() => handleApprove(leave._id)}
+                                          onClick={() => handleForward(leave._id)}
                                           className='w-full text-left px-3 py-2 hover:bg-emerald-50 text-emerald-700'
                                         >
-                                          Approve
+                                          Forward
                                         </button>
                                         <button
                                           type='button'
@@ -777,6 +813,33 @@ const LeaveView = () => {
                 <span className='font-medium text-gray-500 block'>Applied On</span>
                 <p className='text-gray-900'>{formatAppliedOn(viewLeave.createdAt)}</p>
               </div>
+              <div>
+                <span className='font-medium text-gray-500 block'>Current Approval Stage</span>
+                <p className='text-gray-900'>
+                  {viewLeave.status === 'Pending'
+                    ? STAGE_LABELS[viewLeave.approvalStage || 'team_leader']
+                    : STAGE_LABELS.completed}
+                </p>
+              </div>
+              {viewLeave.approvalHistory?.length > 0 && (
+                <div>
+                  <span className='font-medium text-gray-500 block mb-2'>Approval History</span>
+                  <div className='space-y-2'>
+                    {viewLeave.approvalHistory.map((entry, index) => (
+                      <div key={entry._id || index} className='rounded-lg border border-gray-200 p-3'>
+                        <div className='flex items-center justify-between gap-2'>
+                          <p className='font-medium text-gray-900'>{entry.action}</p>
+                          <p className='text-xs text-gray-400'>{formatAppliedOn(entry.actedAt)}</p>
+                        </div>
+                        <p className='text-xs text-gray-500 mt-0.5'>
+                          {STAGE_LABELS[entry.stage] || entry.stage} · {entry.actorName || entry.actor?.name || 'System'}
+                        </p>
+                        {entry.comment && <p className='text-xs text-gray-700 mt-1'>{entry.comment}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type='button'

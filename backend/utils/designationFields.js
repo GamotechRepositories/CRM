@@ -26,7 +26,7 @@ export const getDesignationFields = () => ({
   },
   accessRole: {
     type: String,
-    enum: ['employee', 'manager', 'hr', 'admin', 'technical_lead'],
+    enum: ['employee', 'manager', 'team_leader', 'hr', 'admin', 'technical_lead'],
     default: 'employee',
   },
   permissions: {
@@ -142,6 +142,23 @@ export const getDefaultDesignationMeta = (title) => {
         canApproveLeave: true,
         canManageEmployees: false,
         canManageSocialCalendar: true,
+      },
+    };
+  }
+
+  if (t === 'team leader') {
+    return {
+      ...base,
+      code: 'TEAM_LEADER',
+      description: 'Team leadership and task coordination',
+      level: 'Lead',
+      accessRole: 'team_leader',
+      sortOrder: 8,
+      permissions: {
+        ...base.permissions,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: true,
       },
     };
   }

@@ -90,9 +90,12 @@ export const canRateTaskForUser = (user) => {
 
 export const canApproveLeaveForUser = (user) => {
   if (isAdminUser(user)) return true
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  const title = getDesignationTitle(user)
+  if (['team_leader', 'manager', 'hr'].includes(accessRole)) return true
+  if (title.includes('team lead') || title.includes('manager')) return true
   const fromDesignation = getDesignationPermission(user, 'canApproveLeave')
   if (fromDesignation !== null) return fromDesignation
-  const title = getDesignationTitle(user)
   return [
     'admin',
     'hr manager',

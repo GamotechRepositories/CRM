@@ -1,12 +1,8 @@
 import { Router } from 'express';
-import {
-  createLeave,
-  getLeaves,
-  getLeaveById,
-  updateLeaveStatus,
-} from '../../controllers/mahaProperties/mahaProperties_leaveController.js';
+import { leaveHandlers } from '../../controllers/mahaProperties/mahaProperties_leaveController.js';
 
 const router = Router();
+const { createLeave, getLeaves, getLeaveById, updateLeaveStatus } = leaveHandlers;
 
 router.get('/leave', getLeaves);
 router.post('/leave', createLeave);

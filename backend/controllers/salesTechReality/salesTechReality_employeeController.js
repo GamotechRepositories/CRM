@@ -5,6 +5,7 @@ import Task from "../../models/salesTechReality/salesTechReality_task.js";
 import Attendance from "../../models/salesTechReality/salesTechReality_attendance.js";
 import Leave from "../../models/salesTechReality/salesTechReality_leave.js";
 import Salary from "../../models/salesTechReality/salesTechReality_salary.js";
+import Company from "../../models/salesTechReality/salesTechReality_company.js";
 import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
 import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployeeAvailability.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
@@ -121,5 +122,6 @@ export const getEmployeesAvailability = createGetEmployeesAvailabilityHandler({
   Task,
   Attendance,
   Leave,
+  Company,
 });
 

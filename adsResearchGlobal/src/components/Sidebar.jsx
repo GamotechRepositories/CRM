@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import { getSidebarNav } from '../config/sidebarNav'
+import { getDashboardKind } from '../config/dashboardRoutes'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
 import {
@@ -38,10 +39,11 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   const canViewProjectsValue = canViewProjects()
   const allowedSections = getSidebarSections()
   const dashboardPath = getDashboardPath()
+  const isTeamLeader = getDashboardKind(user) === 'team_leader'
 
   const sections = useMemo(
-    () => getSidebarNav({ fullAccess, canViewProjects: canViewProjectsValue, allowedSections, dashboardPath }),
-    [fullAccess, canViewProjectsValue, allowedSections, dashboardPath]
+    () => getSidebarNav({ fullAccess, canViewProjects: canViewProjectsValue, allowedSections, dashboardPath, isTeamLeader }),
+    [fullAccess, canViewProjectsValue, allowedSections, dashboardPath, isTeamLeader]
   )
 
   const defaultExpanded = useMemo(() => {

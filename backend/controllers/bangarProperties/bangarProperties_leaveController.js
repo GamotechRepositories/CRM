@@ -1,4 +1,9 @@
 import Leave from '../../models/bangarProperties/bangarProperties_leave.js';
+import Employee from '../../models/bangarProperties/bangarProperties_employee.js';
+import Notification from '../../models/bangarProperties/bangarProperties_notification.js';
+import { createLeaveHandlers } from '../../utils/createLeaveHandlers.js';
+
+export const leaveHandlers = createLeaveHandlers({ Leave, Employee, Notification });
 
 const getNumberOfDays = (startDate, endDate) => {
   const start = new Date(startDate);

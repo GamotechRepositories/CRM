@@ -11,6 +11,14 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     type: Date,
     default: null,
   },
+  scheduledStartAt: {
+    type: Date,
+    default: null,
+  },
+  scheduledEndAt: {
+    type: Date,
+    default: null,
+  },
   rating: {
     score: { type: Number, min: 1, max: 5, default: null },
     comments: { type: String, default: '' },

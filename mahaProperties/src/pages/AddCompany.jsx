@@ -8,6 +8,7 @@ const AddCompany = () => {
   const [form, setForm] = useState({
     companyLogo: '',
     companyName: '',
+    workingHours: '9 AM - 6 PM',
     address: '',
     website: '',
     pan: '',
@@ -34,6 +35,7 @@ const AddCompany = () => {
         setForm({
           companyLogo: c.companyLogo ?? '',
           companyName: c.companyName ?? '',
+          workingHours: c.workingHours ?? '9 AM - 6 PM',
           address: c.address ?? '',
           website: c.website ?? '',
           pan: c.pan ?? '',
@@ -167,6 +169,10 @@ const AddCompany = () => {
               <div className='lg:col-span-2'>
                 <label className='block text-sm font-medium text-gray-700'>Address</label>
                 <input name='address' value={form.address} onChange={handleChange} className={inputClass} />
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700'>Working Hours</label>
+                <input name='workingHours' value={form.workingHours} onChange={handleChange} className={inputClass} placeholder='e.g. 9 AM - 6 PM' />
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700'>PAN</label>

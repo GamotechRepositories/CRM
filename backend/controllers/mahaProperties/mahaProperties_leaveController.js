@@ -1,4 +1,9 @@
 import Leave from '../../models/mahaProperties/mahaProperties_leave.js';
+import Employee from '../../models/mahaProperties/mahaProperties_employee.js';
+import Notification from '../../models/mahaProperties/mahaProperties_notification.js';
+import { createLeaveHandlers } from '../../utils/createLeaveHandlers.js';
+
+export const leaveHandlers = createLeaveHandlers({ Leave, Employee, Notification });
 
 const getNumberOfDays = (startDate, endDate) => {
   const start = new Date(startDate);

@@ -1,4 +1,9 @@
 import Leave from '../../models/adsResearchGlobal/adsResearchGlobal_leave.js';
+import Employee from '../../models/adsResearchGlobal/adsResearchGlobal_employee.js';
+import Notification from '../../models/adsResearchGlobal/adsResearchGlobal_notification.js';
+import { createLeaveHandlers } from '../../utils/createLeaveHandlers.js';
+
+export const leaveHandlers = createLeaveHandlers({ Leave, Employee, Notification });
 
 const getNumberOfDays = (startDate, endDate) => {
   const start = new Date(startDate);

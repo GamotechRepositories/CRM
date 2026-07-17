@@ -12,6 +12,30 @@ export const normalizeTaskPayload = (body = {}) => {
       Number.isFinite(mins) && mins > 0 ? Math.round(mins) : null;
   }
 
+  if (normalized.scheduledStartAt) {
+    const start = new Date(normalized.scheduledStartAt);
+    normalized.scheduledStartAt = Number.isNaN(start.getTime()) ? null : start;
+  }
+
+  if (normalized.scheduledEndAt) {
+    const end = new Date(normalized.scheduledEndAt);
+    normalized.scheduledEndAt = Number.isNaN(end.getTime()) ? null : end;
+  }
+
+  if (
+    normalized.scheduledStartAt &&
+    normalized.estimatedDurationMinutes &&
+    !normalized.scheduledEndAt
+  ) {
+    normalized.scheduledEndAt = new Date(
+      normalized.scheduledStartAt.getTime() + Number(normalized.estimatedDurationMinutes) * 60000
+    );
+  }
+
+  if (normalized.scheduledStartAt && !normalized.dueDate) {
+    normalized.dueDate = normalized.scheduledStartAt;
+  }
+
   if (normalized.rating !== undefined) {
     if (normalized.rating === null) {
       normalized.rating = { score: null, comments: '', ratedBy: null, ratedAt: null };

@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Task from '../../models/bangarProperties/bangarProperties_task.js';
+import Employee from '../../models/bangarProperties/bangarProperties_employee.js';
+import Company from '../../models/bangarProperties/bangarProperties_company.js';
 import Notification from '../../models/bangarProperties/bangarProperties_notification.js';
 import SocialMediaCalendar from '../../models/bangarProperties/bangarProperties_socialMediaCalendar.js';
 import { syncClientProfileByProjectId } from '../../utils/bangarProperties/bangarProperties_clientProfileSync.js';
@@ -8,6 +10,7 @@ import { normalizeTaskPayload } from '../../utils/normalizeTaskPayload.js';
 import { createNotificationService } from '../../utils/notificationService.js';
 import { runTaskNotificationSideEffects } from '../../utils/taskNotificationHooks.js';
 import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../utils/taskTiming.js';
+import { assertValidTaskSchedule } from '../../utils/validateTaskSchedule.js';
 import { normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
 const notificationService = createNotificationService({ Notification });
@@ -44,6 +47,8 @@ export const createTask = async (req, res) => {
       priority,
       dueDate,
       estimatedDurationMinutes,
+      scheduledStartAt,
+      scheduledEndAt,
       recurrenceEnabled,
       recurrenceType,
       recurrenceInterval,
@@ -59,6 +64,18 @@ export const createTask = async (req, res) => {
     }
 
     await Promise.all(assigneeIds.map((employeeId) => assertEmployeeAvailableForTask(Task, employeeId)));
+
+    for (const employeeId of assigneeIds) {
+      await assertValidTaskSchedule({
+        Task,
+        Employee,
+        Company,
+        assigneeId: employeeId,
+        scheduledStartAt,
+        scheduledEndAt,
+        estimatedDurationMinutes,
+      });
+    }
 
     if (shouldCreateRecurringTemplate({ recurrenceEnabled, isRecurring })) {
       if (!recurrenceType || !['daily', 'weekly', 'monthly'].includes(recurrenceType)) {
@@ -86,6 +103,8 @@ export const createTask = async (req, res) => {
           priority: priority || 'Medium',
           dueDate: firstRunDate,
           estimatedDurationMinutes: estimatedDurationMinutes || null,
+          scheduledStartAt: scheduledStartAt || undefined,
+          scheduledEndAt: scheduledEndAt || undefined,
           isRecurringTemplate: false,
           recurrenceEnabled: false,
           recurringScheduledFor: firstRunDate,
@@ -104,6 +123,8 @@ export const createTask = async (req, res) => {
           priority: priority || 'Medium',
           dueDate: firstRunDate,
           estimatedDurationMinutes: estimatedDurationMinutes || null,
+          scheduledStartAt: scheduledStartAt || undefined,
+          scheduledEndAt: scheduledEndAt || undefined,
           isRecurringTemplate: true,
           recurrenceEnabled: true,
           recurrenceType,
@@ -149,6 +170,8 @@ export const createTask = async (req, res) => {
         status: initialStatus,
         priority: priority || 'Medium',
         dueDate: dueDate ? new Date(dueDate) : undefined,
+        scheduledStartAt: scheduledStartAt || undefined,
+        scheduledEndAt: scheduledEndAt || undefined,
         estimatedDurationMinutes: estimatedDurationMinutes || null,
         completedAt: initialStatus === 'Completed' ? new Date() : null,
         isRecurringTemplate: false,
@@ -173,8 +196,8 @@ export const createTask = async (req, res) => {
       tasks: populatedTasks,
     });
   } catch (error) {
-    if (error?.statusCode === 409) {
-      return res.status(409).json({ message: error.message });
+    if (error?.statusCode === 400 || error?.statusCode === 409) {
+      return res.status(error.statusCode).json({ message: error.message });
     }
     res.status(500).json({ message: 'Error creating task', error });
   }
@@ -279,7 +302,7 @@ export const getTaskById = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id).select(
-      'project status assignedTo assignedBy title rating'
+      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes'
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
@@ -296,6 +319,28 @@ export const updateTask = async (req, res) => {
     );
 
     const nextAssignee = payload.assignedTo ?? existing.assignedTo;
+    const mergedScheduledStart =
+      payload.scheduledStartAt !== undefined ? payload.scheduledStartAt : existing.scheduledStartAt;
+    const mergedScheduledEnd =
+      payload.scheduledEndAt !== undefined ? payload.scheduledEndAt : existing.scheduledEndAt;
+    const mergedDuration =
+      payload.estimatedDurationMinutes !== undefined
+        ? payload.estimatedDurationMinutes
+        : existing.estimatedDurationMinutes;
+
+    if (mergedScheduledStart) {
+      await assertValidTaskSchedule({
+        Task,
+        Employee,
+        Company,
+        assigneeId: nextAssignee,
+        scheduledStartAt: mergedScheduledStart,
+        scheduledEndAt: mergedScheduledEnd,
+        estimatedDurationMinutes: mergedDuration,
+        excludeTaskId: req.params.id,
+      });
+    }
+
     const assigneeChanged =
       nextAssignee &&
       String(nextAssignee) !== String(existing.assignedTo?._id || existing.assignedTo || '');
@@ -319,8 +364,8 @@ export const updateTask = async (req, res) => {
     await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
     res.status(200).json({ message: 'Task updated', task: updated });
   } catch (error) {
-    if (error?.statusCode === 409) {
-      return res.status(409).json({ message: error.message });
+    if (error?.statusCode === 400 || error?.statusCode === 409) {
+      return res.status(error.statusCode).json({ message: error.message });
     }
     res.status(500).json({ message: 'Error updating task', error });
   }

@@ -1,5 +1,6 @@
 import Task from '../../models/mahaProperties/mahaProperties_task.js';
 import { syncClientProfileByProjectId } from './mahaProperties_clientProfileSync.js';
+import { applyScheduledTimes } from '../workingHoursTimeline.js';
 
 const MAX_BATCH_SIZE = 100;
 
@@ -25,6 +26,19 @@ const addRecurringInterval = (baseDate, recurrenceType, recurrenceInterval) => {
   return next;
 };
 
+const getTemplateScheduledTimes = (template, scheduledFor) => {
+  if (!template.scheduledStartAt) {
+    return { scheduledStartAt: undefined, scheduledEndAt: undefined };
+  }
+  const templateStart = new Date(template.scheduledStartAt);
+  const startMinutes = templateStart.getHours() * 60 + templateStart.getMinutes();
+  return applyScheduledTimes({
+    date: scheduledFor,
+    startMinutes,
+    durationMinutes: template.estimatedDurationMinutes,
+  });
+};
+
 const createTaskFromTemplate = async (template, scheduledFor) => {
   const alreadyExists = await Task.findOne({
     recurringParentTask: template._id,
@@ -35,6 +49,8 @@ const createTaskFromTemplate = async (template, scheduledFor) => {
 
   if (alreadyExists) return false;
 
+  const { scheduledStartAt, scheduledEndAt } = getTemplateScheduledTimes(template, scheduledFor);
+
   const generatedTask = new Task({
     project: template.project,
     title: template.title,
@@ -43,8 +59,10 @@ const createTaskFromTemplate = async (template, scheduledFor) => {
     assignedBy: template.assignedBy,
     status: 'Pending',
     priority: template.priority || 'Medium',
-    dueDate: scheduledFor,
+    dueDate: scheduledStartAt || scheduledFor,
     estimatedDurationMinutes: template.estimatedDurationMinutes || null,
+    scheduledStartAt: scheduledStartAt || undefined,
+    scheduledEndAt: scheduledEndAt || undefined,
     isRecurringTemplate: false,
     recurrenceEnabled: false,
     recurringParentTask: template._id,

@@ -2,6 +2,7 @@ export const DASHBOARD_PATHS = {
   admin: '/admin-dashboard',
   hr: '/hr-dashboard',
   manager: '/manager-dashboard',
+  team_leader: '/team-leader-dashboard',
   employee: '/dashboard',
 }
 
@@ -10,10 +11,17 @@ const ACCESS_ROLE_DASHBOARD = {
   technical_lead: 'admin',
   hr: 'hr',
   manager: 'manager',
+  team_leader: 'team_leader',
   employee: 'employee',
 }
 
 const isHrTitle = (title = '') => title.toLowerCase() === 'hr manager'
+
+const isTeamLeaderTitle = (title = '') => {
+  const t = title.toLowerCase()
+  if (t === 'technical lead') return false
+  return t.includes('team lead') || t === 'team leader'
+}
 
 const isManagerTitle = (title = '') => {
   const t = title.toLowerCase()
@@ -25,14 +33,22 @@ const isManagerTitle = (title = '') => {
 }
 
 export const getDashboardKind = (user) => {
-  const title = (user?.designation?.title || user?.designation?.name || '').toLowerCase()
-  const accessRole = user?.designation?.accessRole
+  const rawDesignation = user?.designation
+  const title = String(
+    typeof rawDesignation === 'string'
+      ? rawDesignation
+      : rawDesignation?.title || rawDesignation?.name || ''
+  ).trim().toLowerCase()
+  const accessRole = String(rawDesignation?.accessRole || '').trim().toLowerCase()
 
   if (accessRole === 'admin' || accessRole === 'technical_lead' || title === 'admin' || title === 'technical lead') {
     return 'admin'
   }
   if (accessRole === 'hr' || isHrTitle(title)) {
     return 'hr'
+  }
+  if (accessRole === 'team_leader' || isTeamLeaderTitle(title)) {
+    return 'team_leader'
   }
   if (accessRole === 'manager' || isManagerTitle(title)) {
     return 'manager'
@@ -52,3 +68,4 @@ export const isDashboardRoute = (pathname = '') =>
   || pathname === '/admin-dashboard'
   || pathname === '/hr-dashboard'
   || pathname === '/manager-dashboard'
+  || pathname === '/team-leader-dashboard'

@@ -13,6 +13,7 @@ import {
   getTenantProjectDashboard,
   getTenantTaskOverview,
   getTenantInvoiceOverview,
+  updateTenantLeaveFinalDecision,
 } from '../controllers/centralAdminController.js';
 import {
   createMeeting,
@@ -39,6 +40,7 @@ router.get('/companies/:tenantId/clients/:clientId/dashboard', getTenantClientDa
 router.get('/companies/:tenantId/projects/:projectId/dashboard', getTenantProjectDashboard);
 router.get('/companies/:tenantId/tasks/:taskId', getTenantTaskOverview);
 router.get('/companies/:tenantId/invoices/:invoiceId', getTenantInvoiceOverview);
+router.patch('/companies/:tenantId/leaves/:leaveId/status', updateTenantLeaveFinalDecision);
 
 // Meeting app (CEO + create-team members)
 router.use(optionalAuth);

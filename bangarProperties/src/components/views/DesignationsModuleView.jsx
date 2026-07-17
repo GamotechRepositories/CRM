@@ -172,12 +172,20 @@ const DesignationsModuleView = () => {
           >
             <option value='employee'>Employee</option>
             <option value='manager'>Manager</option>
+            <option value='team_leader'>Team Leader</option>
             <option value='technical_lead'>Technical Lead</option>
             <option value='hr'>HR</option>
             <option value='admin'>Admin</option>
           </select>
         </div>
-        <div className='mt-3'>
+        <div className='mt-3 flex items-center gap-3'>
+          <input
+            type='number'
+            value={form.sortOrder}
+            onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
+            placeholder='Sort order'
+            className='w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+          />
           <button
             type='submit'
             disabled={saving}

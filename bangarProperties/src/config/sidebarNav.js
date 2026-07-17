@@ -2,7 +2,7 @@
  * Sidebar navigation structure.
  * Items support: requiresFullAccess, requiresProjectAccess, employeeOnly (hidden from full-access-only sections when false - N/A)
  */
-export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, dashboardPath = '/dashboard' }) => {
+export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, dashboardPath = '/dashboard', isTeamLeader = false }) => {
   const useSectionFilter = Array.isArray(allowedSections) && allowedSections.length > 0 && !fullAccess
   const isSectionAllowed = (section) => !useSectionFilter || allowedSections.includes(section.id)
 
@@ -27,6 +27,21 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       type: 'link',
       path: dashboardPath,
     },
+    ...(isTeamLeader
+      ? [
+          {
+            id: 'my-team',
+            label: 'My Team',
+            icon: '👥',
+            type: 'group',
+            alwaysVisible: true,
+            children: [
+              { id: 'team-members', label: 'Team Members', path: '/my-team' },
+              { id: 'team-leave', label: 'Leave', path: '/leave' },
+            ],
+          },
+        ]
+      : []),
     {
       id: 'crm',
       label: 'CRM',
@@ -186,13 +201,15 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
 
   return sections
     .map((section) => {
+      if (isTeamLeader && section.id === 'employees') return null
       if (section.type === 'link') {
         if (section.requiresFullAccess && !fullAccess) return null
-        if (!isSectionAllowed(section)) return null
+        if (!section.alwaysVisible && !isSectionAllowed(section)) return null
         return section
       }
       const filtered = filterGroup(section)
-      if (!filtered || !isSectionAllowed(filtered)) return null
+      if (!filtered) return null
+      if (!section.alwaysVisible && !isSectionAllowed(filtered)) return null
       return filtered
     })
     .filter(Boolean)

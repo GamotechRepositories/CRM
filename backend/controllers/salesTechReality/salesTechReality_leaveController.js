@@ -1,4 +1,9 @@
 import Leave from '../../models/salesTechReality/salesTechReality_leave.js';
+import Employee from '../../models/salesTechReality/salesTechReality_employee.js';
+import Notification from '../../models/salesTechReality/salesTechReality_notification.js';
+import { createLeaveHandlers } from '../../utils/createLeaveHandlers.js';
+
+export const leaveHandlers = createLeaveHandlers({ Leave, Employee, Notification });
 
 const getNumberOfDays = (startDate, endDate) => {
   const start = new Date(startDate);

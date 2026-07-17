@@ -172,6 +172,7 @@ const DesignationsModuleView = () => {
           >
             <option value='employee'>Employee</option>
             <option value='manager'>Manager</option>
+            <option value='team_leader'>Team Leader</option>
             <option value='technical_lead'>Technical Lead</option>
             <option value='hr'>HR</option>
             <option value='admin'>Admin</option>

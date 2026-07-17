@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import AdminCompanyShell from '../components/AdminCompanyShell'
 import { TENANT_NAMES } from '../config/tenants'
+import { useAuth } from '../context/AuthContext'
 
 const TITLES = {
   clients: 'Clients',
@@ -98,6 +99,7 @@ const DataTable = ({ columns, rows, emptyText, onRowClick }) => (
 const ModulePage = ({ moduleId }) => {
   const { tenantId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const status = searchParams.get('status') || ''
   const title = TITLES[moduleId] || 'Module'
@@ -108,6 +110,7 @@ const ModulePage = ({ moduleId }) => {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue)
+  const [processingLeaveId, setProcessingLeaveId] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -152,6 +155,39 @@ const ModulePage = ({ moduleId }) => {
     if (!q) return items
     return items.filter((row) => JSON.stringify(row).toLowerCase().includes(q))
   }, [items, search])
+
+  const handleFinalLeaveDecision = async (leave, action) => {
+    const confirmed = window.confirm(
+      action === 'Approve'
+        ? 'Approve this leave as the final decision?'
+        : 'Reject this leave as the final decision?'
+    )
+    if (!confirmed) return
+    const comment = action === 'Reject'
+      ? (window.prompt('Rejection reason (optional)') || '')
+      : ''
+    try {
+      setProcessingLeaveId(leave._id)
+      setError('')
+      const res = await api.patch(`/companies/${tenantId}/leaves/${leave._id}/status`, {
+        action,
+        comment,
+        centralAdminId: user?._id,
+        centralAdminEmail: user?.email,
+      })
+      const updated = res.data?.leave
+      if (updated) {
+        setData((current) => ({
+          ...current,
+          items: (current?.items || []).map((item) => item._id === updated._id ? updated : item),
+        }))
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to update leave')
+    } finally {
+      setProcessingLeaveId('')
+    }
+  }
 
   const columns = useMemo(() => {
     if (moduleId === 'clients') {
@@ -234,10 +270,45 @@ const ModulePage = ({ moduleId }) => {
         { key: 'endDate', label: 'To', render: (r) => formatDate(r.endDate) },
         { key: 'numberOfDays', label: 'Days', render: (r) => val(r.numberOfDays) },
         { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
+        {
+          key: 'approvalStage',
+          label: 'Approval Stage',
+          render: (r) => r.status === 'Pending'
+            ? val(String(r.approvalStage || 'team_leader').replaceAll('_', ' '))
+            : 'Completed',
+        },
+        {
+          key: 'actions',
+          label: 'Final Decision',
+          render: (r) => r.status === 'Pending' && r.approvalStage === 'central_admin' ? (
+            <div className='flex items-center gap-2'>
+              <button
+                type='button'
+                disabled={processingLeaveId === r._id}
+                onClick={() => handleFinalLeaveDecision(r, 'Approve')}
+                className='rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50'
+              >
+                Approve
+              </button>
+              <button
+                type='button'
+                disabled={processingLeaveId === r._id}
+                onClick={() => handleFinalLeaveDecision(r, 'Reject')}
+                className='rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50'
+              >
+                Reject
+              </button>
+            </div>
+          ) : (
+            <span className='text-xs text-gray-400'>
+              {r.status === 'Pending' ? 'Awaiting previous stage' : 'Decision recorded'}
+            </span>
+          ),
+        },
       ]
     }
     return []
-  }, [moduleId])
+  }, [moduleId, processingLeaveId, tenantId, user?._id])
 
   const subtitle = moduleId === 'reports' || moduleId === 'tasks'
     ? (data?.monthLabel || selectedMonth || 'Selected month')

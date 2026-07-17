@@ -5,6 +5,7 @@ import Task from "../../models/adsResearchGlobal/adsResearchGlobal_task.js";
 import Attendance from "../../models/adsResearchGlobal/adsResearchGlobal_attendance.js";
 import Leave from "../../models/adsResearchGlobal/adsResearchGlobal_leave.js";
 import Salary from "../../models/adsResearchGlobal/adsResearchGlobal_salary.js";
+import Company from "../../models/adsResearchGlobal/adsResearchGlobal_company.js";
 import { buildEmployeeProfile } from "../../utils/buildEmployeeProfile.js";
 import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployeeAvailability.js";
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
@@ -121,5 +122,6 @@ export const getEmployeesAvailability = createGetEmployeesAvailabilityHandler({
   Task,
   Attendance,
   Leave,
+  Company,
 });
 
