@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Logo from '../assets/logo.jpg'
+import Logo from '../assets/log.png'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
