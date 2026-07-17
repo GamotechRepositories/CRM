@@ -4,6 +4,7 @@ import CentralAdminUser, {
   CENTRAL_TEAM_ROLES,
   CENTRAL_ROOT_ROLE,
 } from '../models/centralAdmin/centralAdmin_user.js';
+import { signAuthToken } from '../utils/jwtAuth.js';
 
 const COMPANIES = [
   {
@@ -58,9 +59,20 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    const user = toPublicUser(admin);
+    const token = signAuthToken({
+      sub: String(user._id),
+      email: user.email,
+      role: user.role,
+      isRoot: Boolean(user.isRoot),
+      company: 'admin',
+    });
+
     return res.status(200).json({
       message: 'Login successful',
-      user: toPublicUser(admin),
+      token,
+      expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+      user,
     });
   } catch (error) {
     return res.status(500).json({ message: 'Login failed', error: error?.message || error });

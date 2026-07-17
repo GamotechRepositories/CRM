@@ -14,6 +14,15 @@ import {
   getTenantTaskOverview,
   getTenantInvoiceOverview,
 } from '../controllers/centralAdminController.js';
+import {
+  createMeeting,
+  deleteMeeting,
+  getBoss,
+  getMeetingById,
+  listMeetings,
+  updateMeeting,
+} from '../controllers/centralAdminMeetingController.js';
+import { optionalAuth } from '../utils/jwtAuth.js';
 
 const router = Router();
 
@@ -30,5 +39,14 @@ router.get('/companies/:tenantId/clients/:clientId/dashboard', getTenantClientDa
 router.get('/companies/:tenantId/projects/:projectId/dashboard', getTenantProjectDashboard);
 router.get('/companies/:tenantId/tasks/:taskId', getTenantTaskOverview);
 router.get('/companies/:tenantId/invoices/:invoiceId', getTenantInvoiceOverview);
+
+// Meeting app (CEO + create-team members)
+router.use(optionalAuth);
+router.get('/boss', getBoss);
+router.get('/meetings', listMeetings);
+router.get('/meetings/:id', getMeetingById);
+router.post('/meetings', createMeeting);
+router.put('/meetings/:id', updateMeeting);
+router.delete('/meetings/:id', deleteMeeting);
 
 export default router;

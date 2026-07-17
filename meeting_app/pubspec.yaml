@@ -1,0 +1,54 @@
+name: meeting_app
+description: "Executive Meeting Management - enterprise-grade Flutter foundation."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Networking
+  dio: ^5.8.0+1
+  connectivity_plus: ^6.1.4
+
+  # Local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # UI & animations
+  flutter_animate: ^4.5.2
+  lottie: ^3.3.1
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+
+  # Utilities
+  equatable: ^2.0.7
+  intl: ^0.20.2
+  flutter_dotenv: ^6.0.1
+  file_picker: ^11.0.2
+  open_filex: ^4.7.0
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
+    - assets/lottie/
+    - assets/images/
