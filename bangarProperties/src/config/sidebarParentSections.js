@@ -2,6 +2,7 @@
 export const SIDEBAR_PARENT_SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', icon: '🏠', alwaysOn: true },
   { id: 'crm', label: 'CRM', icon: '👥' },
+  { id: 'properties', label: 'Property Listing', icon: '🏠' },
   { id: 'projects', label: 'Projects', icon: '📁' },
   { id: 'employees', label: 'Employees', icon: '👨' },
   { id: 'finance', label: 'Finance', icon: '💰' },
@@ -20,6 +21,7 @@ export const DEFAULT_SIDEBAR_SECTIONS = [
   'dashboard',
   'workspace',
   'crm',
+  'properties',
   'projects',
   'employees',
 ]

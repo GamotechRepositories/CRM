@@ -55,6 +55,18 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       ],
     },
     {
+      id: 'properties',
+      label: 'Property Listing',
+      icon: '🏠',
+      type: 'group',
+      children: [
+        { id: 'property-listings', label: 'All Properties', path: '/properties' },
+        { id: 'add-property', label: 'Add Property', path: '/add-property' },
+        { id: 'site-visits', label: 'Site Visits', path: '/site-visits' },
+        { id: 'schedule-site-visit', label: 'Schedule Visit', path: '/schedule-site-visit' },
+      ],
+    },
+    {
       id: 'projects',
       label: 'Projects',
       icon: '📁',

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { adsLeadSchemaFields } from '../../utils/adsLeadFields.js';
 
 const followUpSchema = new mongoose.Schema({
   date: { type: Date, default: Date.now },
@@ -41,7 +42,19 @@ const leadSchema = new mongoose.Schema({
     ref: 'salesTechReality_Employee',
     required: true,
   },
+  ...adsLeadSchemaFields,
 }, { timestamps: true });
+
+leadSchema.index(
+  { adPlatform: 1, externalLeadId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      externalLeadId: { $type: 'string', $gt: '' },
+      adPlatform: { $type: 'string', $gt: '' },
+    },
+  }
+);
 
 const Lead = mongoose.model('salesTechReality_Lead', leadSchema);
 export default Lead;

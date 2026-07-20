@@ -134,6 +134,17 @@ for (const company of companies) {
   }
 }
 
+// Property listings, site visits & ads lead webhooks — real-estate tenants only
+const PROPERTY_TENANTS = ['bangarProperties', 'mahaProperties', 'salesTechReality'];
+for (const company of PROPERTY_TENANTS) {
+  const propertyRoute = await import(`./routes/${company}/${company}_propertyRoute.js`);
+  app.use(`/api/v1/${company}`, propertyRoute.default);
+  const siteVisitRoute = await import(`./routes/${company}/${company}_siteVisitRoute.js`);
+  app.use(`/api/v1/${company}`, siteVisitRoute.default);
+  const adsWebhookRoute = await import(`./routes/${company}/${company}_adsWebhookRoute.js`);
+  app.use(`/api/v1/${company}`, adsWebhookRoute.default);
+}
+
 // Centralized admin panel: /api/v1/admin/*
 const centralAdminRoute = await import('./routes/centralAdminRoute.js');
 app.use('/api/v1/admin', centralAdminRoute.default);

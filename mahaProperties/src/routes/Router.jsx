@@ -49,6 +49,10 @@ import ClientDashboardView from '../components/views/ClientDashboardView'
 import ProjectDashboardView from '../components/views/ProjectDashboardView'
 import AddClientProfile from '../pages/AddClientProfile'
 import SocialCalendarClientView from '../pages/SocialCalendarClientView'
+import PropertyListingsView from '../components/views/PropertyListingsView'
+import AddProperty from '../pages/AddProperty'
+import SiteVisitsView from '../components/views/SiteVisitsView'
+import ScheduleSiteVisit from '../pages/ScheduleSiteVisit'
 
 const router = createBrowserRouter([
     {
@@ -81,6 +85,12 @@ const router = createBrowserRouter([
             { path: 'collaborators/edit/:id', element: <AddCollaborator /> },
             { path: 'campaigns', element: <CampaignsView /> },
             { path: 'leads', element: <LeadsView /> },
+            { path: 'properties', element: <PropertyListingsView /> },
+            { path: 'add-property', element: <AddProperty /> },
+            { path: 'properties/edit/:id', element: <AddProperty /> },
+            { path: 'site-visits', element: <SiteVisitsView /> },
+            { path: 'schedule-site-visit', element: <ScheduleSiteVisit /> },
+            { path: 'site-visits/edit/:id', element: <ScheduleSiteVisit /> },
             { path: 'add-lead', element: <AddLead /> },
             { path: 'leads/view/:id', element: <AddLead readOnly /> },
             { path: 'leads/edit/:id', element: <AddLead /> },
