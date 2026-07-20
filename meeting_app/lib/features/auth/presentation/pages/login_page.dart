@@ -464,7 +464,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             alignment: Alignment.centerLeft,
                                             child: Text(
                                               'Boss: root@gmail.com / root@2026\n'
-                                              'Team: create account in Admin → Create Team',
+                                              'Team: team@gmail.com / team@2026\n'
+                                              'Or use your company CRM employee email + password',
                                               style: context
                                                   .textTheme.bodySmall
                                                   ?.copyWith(

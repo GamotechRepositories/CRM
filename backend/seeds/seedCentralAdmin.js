@@ -15,18 +15,27 @@ const ROOT = {
   tenants: [...CENTRAL_TENANTS],
 };
 
+const DEMO_TEAM = {
+  name: process.env.ADMIN_TEAM_NAME || 'Demo Team Member',
+  email: (process.env.ADMIN_TEAM_EMAIL || 'team@gmail.com').trim().toLowerCase(),
+  password: process.env.ADMIN_TEAM_PASSWORD || 'team@2026',
+  role: 'Executive Assistant',
+  isRoot: false,
+  status: 'Active',
+  tenants: [...CENTRAL_TENANTS],
+};
+
 const seed = async () => {
   try {
     await connectDB();
 
-    const hashedPassword = await bcrypt.hash(ROOT.password, 10);
-
+    const rootPassword = await bcrypt.hash(ROOT.password, 10);
     const user = await CentralAdminUser.findOneAndUpdate(
       { email: ROOT.email },
       {
         name: ROOT.name,
         email: ROOT.email,
-        password: hashedPassword,
+        password: rootPassword,
         role: ROOT.role,
         isRoot: true,
         status: ROOT.status,
@@ -35,7 +44,23 @@ const seed = async () => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    const teamPassword = await bcrypt.hash(DEMO_TEAM.password, 10);
+    const team = await CentralAdminUser.findOneAndUpdate(
+      { email: DEMO_TEAM.email },
+      {
+        name: DEMO_TEAM.name,
+        email: DEMO_TEAM.email,
+        password: teamPassword,
+        role: DEMO_TEAM.role,
+        isRoot: false,
+        status: DEMO_TEAM.status,
+        tenants: DEMO_TEAM.tenants,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
     console.log(`Central CEO seeded: ${user.email} (role=${user.role}, isRoot=${user.isRoot})`);
+    console.log(`Demo team seeded: ${team.email} (role=${team.role})`);
     console.log(`Tenants: ${user.tenants.join(', ')}`);
     process.exit(0);
   } catch (error) {

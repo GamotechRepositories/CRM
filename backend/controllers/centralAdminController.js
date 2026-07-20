@@ -6,6 +6,7 @@ import CentralAdminUser, {
   CENTRAL_ROOT_ROLE,
 } from '../models/centralAdmin/centralAdmin_user.js';
 import { signAuthToken } from '../utils/jwtAuth.js';
+import { authenticateCompanyEmployee } from '../utils/companyEmployeeLogin.js';
 
 const COMPANIES = [
   {
@@ -45,28 +46,52 @@ export const login = async (req, res) => {
     }
 
     const admin = await CentralAdminUser.findOne({ email }).select('+password');
-    if (!admin) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-    if (admin.status !== 'Active') {
-      return res.status(401).json({ message: 'Account is inactive. Contact platform owner.' });
-    }
-    if (!admin.password) {
-      return res.status(401).json({ message: 'Account not set up for login.' });
+    if (admin) {
+      if (admin.status !== 'Active') {
+        return res.status(401).json({ message: 'Account is inactive. Contact platform owner.' });
+      }
+      if (!admin.password) {
+        return res.status(401).json({ message: 'Account not set up for login.' });
+      }
+
+      const valid = await bcrypt.compare(password, admin.password);
+      if (!valid) {
+        return res.status(401).json({ message: 'Invalid email or password' });
+      }
+
+      const user = toPublicUser(admin);
+      const token = signAuthToken({
+        sub: String(user._id),
+        email: user.email,
+        role: user.role,
+        isRoot: Boolean(user.isRoot),
+        company: 'admin',
+      });
+
+      return res.status(200).json({
+        message: 'Login successful',
+        token,
+        expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+        user,
+      });
     }
 
-    const valid = await bcrypt.compare(password, admin.password);
-    if (!valid) {
+    // Fallback: company CRM employee (same email/password as company login)
+    const employeeAuth = await authenticateCompanyEmployee(email, password);
+    if (employeeAuth?.error) {
+      return res.status(employeeAuth.status || 401).json({ message: employeeAuth.error });
+    }
+    if (!employeeAuth?.user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    const user = toPublicUser(admin);
+    const user = employeeAuth.user;
     const token = signAuthToken({
       sub: String(user._id),
       email: user.email,
       role: user.role,
-      isRoot: Boolean(user.isRoot),
-      company: 'admin',
+      isRoot: false,
+      company: employeeAuth.companyId,
     });
 
     return res.status(200).json({

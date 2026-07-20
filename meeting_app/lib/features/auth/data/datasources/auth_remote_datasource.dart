@@ -40,18 +40,40 @@ class AuthRemoteDataSource {
     }
   }
 
-  /// Maps create-team / CEO users → Flutter auth + RBAC.
-  /// Boss = CEO (isRoot). Everyone else = team member who creates meetings.
+  /// Maps create-team / CEO / company CRM employees → Flutter auth + RBAC.
+  /// Boss = CEO (isRoot). Team = Create Team or company employee schedulers.
   static AuthUser mapCentralAdminUser(Map<String, dynamic> json) {
     final id = (json['_id'] ?? json['id'] ?? '').toString();
     final role = (json['role'] as String? ?? '').trim();
     final isRoot = json['isRoot'] == true || role.toUpperCase() == 'CEO';
+    final isCompanyEmployee = json['isCompanyEmployee'] == true;
     final phone = (json['phone'] as String?)?.replaceAll(RegExp(r'\D'), '') ?? '';
 
     final rawTenants = json['tenants'];
-    final tenants = rawTenants is List
+    var tenants = rawTenants is List
         ? rawTenants.map((e) => e.toString()).toList()
         : <String>[];
+    final companyTenant = json['companyTenant'] as String?;
+    if (companyTenant != null &&
+        companyTenant.isNotEmpty &&
+        !tenants.contains(companyTenant)) {
+      tenants = [companyTenant, ...tenants];
+    }
+
+    if (isCompanyEmployee) {
+      return AuthUser(
+        id: id,
+        mobileNumber: phone.isEmpty ? '0000000000' : phone,
+        displayName: json['name'] as String? ?? 'User',
+        email: (json['email'] as String?)?.trim().toLowerCase(),
+        appRole: AppRole.member,
+        employeeId: id,
+        employeeRole: EmployeeRole.executiveAssistant,
+        homeCompanyId: companyTenant ?? (tenants.isNotEmpty ? tenants.first : null),
+        roleLabel: role.isEmpty ? 'Team' : role,
+        tenants: tenants,
+      );
+    }
 
     return AuthUser(
       id: id,

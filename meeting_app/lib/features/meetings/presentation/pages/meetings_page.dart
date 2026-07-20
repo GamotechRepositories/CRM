@@ -531,80 +531,104 @@ class _MeetingsBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    Widget bodyChild;
+    Key bodyKey;
+
     if (state.isLoading && state.meetings.isEmpty) {
-      return const Padding(
+      bodyKey = const ValueKey('loading');
+      bodyChild = const Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: SkeletonLoader(itemCount: 5),
       );
-    }
-
-    if (state.status == MeetingsStatus.error && state.meetings.isEmpty) {
-      return ErrorView(
+    } else if (state.status == MeetingsStatus.error && state.meetings.isEmpty) {
+      bodyKey = const ValueKey('error');
+      bodyChild = ErrorView(
         failure: UnknownFailure(state.errorMessage ?? 'Failed to load'),
         onRetry: () {
           ref.read(meetingsControllerProvider.notifier).load(null);
         },
       );
-    }
-
-    final meetings = _filtered(
-      [...state.meetings]..sort((a, b) => a.startAt.compareTo(b.startAt)),
-    );
-
-    if (state.meetings.isEmpty) {
-      return MeetingEmptyState(
-        icon: Icons.event_note_rounded,
-        title: 'No meetings yet',
-        message: isBoss
-            ? 'Your team will create meetings for you. Pull down to refresh.'
-            : 'Create a meeting for the Boss. Keep title, time, and agenda clear.',
-        actionLabel: isBoss ? null : 'New meeting',
-        onAction: isBoss
-            ? null
-            : () => context.push(RoutePaths.meetingCreate),
+    } else {
+      final meetings = _filtered(
+        [...state.meetings]..sort((a, b) => a.startAt.compareTo(b.startAt)),
       );
+
+      if (state.meetings.isEmpty) {
+        bodyKey = const ValueKey('empty');
+        bodyChild = MeetingEmptyState(
+          icon: Icons.event_note_rounded,
+          title: 'No meetings yet',
+          message: isBoss
+              ? 'Your team will create meetings for you. Pull down to refresh.'
+              : 'Create a meeting for the Boss. Keep title, time, and agenda clear.',
+          actionLabel: isBoss ? null : 'New meeting',
+          onAction: isBoss
+              ? null
+              : () => context.push(RoutePaths.meetingCreate),
+        );
+      } else if (meetings.isEmpty) {
+        bodyKey = ValueKey('filter-${filter.name}');
+        bodyChild = const MeetingEmptyState(
+          icon: Icons.filter_alt_outlined,
+          title: 'Nothing in this filter',
+          message: 'Try All, Today, Soon, or Priority to see your meetings.',
+        );
+      } else {
+        bodyKey = ValueKey('list-${filter.name}-${meetings.length}');
+        bodyChild = RefreshIndicator(
+          onRefresh: () =>
+              ref.read(meetingsControllerProvider.notifier).load(null),
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.md,
+            ),
+            itemCount: meetings.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              final meeting = meetings[index];
+              final canEdit =
+                  userId != null &&
+                  permissions.canEditMeeting(
+                    currentUserId: userId!,
+                    meeting: MeetingAccessContext(
+                      createdByUserId: meeting.createdByUserId,
+                    ),
+                  );
+              return MeetingListCard(
+                key: ValueKey('meeting-${meeting.id}'),
+                meeting: meeting,
+                showOrganizer: isBoss,
+                canEdit: canEdit,
+                onEdit: canEdit
+                    ? () => context.push(RoutePaths.meetingEditPath(meeting.id))
+                    : null,
+              ).animate().fadeIn(delay: (40 * index).ms).slideY(begin: 0.04, end: 0);
+            },
+          ),
+        );
+      }
     }
 
-    if (meetings.isEmpty) {
-      return MeetingEmptyState(
-        icon: Icons.filter_alt_outlined,
-        title: 'Nothing in this filter',
-        message: 'Try All, Today, Soon, or Priority to see your meetings.',
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: () =>
-          ref.read(meetingsControllerProvider.notifier).load(null),
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md,
-          AppSpacing.sm,
-          AppSpacing.md,
-          AppSpacing.md,
-        ),
-        itemCount: meetings.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-        itemBuilder: (context, index) {
-          final meeting = meetings[index];
-          final canEdit =
-              userId != null &&
-              permissions.canEditMeeting(
-                currentUserId: userId!,
-                meeting: MeetingAccessContext(
-                  createdByUserId: meeting.createdByUserId,
-                ),
-              );
-          return MeetingListCard(
-            meeting: meeting,
-            showOrganizer: isBoss,
-            canEdit: canEdit,
-            onEdit: canEdit
-                ? () => context.push(RoutePaths.meetingEditPath(meeting.id))
-                : null,
-          ).animate().fadeIn(delay: (40 * index).ms).slideY(begin: 0.04, end: 0);
-        },
-      ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.0, 0.02),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(key: bodyKey, child: bodyChild),
     );
   }
 }

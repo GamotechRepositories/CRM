@@ -4,7 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/error/result.dart';
 import '../../../../core/extensions/context_extensions.dart';
@@ -13,6 +12,7 @@ import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/utils/meeting_link_launcher.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../domain/entities/meeting.dart';
 import '../providers/meeting_providers.dart';
@@ -480,7 +480,10 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   }
 
   Future<void> _copyLink(String link) async {
-    await Clipboard.setData(ClipboardData(text: link));
+    final normalized = MeetingLinkLauncher.normalize(link);
+    await Clipboard.setData(
+      ClipboardData(text: normalized?.toString() ?? link.trim()),
+    );
     if (!mounted) return;
     context.showAppSnackBar('Link copied');
   }
@@ -517,12 +520,12 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   }
 
   Future<void> _joinMeeting(String link) async {
-    final uri = Uri.tryParse(link);
-    if (uri == null ||
-        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) {
-        context.showAppSnackBar('Could not open meeting link', isError: true);
-      }
+    final ok = await MeetingLinkLauncher.open(link);
+    if (!ok && mounted) {
+      context.showAppSnackBar(
+        'Could not open meeting link. Check the URL or install a browser.',
+        isError: true,
+      );
     }
   }
 }

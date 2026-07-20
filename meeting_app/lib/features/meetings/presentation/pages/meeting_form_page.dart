@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -164,14 +165,14 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                     ),
                   ],
                 ),
-              ),
+              ).animate().fadeIn(duration: 260.ms).slideY(begin: 0.04, end: 0),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'Basics',
                 style: context.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
-              ),
+              ).animate().fadeIn(delay: 40.ms),
               const SizedBox(height: AppSpacing.sm),
               AppTextField(
                 controller: _titleController,
@@ -179,27 +180,27 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                 hint: 'e.g. Weekly review with Boss',
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Title is required' : null,
-              ),
+              ).animate().fadeIn(delay: 70.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _agendaController,
                 label: 'Agenda',
                 hint: 'What will you discuss?',
                 maxLines: 3,
-              ),
+              ).animate().fadeIn(delay: 90.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _descriptionController,
                 label: 'Notes / details (optional)',
                 maxLines: 2,
-              ),
+              ).animate().fadeIn(delay: 110.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'When',
                 style: context.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
-              ),
+              ).animate().fadeIn(delay: 140.ms),
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
@@ -223,14 +224,14 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                     ),
                   ),
                 ],
-              ),
+              ).animate().fadeIn(delay: 160.ms).slideY(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'Details',
                 style: context.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
-              ),
+              ).animate().fadeIn(delay: 190.ms),
               const SizedBox(height: AppSpacing.sm),
               DropdownButtonFormField<MeetingPriority>(
                 initialValue: _priority,
@@ -243,7 +244,7 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                 onChanged: (v) {
                   if (v != null) setState(() => _priority = v);
                 },
-              ),
+              ).animate().fadeIn(delay: 220.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<MeetingType>(
                 initialValue: _type,
@@ -256,27 +257,27 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                 onChanged: (v) {
                   if (v != null) setState(() => _type = v);
                 },
-              ),
+              ).animate().fadeIn(delay: 240.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _locationController,
                 label: 'Location (optional)',
                 hint: 'Office / room / city',
                 prefixIcon: Icons.place_outlined,
-              ),
+              ).animate().fadeIn(delay: 260.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _meetLinkController,
                 label: 'Video link (optional)',
                 hint: 'https://meet.google.com/...',
                 prefixIcon: Icons.videocam_outlined,
-              ),
+              ).animate().fadeIn(delay: 280.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.md),
               AppTextField(
                 controller: _notesController,
                 label: 'Private notes (optional)',
                 maxLines: 2,
-              ),
+              ).animate().fadeIn(delay: 300.ms).slideX(begin: 0.02, end: 0),
               const SizedBox(height: AppSpacing.xl),
               AppButton(
                 label: widget.isEditing
@@ -285,6 +286,9 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                 icon: Icons.check_rounded,
                 isExpanded: true,
                 onPressed: _save,
+              ).animate().fadeIn(delay: 340.ms).scale(
+                begin: const Offset(0.98, 0.98),
+                end: const Offset(1, 1),
               ),
             ],
           ),

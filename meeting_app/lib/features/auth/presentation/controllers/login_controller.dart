@@ -69,6 +69,18 @@ class LoginController extends StateNotifier<LoginState> {
     };
   }
 
+  String _loginErrorMessage(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('invalid email') || lower.contains('invalid password')) {
+      return 'Invalid email or password.\n'
+          'Use Create Team login (Admin → Create Team) or your company CRM employee email/password.';
+    }
+    if (lower.contains('not set up for login')) {
+      return '$message\nAsk admin to set your CRM password first.';
+    }
+    return message;
+  }
+
   Future<bool> loginWithPassword() async {
     final emailError = Validators.email(state.email);
     if (emailError != null) {
@@ -100,7 +112,7 @@ class LoginController extends StateNotifier<LoginState> {
       Error(:final failure) => () {
         state = state.copyWith(
           status: LoginStatus.error,
-          errorMessage: failure.message,
+          errorMessage: _loginErrorMessage(failure.message),
         );
         return false;
       }(),

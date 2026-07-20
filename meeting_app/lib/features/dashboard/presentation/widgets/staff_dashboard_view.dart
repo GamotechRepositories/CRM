@@ -12,6 +12,7 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/utils/meeting_link_launcher.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../../../shared/widgets/loading/skeleton_loader.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
@@ -868,9 +869,24 @@ class _NextMeetingHero extends StatelessWidget {
                           children: [
                             Expanded(
                               child: FilledButton.icon(
-                                onPressed: () => context.push(
-                                  RoutePaths.meetingDetailsPath(meeting.id),
-                                ),
+                                onPressed: () async {
+                                  if (hasLink) {
+                                    final ok = await MeetingLinkLauncher.open(
+                                      meeting.meetLink,
+                                    );
+                                    if (!context.mounted) return;
+                                    if (!ok) {
+                                      context.showAppSnackBar(
+                                        'Could not open meeting link',
+                                        isError: true,
+                                      );
+                                    }
+                                    return;
+                                  }
+                                  context.push(
+                                    RoutePaths.meetingDetailsPath(meeting.id),
+                                  );
+                                },
                                 icon: Icon(
                                   hasLink
                                       ? Icons.videocam_rounded
@@ -878,7 +894,7 @@ class _NextMeetingHero extends StatelessWidget {
                                   size: 18,
                                 ),
                                 label: Text(
-                                  hasLink ? 'Join / open' : 'View details',
+                                  hasLink ? 'Join video call' : 'View details',
                                 ),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppColors.primary,
@@ -889,6 +905,16 @@ class _NextMeetingHero extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (hasLink) ...[
+                              const SizedBox(width: 8),
+                              IconButton.filledTonal(
+                                tooltip: 'Meeting details',
+                                onPressed: () => context.push(
+                                  RoutePaths.meetingDetailsPath(meeting.id),
+                                ),
+                                icon: const Icon(Icons.info_outline_rounded),
+                              ),
+                            ],
                           ],
                         ),
                       ],

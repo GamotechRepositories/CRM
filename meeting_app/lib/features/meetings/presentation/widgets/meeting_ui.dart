@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -205,7 +206,7 @@ class MeetingListCard extends StatelessWidget {
                             color: meetingPriorityColor(meeting.priority),
                           ),
                       ],
-                    ),
+                    ).animate().fadeIn(duration: 220.ms),
                     const SizedBox(height: 8),
                     Text(
                       meeting.title,
@@ -225,8 +226,7 @@ class MeetingListCard extends StatelessWidget {
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    if (meeting.location != null &&
-                        meeting.location!.isNotEmpty) ...[
+                    if (meeting.location?.isNotEmpty ?? false) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -238,7 +238,7 @@ class MeetingListCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              meeting.location!,
+                              meeting.location ?? '',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: context.textTheme.bodySmall?.copyWith(
@@ -267,7 +267,7 @@ class MeetingListCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ).animate().fadeIn(duration: 240.ms).slideX(begin: 0.02, end: 0);
   }
 }
 
@@ -293,7 +293,7 @@ class MeetingSectionHeader extends StatelessWidget {
             ),
           ),
         ),
-        if (trailing != null) trailing!,
+        for (final item in [trailing].whereType<Widget>()) item,
       ],
     );
   }
