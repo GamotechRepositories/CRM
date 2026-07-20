@@ -4,6 +4,11 @@ import AdminCompanyShell, { getInitials } from '../components/AdminCompanyShell'
 import { AppIcon } from '../components/Icons'
 import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
 
+const LIVE_BACKEND = import.meta.env.VITE_API_PROXY_TARGET || 'http://localhost:5011'
+const apiBackendLabel = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL
+  : `Local backend → MongoDB (${LIVE_BACKEND})`
+
 const DEFAULT_ROLES = [
   'Executive Assistant',
   'Meeting Coordinator',
@@ -103,7 +108,7 @@ const CreateTeamPage = () => {
         role: form.role,
         tenants: form.tenants,
       })
-      setSuccess(`Team member created as ${form.role}`)
+      setSuccess(`Team member saved to MongoDB as ${form.role}`)
       setForm({ ...emptyForm, role: roles[0] || 'Executive Assistant' })
       await loadTeam()
     } catch (err) {
@@ -120,6 +125,12 @@ const CreateTeamPage = () => {
           <h1 className='text-2xl font-bold text-gray-900'>Create Team</h1>
           <p className='text-sm text-gray-500 mt-1'>
             Build the CEO support team that schedules and runs meetings for the boss across companies.
+          </p>
+          <p className='text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mt-3 inline-block'>
+            Team members are saved in <span className='font-semibold'>MongoDB</span> via{' '}
+            <span className='font-semibold'>{apiBackendLabel}</span>.
+            {' '}
+            Start the backend: <code className='text-[11px]'>cd backend && npm run dev</code>
           </p>
         </div>
       </div>
