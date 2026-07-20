@@ -1,30 +1,23 @@
 /**
- * Copy CentralAdminUser records from local MongoDB to live MongoDB.
- * Password hashes are copied as-is — same login works on live after sync.
+ * Sync CentralAdminUser from local DB → Render live DB (same Atlas cluster).
+ * Copies password hashes so the same email/password works on the mobile app.
+ *
+ * Default:
+ *   source = BangalorePropertiesCRM (local backend)
+ *   target = BangalorePropertiesCRMPROD (Render live)
  *
  * Usage:
- *   node scripts/syncCentralAdminsToLive.js "<TARGET_MONGO_URI>"
- *
- * Or set LIVE_MONGO_URI in backend/.env
+ *   node scripts/syncCentralAdminsToLive.js
  */
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 
 dotenv.config();
 
-const SOURCE_URI = process.env.MONGO_URI;
-const TARGET_URI = process.argv[2] || process.env.LIVE_MONGO_URI;
+const SOURCE_DB = process.env.SYNC_SOURCE_DB || 'BangalorePropertiesCRM';
+const TARGET_DB = process.env.SYNC_TARGET_DB || 'BangalorePropertiesCRMPROD';
 
-if (!SOURCE_URI) {
-  console.error('Missing MONGO_URI in backend/.env');
-  process.exit(1);
-}
-if (!TARGET_URI) {
-  console.error(
-    'Pass live Mongo URI:\n  node scripts/syncCentralAdminsToLive.js "<LIVE_MONGO_URI>"\nOr set LIVE_MONGO_URI in backend/.env'
-  );
-  process.exit(1);
-}
+const swapDb = (uri, dbName) => uri.replace(/\/([^/?]+)(\?|$)/, `/${dbName}$2`);
 
 const centralAdminUserSchema = new mongoose.Schema(
   {
@@ -57,40 +50,28 @@ async function upsertUsers(uri, users) {
 
   for (const user of users) {
     const email = String(user.email || '').trim().toLowerCase();
-    if (!email) {
+    if (!email || !user.password) {
       skipped += 1;
       continue;
     }
 
     const existing = await Model.findOne({ email }).select('+password').lean();
+    const payload = {
+      name: user.name,
+      password: user.password,
+      role: user.role,
+      isRoot: Boolean(user.isRoot),
+      tenants: user.tenants,
+      status: user.status || 'Active',
+      phone: user.phone || '',
+    };
+
     if (existing) {
-      await Model.updateOne(
-        { email },
-        {
-          $set: {
-            name: user.name,
-            password: user.password,
-            role: user.role,
-            isRoot: user.isRoot,
-            tenants: user.tenants,
-            status: user.status,
-            phone: user.phone || '',
-          },
-        }
-      );
+      await Model.updateOne({ email }, { $set: payload });
       updated += 1;
       console.log(`Updated: ${email}`);
     } else {
-      await Model.create({
-        name: user.name,
-        email,
-        password: user.password,
-        role: user.role,
-        isRoot: Boolean(user.isRoot),
-        tenants: user.tenants,
-        status: user.status || 'Active',
-        phone: user.phone || '',
-      });
+      await Model.create({ email, ...payload });
       created += 1;
       console.log(`Created: ${email}`);
     }
@@ -101,14 +82,27 @@ async function upsertUsers(uri, users) {
 }
 
 async function main() {
-  console.log('Source:', SOURCE_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
-  console.log('Target:', TARGET_URI.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@'));
+  if (!process.env.MONGO_URI) {
+    console.error('Missing MONGO_URI in backend/.env');
+    process.exit(1);
+  }
 
-  const users = await loadUsers(SOURCE_URI);
-  console.log(`Found ${users.length} central admin user(s) in source.`);
+  const sourceUri = swapDb(process.env.MONGO_URI, SOURCE_DB);
+  const targetUri = swapDb(process.env.MONGO_URI, TARGET_DB);
 
-  const result = await upsertUsers(TARGET_URI, users);
-  console.log(`Done. created=${result.created} updated=${result.updated} skipped=${result.skipped}`);
+  console.log(`Source: ${SOURCE_DB}`);
+  console.log(`Target: ${TARGET_DB} (Render live)`);
+
+  const users = await loadUsers(sourceUri);
+  console.log(`Found ${users.length} user(s) in source.`);
+
+  const result = await upsertUsers(targetUri, users);
+  console.log(
+    `Done. created=${result.created} updated=${result.updated} skipped=${result.skipped}`
+  );
+
+  const verify = await loadUsers(targetUri);
+  console.log('Live users now:', verify.map((u) => u.email).join(', '));
   process.exit(0);
 }
 

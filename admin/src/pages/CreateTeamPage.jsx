@@ -4,10 +4,10 @@ import AdminCompanyShell, { getInitials } from '../components/AdminCompanyShell'
 import { AppIcon } from '../components/Icons'
 import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
 
-const LIVE_BACKEND = import.meta.env.VITE_API_PROXY_TARGET || 'http://localhost:5011'
+const API_TARGET = import.meta.env.VITE_API_PROXY_TARGET || 'https://crm-1-foi4.onrender.com'
 const apiBackendLabel = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL
-  : `Local backend → MongoDB (${LIVE_BACKEND})`
+  : `Live backend → MongoDB (${API_TARGET})`
 
 const DEFAULT_ROLES = [
   'Executive Assistant',
@@ -127,10 +127,10 @@ const CreateTeamPage = () => {
             Build the CEO support team that schedules and runs meetings for the boss across companies.
           </p>
           <p className='text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mt-3 inline-block'>
-            Team members are saved in <span className='font-semibold'>MongoDB</span> via{' '}
-            <span className='font-semibold'>{apiBackendLabel}</span>.
-            {' '}
-            Start the backend: <code className='text-[11px]'>cd backend && npm run dev</code>
+            Saved to <span className='font-semibold'>live MongoDB</span> via{' '}
+            <span className='font-semibold'>{apiBackendLabel}</span>
+            {' — '}
+            mobile meeting app login uses this same backend.
           </p>
         </div>
       </div>
