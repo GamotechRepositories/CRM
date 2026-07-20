@@ -49,24 +49,63 @@ class SettingsPage extends ConsumerWidget {
     return AppScaffold(
       maxContentWidth: 640,
       padFloatingNav: true,
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          isBoss ? 'Account' : 'Settings',
+          style: context.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           // Profile
-          AppCard(
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.xlAll,
+              gradient: isBoss
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF0F766E),
+                        Color(0xFF115E59),
+                        Color(0xFF1D4ED8),
+                      ],
+                    )
+                  : null,
+              color: isBoss ? null : colorScheme.surfaceContainerHighest,
+              border: isBoss
+                  ? null
+                  : Border.all(color: colorScheme.outline.withValues(alpha: 0.3)),
+              boxShadow: isBoss
+                  ? [
+                      BoxShadow(
+                        color: AppColors.secondary.withValues(alpha: 0.25),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : null,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 28,
-                  backgroundColor: colorScheme.primary,
+                  radius: 30,
+                  backgroundColor: isBoss
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : colorScheme.primary,
                   child: Text(
                     (user?.displayName ?? 'U').trim().isNotEmpty
                         ? (user!.displayName!.trim()[0].toUpperCase())
                         : 'U',
-                    style: context.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.onPrimary,
+                    style: context.textTheme.headlineSmall?.copyWith(
+                      color: Colors.white,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -80,35 +119,51 @@ class SettingsPage extends ConsumerWidget {
                         user?.displayName ?? 'User',
                         style: context.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
+                          color: isBoss ? Colors.white : null,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: (isBoss ? AppColors.secondary : AppColors.primary)
-                              .withValues(alpha: 0.12),
+                          color: isBoss
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: AppRadius.fullAll,
                         ),
-                        child: Text(
-                          roleLabel,
-                          style: context.textTheme.labelMedium?.copyWith(
-                            color: isBoss
-                                ? AppColors.secondary
-                                : AppColors.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isBoss) ...[
+                              Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 14,
+                                color: Colors.white.withValues(alpha: 0.95),
+                              ),
+                              const SizedBox(width: 5),
+                            ],
+                            Text(
+                              roleLabel,
+                              style: context.textTheme.labelMedium?.copyWith(
+                                color: isBoss
+                                    ? Colors.white
+                                    : AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       if (user?.email != null &&
                           user!.email!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         _InfoLine(
                           icon: Icons.email_outlined,
                           text: user.email!,
+                          light: isBoss,
                         ),
                       ],
                       if (user != null &&
@@ -118,6 +173,7 @@ class SettingsPage extends ConsumerWidget {
                         _InfoLine(
                           icon: Icons.phone_outlined,
                           text: user.mobileNumber,
+                          light: isBoss,
                         ),
                       ],
                     ],
@@ -452,15 +508,20 @@ class _InfoLine extends StatelessWidget {
     required this.icon,
     required this.text,
     this.color,
+    this.light = false,
   });
 
   final IconData icon;
   final String text;
   final Color? color;
+  final bool light;
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? context.colorScheme.onSurfaceVariant;
+    final c = color ??
+        (light
+            ? Colors.white.withValues(alpha: 0.88)
+            : context.colorScheme.onSurfaceVariant);
     return Row(
       children: [
         Icon(icon, size: 16, color: c),
@@ -468,7 +529,10 @@ class _InfoLine extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: context.textTheme.bodyMedium?.copyWith(color: c),
+            style: context.textTheme.bodyMedium?.copyWith(
+              color: c,
+              fontWeight: light ? FontWeight.w500 : null,
+            ),
           ),
         ),
       ],

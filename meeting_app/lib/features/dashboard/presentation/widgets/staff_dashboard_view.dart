@@ -90,13 +90,35 @@ class _BossHomeView extends ConsumerWidget {
         .take(5)
         .toList();
 
+    final dateLabel = DateFormat('EEEE, MMM d').format(now);
+    final isBusySoon = next != null &&
+        next.startAt.difference(now).inMinutes <= 60 &&
+        !next.startAt.isBefore(now);
+
     return AppScaffold(
       maxContentWidth: 800,
       padFloatingNav: true,
       appBar: AppBar(
         surfaceTintColor: Colors.transparent,
         titleSpacing: AppSpacing.md,
-        title: const Text('Home'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'My schedule',
+              style: context.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              dateLabel,
+              style: context.textTheme.labelMedium?.copyWith(
+                color: context.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -106,15 +128,18 @@ class _BossHomeView extends ConsumerWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-              child: Text(
-                fullName[0].toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
+            child: GestureDetector(
+              onTap: () => context.go(RoutePaths.settings),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.secondary.withValues(alpha: 0.15),
+                child: Text(
+                  fullName[0].toUpperCase(),
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),
@@ -132,7 +157,7 @@ class _BossHomeView extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
-                  4,
+                  8,
                   AppSpacing.md,
                   AppSpacing.md,
                 ),
@@ -145,13 +170,15 @@ class _BossHomeView extends ConsumerWidget {
                   _BossGreetingCard(
                     name: name,
                     greeting: _greeting(now),
+                    dateLabel: dateLabel,
                     freeUntil: next == null
                         ? 'Your day is clear'
                         : _freeUntilLabel(now, next.startAt.toLocal()),
+                    isBusySoon: isBusySoon,
                   ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.03, end: 0),
                   const SizedBox(height: AppSpacing.md),
 
-                  _GlanceStatsBar(
+                  _BossStatsGrid(
                     items: [
                       _GlanceStat(
                         label: 'Today',
@@ -162,6 +189,7 @@ class _BossHomeView extends ConsumerWidget {
                                 ? '1 meeting'
                                 : '${today.length} meetings',
                         color: AppColors.primary,
+                        icon: Icons.today_rounded,
                         onTap: () => context.go(RoutePaths.meetings),
                       ),
                       _GlanceStat(
@@ -169,6 +197,7 @@ class _BossHomeView extends ConsumerWidget {
                         value: '${thisWeek.length}',
                         hint: thisWeek.isEmpty ? 'Nothing yet' : 'Next 7 days',
                         color: AppColors.secondary,
+                        icon: Icons.date_range_rounded,
                         onTap: () => context.go(RoutePaths.meetings),
                       ),
                       _GlanceStat(
@@ -178,6 +207,7 @@ class _BossHomeView extends ConsumerWidget {
                             ? 'All calm'
                             : 'Needs focus',
                         color: AppColors.warning,
+                        icon: Icons.flag_rounded,
                         onTap: () => context.go(RoutePaths.meetings),
                       ),
                     ],
@@ -293,53 +323,134 @@ class _BossGreetingCard extends StatelessWidget {
   const _BossGreetingCard({
     required this.name,
     required this.greeting,
+    required this.dateLabel,
     required this.freeUntil,
+    required this.isBusySoon,
   });
 
   final String name;
   final String greeting;
+  final String dateLabel;
   final String freeUntil;
+  final bool isBusySoon;
 
   @override
   Widget build(BuildContext context) {
+    final statusColor = isBusySoon ? AppColors.warning : AppColors.success;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.xlAll,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0F766E),
+            Color(0xFF115E59),
+            Color(0xFF1D4ED8),
+          ],
+          stops: [0.0, 0.45, 1.0],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.secondary.withValues(alpha: 0.28),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Good $greeting, $name',
-                  style: context.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
-                  ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: AppRadius.fullAll,
                 ),
-                const SizedBox(height: 8),
-                Row(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.95),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        freeUntil,
-                        style: context.textTheme.bodyMedium?.copyWith(
-                          color: context.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Boss',
+                      style: context.textTheme.labelMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                dateLabel,
+                style: context.textTheme.labelMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Good $greeting,',
+            style: context.textTheme.titleMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.88),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            name,
+            style: context.textTheme.headlineMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              height: 1.1,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.18),
+              borderRadius: AppRadius.lgAll,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.55),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    freeUntil,
+                    style: context.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -356,6 +467,7 @@ class _GlanceStat {
     required this.value,
     required this.hint,
     required this.color,
+    this.icon,
     this.onTap,
   });
 
@@ -363,10 +475,11 @@ class _GlanceStat {
   final String value;
   final String hint;
   final Color color;
+  final IconData? icon;
   final VoidCallback? onTap;
 }
 
-/// Soft stats strip — Today / This week / Priority (no heavy boxes).
+/// Soft stats strip — used by Team home.
 class _GlanceStatsBar extends StatelessWidget {
   const _GlanceStatsBar({required this.items});
 
@@ -461,6 +574,112 @@ class _GlanceStatCell extends StatelessWidget {
   }
 }
 
+/// Boss home: three elevated stat cards.
+class _BossStatsGrid extends StatelessWidget {
+  const _BossStatsGrid({required this.items});
+
+  final List<_GlanceStat> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(child: _BossStatCard(stat: items[i])),
+        ],
+      ],
+    );
+  }
+}
+
+class _BossStatCard extends StatelessWidget {
+  const _BossStatCard({required this.stat});
+
+  final _GlanceStat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: stat.onTap,
+        borderRadius: AppRadius.lgAll,
+        child: Ink(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+          decoration: BoxDecoration(
+            color: isDark ? scheme.surfaceContainerHighest : Colors.white,
+            borderRadius: AppRadius.lgAll,
+            border: Border.all(
+              color: isDark
+                  ? scheme.outline.withValues(alpha: 0.35)
+                  : AppColors.borderLight,
+            ),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: stat.color.withValues(alpha: 0.12),
+                  borderRadius: AppRadius.mdAll,
+                ),
+                child: Icon(
+                  stat.icon ?? Icons.insights_rounded,
+                  size: 18,
+                  color: stat.color,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                stat.value,
+                style: context.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: stat.color,
+                  height: 1,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                stat.label,
+                style: context.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                stat.hint,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NextMeetingHero extends StatelessWidget {
   const _NextMeetingHero({required this.meeting});
 
@@ -490,6 +709,7 @@ class _NextMeetingHero extends StatelessWidget {
     final durationLabel = duration.inHours > 0
         ? '${duration.inHours}h ${duration.inMinutes.remainder(60)}m'
         : '${duration.inMinutes} min';
+    final priorityColor = meetingPriorityColor(meeting.priority);
 
     return Material(
       color: Colors.transparent,
@@ -499,122 +719,179 @@ class _NextMeetingHero extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: AppRadius.xlAll,
-            color: isDark ? null : const Color(0xFFEFF6FF),
-            gradient: isDark
-                ? LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.2),
-                      AppColors.secondary.withValues(alpha: 0.14),
+            border: Border.all(
+              color: isDark
+                  ? AppColors.primary.withValues(alpha: 0.35)
+                  : AppColors.primary.withValues(alpha: 0.18),
+            ),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDark
+                  ? [
+                      AppColors.primary.withValues(alpha: 0.28),
+                      AppColors.secondary.withValues(alpha: 0.16),
                       scheme.surface,
+                    ]
+                  : const [
+                      Color(0xFFEFF6FF),
+                      Color(0xFFECFEFF),
+                      Color(0xFFF8FAFC),
                     ],
-                  )
-                : null,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: AppRadius.fullAll,
-                      ),
-                      child: Text(
-                        whenLabel,
-                        style: context.textTheme.labelMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+            ),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      durationLabel,
-                      style: context.textTheme.labelMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (meeting.priority == MeetingPriority.high ||
-                        meeting.priority == MeetingPriority.critical)
-                      MeetingTag(
-                        label: meeting.priority.label,
-                        color: meetingPriorityColor(meeting.priority),
-                      ),
                   ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  meeting.title,
-                  style: context.textTheme.headlineSmall?.copyWith(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w800,
-                    height: 1.2,
-                  ),
-                ),
-                if (agenda.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    agenda,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      height: 1.35,
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    color: priorityColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(AppRadius.xl),
+                      bottomLeft: Radius.circular(AppRadius.xl),
                     ),
                   ),
-                ],
-                const SizedBox(height: 12),
-                _HeroMeta(
-                  icon: Icons.schedule_rounded,
-                  text:
-                      '${DateFormat('EEE, MMM d · h:mm a').format(start)} – ${DateFormat('h:mm a').format(end)}',
                 ),
-                const SizedBox(height: 6),
-                _HeroMeta(
-                  icon: Icons.person_outline_rounded,
-                  text:
-                      'By ${meeting.organizerName}${meeting.organizerRoleOrEmpty.isNotEmpty ? ' · ${meeting.organizerRoleOrEmpty}' : ''}',
-                ),
-                if (company != null) ...[
-                  const SizedBox(height: 6),
-                  _HeroMeta(icon: Icons.business_outlined, text: company),
-                ],
-                if (meeting.location != null &&
-                    meeting.location!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  _HeroMeta(
-                    icon: Icons.place_outlined,
-                    text: meeting.location!.trim(),
-                  ),
-                ],
-                const SizedBox(height: AppSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () =>
-                        context.push(RoutePaths.meetingDetailsPath(meeting.id)),
-                    icon: Icon(
-                      hasLink
-                          ? Icons.videocam_rounded
-                          : Icons.arrow_forward_rounded,
-                      size: 18,
-                    ),
-                    label: Text(hasLink ? 'Open meeting' : 'View details'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: AppRadius.fullAll,
+                              ),
+                              child: Text(
+                                whenLabel,
+                                style: context.textTheme.labelMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: scheme.surface.withValues(alpha: 0.7),
+                                borderRadius: AppRadius.fullAll,
+                              ),
+                              child: Text(
+                                durationLabel,
+                                style: context.textTheme.labelMedium?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (meeting.priority == MeetingPriority.high ||
+                                meeting.priority == MeetingPriority.critical)
+                              MeetingTag(
+                                label: meeting.priority.label,
+                                color: priorityColor,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          meeting.title,
+                          style: context.textTheme.headlineSmall?.copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                        ),
+                        if (agenda.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            agenda,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        _HeroMeta(
+                          icon: Icons.schedule_rounded,
+                          text:
+                              '${DateFormat('EEE, MMM d · h:mm a').format(start)} – ${DateFormat('h:mm a').format(end)}',
+                        ),
+                        const SizedBox(height: 6),
+                        _HeroMeta(
+                          icon: Icons.person_outline_rounded,
+                          text:
+                              'By ${meeting.organizerName}${meeting.organizerRoleOrEmpty.isNotEmpty ? ' · ${meeting.organizerRoleOrEmpty}' : ''}',
+                        ),
+                        if (company != null) ...[
+                          const SizedBox(height: 6),
+                          _HeroMeta(
+                            icon: Icons.business_outlined,
+                            text: company,
+                          ),
+                        ],
+                        if (meeting.location != null &&
+                            meeting.location!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _HeroMeta(
+                            icon: Icons.place_outlined,
+                            text: meeting.location!.trim(),
+                          ),
+                        ],
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () => context.push(
+                                  RoutePaths.meetingDetailsPath(meeting.id),
+                                ),
+                                icon: Icon(
+                                  hasLink
+                                      ? Icons.videocam_rounded
+                                      : Icons.arrow_forward_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  hasLink ? 'Join / open' : 'View details',
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -666,136 +943,177 @@ class _BossTimelineCard extends StatelessWidget {
     final start = meeting.startAt.toLocal();
     final end = meeting.endAt.toLocal();
     final scheme = context.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final company = meeting.companyNameOrEmpty.trim();
     final initial = meeting.organizerName.trim().isNotEmpty
         ? meeting.organizerName.trim()[0].toUpperCase()
         : '?';
+    final accent = meetingPriorityColor(meeting.priority);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: AppRadius.lgAll,
         onTap: () => context.push(RoutePaths.meetingDetailsPath(meeting.id)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 4,
-                height: compact ? 56 : 72,
-                decoration: BoxDecoration(
-                  color: meetingPriorityColor(meeting.priority),
-                  borderRadius: AppRadius.fullAll,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: isDark ? scheme.surfaceContainerHighest : Colors.white,
+            borderRadius: AppRadius.lgAll,
+            border: Border.all(
+              color: isDark
+                  ? scheme.outline.withValues(alpha: 0.3)
+                  : AppColors.borderLight,
+            ),
+            boxShadow: isDark
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              0,
+              compact ? 12 : 14,
+              12,
+              compact ? 12 : 14,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 4,
+                  height: compact ? 58 : 78,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(4),
+                      bottomRight: Radius.circular(4),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 54,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DateFormat('h:mm').format(start),
-                      style: context.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      DateFormat('a').format(start),
-                      style: context.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (!compact) ...[
-                      const SizedBox(height: 2),
+                SizedBox(
+                  width: 54,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        DateFormat('h:mm a').format(end),
+                        DateFormat('h:mm').format(start),
+                        style: context.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('a').format(start),
                         style: context.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
-                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      meeting.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 10,
-                          backgroundColor: AppColors.primary.withValues(
-                            alpha: 0.12,
-                          ),
-                          child: Text(
-                            initial,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            [
-                              if (!DateUtils.isSameDay(start, DateTime.now()))
-                                DateFormat('EEE, MMM d').format(start),
-                              meeting.organizerName,
-                              if (company.isNotEmpty) company,
-                            ].join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: context.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                      if (!compact) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          DateFormat('h:mm a').format(end),
+                          style: context.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 10,
                           ),
                         ),
                       ],
-                    ),
-                    if (!compact) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        meeting.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
                         children: [
-                          MeetingTag(
-                            label: meeting.status.label,
-                            color: meetingStatusColor(meeting.status),
-                          ),
-                          MeetingTag(
-                            label: meeting.priority.label,
-                            color: meetingPriorityColor(meeting.priority),
-                          ),
-                          if (meeting.meetLink != null &&
-                              meeting.meetLink!.trim().isNotEmpty)
-                            const MeetingTag(
-                              label: 'Video',
-                              color: AppColors.info,
+                          CircleAvatar(
+                            radius: 10,
+                            backgroundColor: AppColors.secondary.withValues(
+                              alpha: 0.14,
                             ),
+                            child: Text(
+                              initial,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              [
+                                if (!DateUtils.isSameDay(
+                                  start,
+                                  DateTime.now(),
+                                ))
+                                  DateFormat('EEE, MMM d').format(start),
+                                meeting.organizerName,
+                                if (company.isNotEmpty) company,
+                              ].join(' · '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
+                      if (!compact) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            MeetingTag(
+                              label: meeting.status.label,
+                              color: meetingStatusColor(meeting.status),
+                            ),
+                            MeetingTag(
+                              label: meeting.priority.label,
+                              color: accent,
+                            ),
+                            if (meeting.meetLink != null &&
+                                meeting.meetLink!.trim().isNotEmpty)
+                              const MeetingTag(
+                                label: 'Video',
+                                color: AppColors.info,
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
-            ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -867,20 +1185,33 @@ class _QuietDayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: isDark ? scheme.surfaceContainerHighest : Colors.white,
+        borderRadius: AppRadius.xlAll,
+        border: Border.all(
+          color: isDark
+              ? scheme.outline.withValues(alpha: 0.3)
+              : AppColors.borderLight,
+        ),
+      ),
       child: Column(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
-              color: AppColors.secondary.withValues(alpha: 0.1),
+              color: AppColors.secondary.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.event_available_rounded,
+              size: 30,
               color: AppColors.secondary,
             ),
           ),
@@ -889,6 +1220,7 @@ class _QuietDayCard extends StatelessWidget {
             title,
             style: context.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
+              color: scheme.onSurface,
             ),
           ),
           const SizedBox(height: 6),
@@ -896,7 +1228,7 @@ class _QuietDayCard extends StatelessWidget {
             message,
             textAlign: TextAlign.center,
             style: context.textTheme.bodyMedium?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
+              color: scheme.onSurfaceVariant,
               height: 1.4,
             ),
           ),
@@ -914,17 +1246,28 @@ class _InlineEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+    final scheme = context.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? scheme.surfaceContainerHighest.withValues(alpha: 0.6)
+            : AppColors.surfaceContainerLight,
+        borderRadius: AppRadius.lgAll,
+      ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: context.colorScheme.onSurfaceVariant),
+          Icon(icon, size: 20, color: AppColors.secondary),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
               style: context.textTheme.bodyMedium?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -941,19 +1284,37 @@ class _BossTipCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.info.withValues(alpha: 0.08),
+        borderRadius: AppRadius.lgAll,
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.lightbulb_outline_rounded, size: 18, color: AppColors.info),
-          const SizedBox(width: 10),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.info.withValues(alpha: 0.14),
+              borderRadius: AppRadius.mdAll,
+            ),
+            child: const Icon(
+              Icons.lightbulb_outline_rounded,
+              size: 18,
+              color: AppColors.info,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               text,
               style: context.textTheme.bodySmall?.copyWith(
                 color: AppColors.info,
-                height: 1.35,
+                height: 1.4,
                 fontWeight: FontWeight.w600,
               ),
             ),

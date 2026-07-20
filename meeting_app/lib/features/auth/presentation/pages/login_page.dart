@@ -60,18 +60,42 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   InputDecoration _fieldDecoration({
+    required ColorScheme scheme,
+    required bool isDark,
     required String label,
     required String hint,
     required IconData icon,
     Widget? suffix,
   }) {
+    final fill = isDark
+        ? scheme.surfaceContainerHighest
+        : AppColors.surfaceContainerLight;
+    final border = isDark ? scheme.outline : AppColors.borderLight;
+    final muted = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      prefixIcon: Icon(icon, size: 22),
+      labelStyle: TextStyle(
+        color: muted,
+        fontWeight: FontWeight.w500,
+      ),
+      floatingLabelStyle: TextStyle(
+        color: scheme.primary,
+        fontWeight: FontWeight.w600,
+      ),
+      hintStyle: TextStyle(
+        color: muted.withValues(alpha: 0.85),
+        fontWeight: FontWeight.w400,
+      ),
+      prefixIcon: Icon(icon, size: 22, color: muted),
       suffixIcon: suffix,
+      prefixIconColor: muted,
+      suffixIconColor: muted,
       filled: true,
-      fillColor: const Color(0xFFF4F5F7),
+      fillColor: fill,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
@@ -79,16 +103,27 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
-        borderSide: const BorderSide(color: Color(0xFFE5E5E5)),
+        borderSide: BorderSide(color: border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
         borderSide: const BorderSide(color: AppColors.error),
       ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: AppRadius.lgAll,
+        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+      ),
+    );
+  }
+
+  TextStyle? _fieldTextStyle(ColorScheme scheme) {
+    return context.textTheme.bodyLarge?.copyWith(
+      color: scheme.onSurface,
+      fontWeight: FontWeight.w500,
     );
   }
 
@@ -97,15 +132,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final state = ref.watch(loginControllerProvider);
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final scheme = context.colorScheme;
+    final isDark = context.isDarkMode;
+    final pageBg =
+        isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
+    final cardBg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
+    final cardBorder = isDark ? AppColors.borderDark : AppColors.borderLight;
+    final primaryText =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final secondaryText =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
+      value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+          .copyWith(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: const Color(0xFFF4F5F7),
+        systemNavigationBarColor: pageBg,
       ),
       child: Scaffold(
         resizeToAvoidBottomInset: true,
-        backgroundColor: const Color(0xFFF4F5F7),
+        backgroundColor: pageBg,
         body: LoadingOverlay(
           isLoading: state.isLoading,
           message: 'Signing in…',
@@ -123,9 +168,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       center: Alignment.topCenter,
                       radius: 1.1,
                       colors: [
-                        AppColors.secondary.withValues(alpha: 0.14),
-                        AppColors.primary.withValues(alpha: 0.06),
-                        const Color(0xFFF4F5F7),
+                        AppColors.secondary.withValues(
+                          alpha: isDark ? 0.22 : 0.14,
+                        ),
+                        AppColors.primary.withValues(
+                          alpha: isDark ? 0.14 : 0.06,
+                        ),
+                        pageBg,
                       ],
                     ),
                   ),
@@ -187,6 +236,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   textAlign: TextAlign.center,
                                   style: context.textTheme.headlineSmall
                                       ?.copyWith(
+                                    color: primaryText,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.3,
                                   ),
@@ -196,7 +246,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   AppConstants.appTagline,
                                   textAlign: TextAlign.center,
                                   style: context.textTheme.bodyMedium?.copyWith(
-                                    color: scheme.onSurfaceVariant,
+                                    color: secondaryText,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -211,14 +261,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             Container(
                               padding: const EdgeInsets.all(AppSpacing.lg),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: cardBg,
                                 borderRadius: AppRadius.xlAll,
-                                border: Border.all(
-                                  color: const Color(0xFFE5E5E5),
-                                ),
+                                border: Border.all(color: cardBorder),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
+                                    color: Colors.black.withValues(
+                                      alpha: isDark ? 0.35 : 0.05,
+                                    ),
                                     blurRadius: 20,
                                     offset: const Offset(0, 8),
                                   ),
@@ -230,14 +280,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   Text(
                                     'Welcome back',
                                     style: context.textTheme.titleLarge
-                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                        ?.copyWith(
+                                      color: primaryText,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
                                     'Sign in with your Create Team email and password.',
                                     style: context.textTheme.bodyMedium
                                         ?.copyWith(
-                                      color: scheme.onSurfaceVariant,
+                                      color: secondaryText,
                                       height: 1.35,
                                     ),
                                   ),
@@ -248,10 +301,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     enabled: !state.isLoading,
                                     keyboardType: TextInputType.emailAddress,
                                     textInputAction: TextInputAction.next,
+                                    style: _fieldTextStyle(scheme),
+                                    cursorColor: scheme.primary,
                                     autofillHints: const [
                                       AutofillHints.email,
                                     ],
                                     decoration: _fieldDecoration(
+                                      scheme: scheme,
+                                      isDark: isDark,
                                       label: 'Email',
                                       hint: 'you@company.com',
                                       icon: Icons.email_outlined,
@@ -269,10 +326,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     enabled: !state.isLoading,
                                     obscureText: _obscurePassword,
                                     textInputAction: TextInputAction.done,
+                                    style: _fieldTextStyle(scheme),
+                                    cursorColor: scheme.primary,
                                     autofillHints: const [
                                       AutofillHints.password,
                                     ],
                                     decoration: _fieldDecoration(
+                                      scheme: scheme,
+                                      isDark: isDark,
                                       label: 'Password',
                                       hint: 'Enter your password',
                                       icon: Icons.lock_outline_rounded,
@@ -288,6 +349,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                           _obscurePassword
                                               ? Icons.visibility_outlined
                                               : Icons.visibility_off_outlined,
+                                          color: secondaryText,
                                         ),
                                       ),
                                     ),
@@ -351,7 +413,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                             // Help / demo access
                             Material(
-                              color: Colors.white,
+                              color: cardBg,
                               borderRadius: AppRadius.lgAll,
                               child: InkWell(
                                 borderRadius: AppRadius.lgAll,
@@ -360,9 +422,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 child: Ink(
                                   decoration: BoxDecoration(
                                     borderRadius: AppRadius.lgAll,
-                                    border: Border.all(
-                                      color: const Color(0xFFE5E5E5),
-                                    ),
+                                    border: Border.all(color: cardBorder),
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
@@ -376,7 +436,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                             Icon(
                                               Icons.help_outline_rounded,
                                               size: 18,
-                                              color: scheme.onSurfaceVariant,
+                                              color: secondaryText,
                                             ),
                                             const SizedBox(width: 8),
                                             Expanded(
@@ -385,6 +445,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                                 style: context
                                                     .textTheme.labelLarge
                                                     ?.copyWith(
+                                                  color: primaryText,
                                                   fontWeight: FontWeight.w700,
                                                 ),
                                               ),
@@ -393,7 +454,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                               _showHint
                                                   ? Icons.expand_less_rounded
                                                   : Icons.expand_more_rounded,
-                                              color: scheme.onSurfaceVariant,
+                                              color: secondaryText,
                                             ),
                                           ],
                                         ),
@@ -407,7 +468,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                               style: context
                                                   .textTheme.bodySmall
                                                   ?.copyWith(
-                                                color: scheme.onSurfaceVariant,
+                                                color: secondaryText,
                                                 height: 1.45,
                                               ),
                                             ),
@@ -431,16 +492,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       Icon(
                                         Icons.verified_user_outlined,
                                         size: 14,
-                                        color: scheme.onSurfaceVariant
-                                            .withValues(alpha: 0.7),
+                                        color: secondaryText.withValues(
+                                          alpha: 0.8,
+                                        ),
                                       ),
                                       const SizedBox(width: 6),
                                       Text(
                                         'Secure Create Team sign-in',
                                         style: context.textTheme.labelSmall
                                             ?.copyWith(
-                                          color: scheme.onSurfaceVariant
-                                              .withValues(alpha: 0.75),
+                                          color: secondaryText.withValues(
+                                            alpha: 0.85,
+                                          ),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -452,8 +515,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     textAlign: TextAlign.center,
                                     style: context.textTheme.labelSmall
                                         ?.copyWith(
-                                      color: scheme.onSurfaceVariant
-                                          .withValues(alpha: 0.55),
+                                      color: secondaryText.withValues(
+                                        alpha: 0.7,
+                                      ),
                                     ),
                                   ),
                                 ],

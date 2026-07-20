@@ -47,7 +47,13 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
       maxContentWidth: 960,
       padFloatingNav: true,
       appBar: AppBar(
-        title: Text(isBoss ? 'Your meetings' : 'Meetings for Boss'),
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          isBoss ? 'Your meetings' : 'Meetings for Boss',
+          style: context.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
       floatingActionButton: PermissionGate(
         permission: AppPermission.createMeeting,
@@ -72,14 +78,18 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isBoss
-                        ? 'Everything your team scheduled for you.'
-                        : 'Meetings you create appear on the Boss schedule.',
-                    style: context.textTheme.bodyMedium?.copyWith(
-                      color: context.colorScheme.onSurfaceVariant,
+                  if (isBoss)
+                    _BossMeetingsHeader(
+                      total: stats.total,
+                      upcoming: stats.upcoming,
+                    )
+                  else
+                    Text(
+                      'Meetings you create appear on the Boss schedule.',
+                      style: context.textTheme.bodyMedium?.copyWith(
+                        color: context.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: AppSpacing.md),
                   _StatsRow(stats: stats),
                   if (stats.nextMeeting != null) ...[
@@ -139,6 +149,87 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
         ),
       ),
     );
+  }
+}
+
+class _BossMeetingsHeader extends StatelessWidget {
+  const _BossMeetingsHeader({
+    required this.total,
+    required this.upcoming,
+  });
+
+  final int total;
+  final int upcoming;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.lgAll,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  AppColors.secondary.withValues(alpha: 0.28),
+                  AppColors.primary.withValues(alpha: 0.18),
+                ]
+              : const [
+                  Color(0xFFCCFBF1),
+                  Color(0xFFDBEAFE),
+                ],
+        ),
+        border: Border.all(
+          color: isDark
+              ? AppColors.secondary.withValues(alpha: 0.35)
+              : AppColors.secondary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withValues(alpha: 0.18),
+              borderRadius: AppRadius.mdAll,
+            ),
+            child: const Icon(
+              Icons.calendar_month_rounded,
+              color: AppColors.secondary,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Scheduled by your team',
+                  style: context.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  total == 0
+                      ? 'No meetings yet — pull to refresh when your team adds one.'
+                      : '$upcoming upcoming · $total total on your calendar',
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: context.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 280.ms);
   }
 }
 
@@ -279,68 +370,119 @@ class _NextMeetingBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final start = meeting.startAt.toLocal();
     final company = meeting.companyNameOrEmpty.trim();
+    final mins = start.difference(DateTime.now()).inMinutes;
+    final whenLabel = mins <= 0
+        ? 'Now'
+        : mins < 60
+            ? 'In $mins min'
+            : DateFormat('h:mm a').format(start);
 
     return Material(
-      color: scheme.primaryContainer.withValues(alpha: 0.45),
-      borderRadius: AppRadius.lgAll,
+      color: Colors.transparent,
       child: InkWell(
         borderRadius: AppRadius.lgAll,
         onTap: () => context.push(RoutePaths.meetingDetailsPath(meeting.id)),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: AppRadius.mdAll,
-                ),
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: scheme.onPrimary,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Next up',
-                      style: context.textTheme.labelMedium?.copyWith(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.lgAll,
+            color: isDark
+                ? scheme.primary.withValues(alpha: 0.16)
+                : scheme.primaryContainer.withValues(alpha: 0.55),
+            border: Border.all(
+              color: scheme.primary.withValues(alpha: isDark ? 0.35 : 0.2),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: AppRadius.mdAll,
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-                    ),
-                    Text(
-                      meeting.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      [
-                        DateFormat('EEE, MMM d · h:mm a').format(start),
-                        if (isBoss) meeting.organizerName,
-                        if (company.isNotEmpty) company,
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: scheme.onPrimary,
+                    size: 28,
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
-            ],
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Next up',
+                            style: context.textTheme.labelMedium?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: AppRadius.fullAll,
+                            ),
+                            child: Text(
+                              whenLabel,
+                              style: context.textTheme.labelSmall?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        meeting.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        [
+                          DateFormat('EEE, MMM d · h:mm a').format(start),
+                          if (isBoss) meeting.organizerName,
+                          if (company.isNotEmpty) company,
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
         ),
       ),

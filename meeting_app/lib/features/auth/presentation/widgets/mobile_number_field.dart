@@ -126,7 +126,14 @@ class AuthPrimaryButton extends StatelessWidget {
         child: FilledButton(
           onPressed: canTap ? onPressed : null,
           style: FilledButton.styleFrom(
+            foregroundColor: scheme.onPrimary,
+            disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.55),
+            disabledBackgroundColor: scheme.onSurface.withValues(alpha: 0.12),
             shape: RoundedRectangleBorder(borderRadius: AppRadius.lgAll),
+            textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: scheme.onPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           child: isLoading
               ? SizedBox(

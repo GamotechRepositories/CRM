@@ -66,6 +66,7 @@ abstract final class AppTypography {
       labelLarge: base.labelLarge?.copyWith(
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
+        color: primaryColor,
       ),
       labelMedium: base.labelMedium?.copyWith(
         fontWeight: FontWeight.w500,
