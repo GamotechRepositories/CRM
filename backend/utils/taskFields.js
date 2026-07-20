@@ -24,5 +24,7 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     comments: { type: String, default: '' },
     ratedBy: { type: mongoose.Schema.Types.ObjectId, ref: employeeRef, default: null },
     ratedAt: { type: Date, default: null },
+    /** true when score was set by completion-time automation */
+    auto: { type: Boolean, default: false },
   },
 });

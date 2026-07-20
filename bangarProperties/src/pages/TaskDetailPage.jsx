@@ -9,6 +9,7 @@ import {
   normalizeTaskStatus,
   taskStatusToSocialStatus,
 } from '../utils/taskStatus'
+import { formatTaskStarDisplay, getActualTaskDurationMinutes } from '../utils/taskStarRating'
 
 const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
 const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
@@ -33,41 +34,45 @@ const formatDuration = (minutes) => {
   return `${m}m`
 }
 
-const getCompletionDurationMinutes = (task) => {
-  if (normalizeTaskStatus(task?.status) !== 'Completed' || !task?.completedAt || !task?.createdAt) return null
-  const diffMs = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime()
-  if (!Number.isFinite(diffMs) || diffMs < 0) return null
-  return Math.round(diffMs / 60000)
-}
+const getCompletionDurationMinutes = (task) => getActualTaskDurationMinutes(task)
 
 const getDurationVarianceLabel = (estimatedMinutes, actualMinutes) => {
   const estimated = Number(estimatedMinutes)
   const actual = Number(actualMinutes)
-  if (!Number.isFinite(estimated) || estimated <= 0 || !Number.isFinite(actual) || actual <= 0) return null
+  if (!Number.isFinite(estimated) || estimated <= 0 || !Number.isFinite(actual) || actual < 0) return null
   const diff = actual - estimated
   if (Math.abs(diff) < 5) return { text: 'On estimate', className: 'text-green-600' }
   if (diff > 0) return { text: `${formatDuration(diff)} over estimate`, className: 'text-orange-600' }
   return { text: `${formatDuration(Math.abs(diff))} under estimate`, className: 'text-green-600' }
 }
 
-const StarRating = ({ value, onChange, disabled }) => (
-  <div className='flex items-center gap-1'>
-    {[1, 2, 3, 4, 5].map((star) => (
-      <button
-        key={star}
-        type='button'
-        disabled={disabled}
-        onClick={() => onChange?.(star)}
-        className={`text-2xl leading-none transition-colors disabled:cursor-default ${
-          star <= value ? 'text-amber-400' : 'text-gray-300 hover:text-amber-200'
-        }`}
-        aria-label={`${star} star`}
-      >
-        ★
-      </button>
-    ))}
-  </div>
-)
+const StarRating = ({ value, onChange, disabled, incomplete = false }) => {
+  if (incomplete) {
+    return (
+      <span className='text-xl' title='Not completed' aria-label='Not completed'>
+        ❌
+      </span>
+    )
+  }
+  return (
+    <div className='flex items-center gap-1'>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type='button'
+          disabled={disabled}
+          onClick={() => onChange?.(star)}
+          className={`text-2xl leading-none transition-colors disabled:cursor-default ${
+            star <= value ? 'text-amber-400' : 'text-gray-300 hover:text-amber-200'
+          }`}
+          aria-label={`${star} star`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const TaskDetailPage = ({ isMyTasks = false }) => {
   const { taskId } = useParams()
@@ -604,45 +609,54 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
               <span className='text-sm text-gray-700'>{task.updatedAt ? fmtDateTime(task.updatedAt) : '—'}</span>
             </div>
 
-            {task.source !== 'social_media' && !canRateTask() && task.rating?.score > 0 && (
+            {task.source !== 'social_media' && (
               <div className='mt-6 pt-6 border-t border-gray-200'>
-                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Your performance rating</h3>
-                <p className='text-xs text-gray-500 mb-3'>Feedback from your manager on this task.</p>
-                <div className='rounded-lg bg-amber-50 border border-amber-100 p-4'>
-                  <StarRating value={task.rating.score} disabled />
-                  {task.rating.comments && (
-                    <p className='text-sm text-gray-700 mt-3 whitespace-pre-wrap'>{task.rating.comments}</p>
-                  )}
-                  <p className='text-xs text-gray-500 mt-3'>
-                    Rated by {task.rating.ratedBy?.name || task.assignedBy?.name || 'Manager'}
-                    {task.rating.ratedAt ? ` · ${fmtDateTime(task.rating.ratedAt)}` : ''}
-                  </p>
-                </div>
+                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Performance rating</h3>
+                <p className='text-xs text-gray-500 mb-3'>
+                  Stars are auto-calculated from completion time vs estimate when the task is marked Completed.
+                  Managers can still override manually.
+                </p>
+                {(() => {
+                  const display = formatTaskStarDisplay(task)
+                  if (display.kind === 'incomplete') {
+                    return (
+                      <div className='rounded-lg bg-gray-50 border border-gray-200 p-4 flex items-center gap-3'>
+                        <StarRating incomplete />
+                        <span className='text-sm text-gray-600'>Not completed — no star rating yet</span>
+                      </div>
+                    )
+                  }
+                  if (display.kind === 'score') {
+                    return (
+                      <div className='rounded-lg bg-amber-50 border border-amber-100 p-4'>
+                        <StarRating value={task.rating.score} disabled />
+                        {task.rating.comments && (
+                          <p className='text-sm text-gray-700 mt-3 whitespace-pre-wrap'>{task.rating.comments}</p>
+                        )}
+                        <p className='text-xs text-gray-500 mt-3'>
+                          {display.auto
+                            ? 'Auto-rated from completion time'
+                            : `Rated by ${task.rating.ratedBy?.name || task.assignedBy?.name || 'Manager'}`}
+                          {task.rating.ratedAt ? ` · ${fmtDateTime(task.rating.ratedAt)}` : ''}
+                        </p>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className='rounded-lg bg-gray-50 border border-gray-200 p-4'>
+                      <p className='text-sm text-gray-600'>No rating available (missing estimate or start time).</p>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
             {task.source !== 'social_media' && canRateTask() && (
               <div className='mt-6 pt-6 border-t border-gray-200'>
-                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Employee performance rating</h3>
+                <h3 className='text-sm font-semibold text-gray-900 mb-1'>Override rating (optional)</h3>
                 <p className='text-xs text-gray-500 mb-4'>
-                  Project managers and team leads can rate the assignee on this task.
+                  Manually adjust the auto star rating if needed.
                 </p>
-
-                {task.rating?.score > 0 && (
-                  <div className='mb-4 rounded-lg bg-amber-50 border border-amber-100 p-4'>
-                    <p className='text-xs font-medium text-amber-800 mb-2'>Current rating</p>
-                    <StarRating value={task.rating.score} disabled />
-                    {task.rating.comments && (
-                      <p className='text-sm text-gray-700 mt-2 whitespace-pre-wrap'>{task.rating.comments}</p>
-                    )}
-                    {task.rating.ratedBy && (
-                      <p className='text-xs text-gray-500 mt-2'>
-                        Rated by {task.rating.ratedBy?.name || 'Manager'}
-                        {task.rating.ratedAt ? ` · ${fmtDateTime(task.rating.ratedAt)}` : ''}
-                      </p>
-                    )}
-                  </div>
-                )}
 
                 <div className='mb-4'>
                   <p className='text-xs font-medium text-gray-500 mb-2'>

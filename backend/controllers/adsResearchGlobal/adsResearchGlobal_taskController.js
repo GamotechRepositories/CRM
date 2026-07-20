@@ -10,6 +10,7 @@ import { normalizeTaskPayload } from '../../utils/normalizeTaskPayload.js';
 import { createNotificationService } from '../../utils/notificationService.js';
 import { runTaskNotificationSideEffects } from '../../utils/taskNotificationHooks.js';
 import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../utils/taskTiming.js';
+import { applyAutoTaskStarRating } from '../../utils/applyAutoTaskStarRating.js';
 import { assertValidTaskSchedule } from '../../utils/validateTaskSchedule.js';
 import { normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 
@@ -302,7 +303,7 @@ export const getTaskById = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id).select(
-      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes'
+      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt completedAt'
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
@@ -348,11 +349,16 @@ export const updateTask = async (req, res) => {
       await assertEmployeeAvailableForTask(Task, nextAssignee, req.params.id);
     }
 
-    if (nextStatus === 'Completed' && existing.status !== 'Completed') {
-      payload.completedAt = payload.completedAt || new Date();
-    } else if (nextStatus !== 'Completed' && existing.status === 'Completed') {
-      payload.completedAt = null;
-    }
+    const ratingProvidedInRequest = Object.prototype.hasOwnProperty.call(req.body || {}, 'rating');
+    Object.assign(
+      payload,
+      applyAutoTaskStarRating({
+        existing,
+        payload,
+        nextStatus,
+        ratingProvidedInRequest,
+      })
+    );
 
     const updated = await Task.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true })
       .populate('project')

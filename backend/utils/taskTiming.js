@@ -19,7 +19,15 @@ export const applyTaskStatusTiming = ({ existingStatus, nextStatus, payload = {}
 
   if (nextStatus === 'In Progress' && existingStatus !== 'In Progress') {
     result.startedAt = result.startedAt || new Date();
+  } else if (nextStatus === 'Completed') {
+    // Keep startedAt so completion duration (and auto star rating) can be computed.
+    // If the task was never marked In Progress, start the clock now.
+    if (!result.startedAt) {
+      // Leave undefined so existing DB startedAt is preserved by $set omission;
+      // callers should merge existing.startedAt when auto-rating.
+    }
   } else if (nextStatus !== 'In Progress') {
+    // Pending / Cancelled — clear active timer
     result.startedAt = null;
   }
 

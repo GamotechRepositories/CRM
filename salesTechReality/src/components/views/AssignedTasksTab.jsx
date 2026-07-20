@@ -249,10 +249,15 @@ const AssignedTasksTab = () => {
                     </td>
                     <td className='px-4 py-3 text-gray-600 whitespace-nowrap'>{formatDate(task.dueDate)}</td>
                     <td className='px-4 py-3'>
-                      {task.rating?.score ? (
-                        <span className='text-amber-500 font-semibold'>★ {task.rating.score}/5</span>
+                      {task.status !== 'Completed' ? (
+                        <span title='Not completed'>❌</span>
+                      ) : task.rating?.score ? (
+                        <span className='text-amber-500 font-semibold' title={task.rating?.auto ? 'Auto-rated from completion time' : 'Manager rating'}>
+                          ★ {task.rating.score}/5
+                          {task.rating?.auto ? <span className='text-xs text-gray-500 font-normal ml-1'>auto</span> : null}
+                        </span>
                       ) : (
-                        <span className='text-xs text-gray-400'>Not rated</span>
+                        <span className='text-gray-400'>—</span>
                       )}
                     </td>
                   </tr>

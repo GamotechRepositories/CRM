@@ -38,7 +38,7 @@ export const normalizeTaskPayload = (body = {}) => {
 
   if (normalized.rating !== undefined) {
     if (normalized.rating === null) {
-      normalized.rating = { score: null, comments: '', ratedBy: null, ratedAt: null };
+      normalized.rating = { score: null, comments: '', ratedBy: null, ratedAt: null, auto: false };
     } else if (typeof normalized.rating === 'object') {
       const score = Number(normalized.rating.score);
       normalized.rating = {
@@ -46,6 +46,7 @@ export const normalizeTaskPayload = (body = {}) => {
         comments: String(normalized.rating.comments || '').trim(),
         ratedBy: normalized.rating.ratedBy || null,
         ratedAt: normalized.rating.ratedAt || (Number.isFinite(score) ? new Date() : null),
+        auto: Boolean(normalized.rating.auto),
       };
     }
   }
