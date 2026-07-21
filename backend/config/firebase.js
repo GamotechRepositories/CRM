@@ -1,4 +1,5 @@
 import admin from 'firebase-admin';
+import { getMessaging as getFirebaseMessaging } from 'firebase-admin/messaging';
 import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -106,11 +107,19 @@ export function getFirebaseInitStatus() {
 }
 
 /**
- * @returns {admin.messaging.Messaging | null}
+ * Firebase Cloud Messaging client (firebase-admin v14 modular API).
+ * @returns {import('firebase-admin/messaging').Messaging | null}
  */
 export function getMessaging() {
   const app = getFirebaseAdmin();
-  return app ? app.messaging() : null;
+  if (!app) return null;
+
+  // v14+: app.messaging() is no longer available on the App instance.
+  if (typeof app.messaging === 'function') {
+    return app.messaging();
+  }
+
+  return getFirebaseMessaging(app);
 }
 
 export default getFirebaseAdmin;

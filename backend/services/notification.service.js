@@ -153,7 +153,11 @@ class NotificationService {
         });
       } catch (error) {
         failureCount += batch.length;
-        logger.notificationFailed({ error: error?.message, batch: batch.length });
+        logger.notificationFailed({
+          error: error?.message || String(error),
+          code: error?.code || error?.errorInfo?.code,
+          batch: batch.length,
+        });
       }
     }
 
