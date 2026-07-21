@@ -5,6 +5,7 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../core/config/env_config.dart';
 import '../core/utils/logger.dart';
 
+/// Live meeting-list sync via Socket.IO (`meetings:changed`).
 class MeetingRealtimeService {
   MeetingRealtimeService._();
   static final MeetingRealtimeService instance = MeetingRealtimeService._();
@@ -15,22 +16,31 @@ class MeetingRealtimeService {
 
   Stream<Map<String, dynamic>> get changes => _changes.stream;
 
+  bool get isConnected => _socket?.connected == true;
+
   void connect({required String userId}) {
-    if (userId.trim().isEmpty) return;
-    if (_connectedUserId == userId && _socket?.connected == true) return;
+    final trimmed = userId.trim();
+    if (trimmed.isEmpty) return;
+    if (_connectedUserId == trimmed && isConnected) return;
 
     disconnect();
-    _connectedUserId = userId;
+    _connectedUserId = trimmed;
+
+    final host = EnvConfig.apiHost.trim();
+    AppLogger.info('Connecting meetings socket → $host', tag: 'Socket');
 
     final socket = io.io(
-      EnvConfig.apiHost,
+      host,
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(['websocket', 'polling'])
+          .setPath('/socket.io')
           .disableAutoConnect()
           .enableReconnection()
-          .setReconnectionAttempts(20)
-          .setReconnectionDelay(1500)
-          .setQuery({'userId': userId})
+          .setReconnectionAttempts(50)
+          .setReconnectionDelay(1200)
+          .setAuth({'userId': trimmed})
+          .setQuery({'userId': trimmed})
+          .enableForceNew()
           .build(),
     );
 
@@ -46,7 +56,11 @@ class MeetingRealtimeService {
     socket.onError((error) {
       AppLogger.warning('Meetings socket error: $error', tag: 'Socket');
     });
+    socket.onReconnect((_) {
+      AppLogger.info('Meetings socket reconnected', tag: 'Socket');
+    });
     socket.on('meetings:changed', (payload) {
+      AppLogger.info('meetings:changed received · $payload', tag: 'Socket');
       if (payload is Map) {
         _changes.add(Map<String, dynamic>.from(payload));
       } else {
@@ -60,7 +74,10 @@ class MeetingRealtimeService {
 
   void disconnect() {
     _connectedUserId = null;
-    _socket?.dispose();
+    try {
+      _socket?.disconnect();
+      _socket?.dispose();
+    } catch (_) {}
     _socket = null;
   }
 }

@@ -92,6 +92,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Keep Socket.IO connected for live meeting updates across all tabs.
+    ref.watch(meetingRealtimeSyncProvider);
+
     final permissions = ref.watch(permissionSetProvider);
     final visible = ShellNavCatalog.visibleFor(permissions.can);
     final user = ref.watch(authSessionProvider).session?.user;

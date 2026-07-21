@@ -177,14 +177,28 @@ cleanupOrphanTokens().catch((e) =>
 // Server start
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  path: '/socket.io',
   cors: {
-    origin: corsOptions.origin,
-    methods: corsOptions.methods,
+    // Mobile apps often send no Origin — allow those + configured web origins.
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowed = Array.isArray(corsOptions.origin)
+        ? corsOptions.origin
+        : DEFAULT_CORS_ORIGINS;
+      if (allowed.includes(origin) || corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
 });
 bindSocketServer(io);
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Socket.IO ready at /socket.io`);
 });

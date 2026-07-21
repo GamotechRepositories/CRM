@@ -73,16 +73,16 @@ const toApi = (doc) => {
   };
 };
 
-async function emitRealtimeMeetingChange(action, meeting) {
+function emitRealtimeMeetingChange(action, meeting) {
   try {
-    const users = await CentralAdminUser.find({ status: 'Active' }).select('_id').lean();
-    emitMeetingChange(
-      users.map((u) => String(u._id)),
-      {
-        action,
-        meetingId: meeting?._id ? String(meeting._id) : meeting?.id ? String(meeting.id) : undefined,
-      },
-    );
+    emitMeetingChange([], {
+      action,
+      meetingId: meeting?._id
+        ? String(meeting._id)
+        : meeting?.id
+          ? String(meeting.id)
+          : undefined,
+    });
   } catch (_error) {
     // Real-time sync is best-effort; API response should not fail because of socket issues.
   }
