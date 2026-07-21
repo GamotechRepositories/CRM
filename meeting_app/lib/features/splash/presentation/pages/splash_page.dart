@@ -11,6 +11,7 @@ import '../../../../shared/widgets/loading/lottie_loading.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/states/auth_session_state.dart';
 import '../../../auth/presentation/widgets/auth_hero_logo.dart';
+import '../../../../services/notification_service.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -36,6 +37,10 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     final auth = ref.read(authSessionProvider);
     if (auth.status == AuthSessionStatus.authenticated) {
+      await NotificationService.instance.syncDeviceTokenAfterLogin();
+      if (!mounted) return;
+      await NotificationService.instance.handleInitialMessage();
+      if (!mounted) return;
       final permissions = ref.read(permissionSetProvider);
       context.go(ShellNavCatalog.homeLocation(permissions.can));
     } else {

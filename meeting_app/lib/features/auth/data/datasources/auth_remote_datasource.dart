@@ -75,6 +75,12 @@ class AuthRemoteDataSource {
       );
     }
 
+    final employeeRole = isRoot
+        ? EmployeeRole.boss
+        : role == 'Meeting Coordinator'
+            ? EmployeeRole.meetingCoordinator
+            : EmployeeRole.executiveAssistant;
+
     return AuthUser(
       id: id,
       mobileNumber: phone.isEmpty ? '0000000000' : phone,
@@ -82,8 +88,7 @@ class AuthRemoteDataSource {
       email: (json['email'] as String?)?.trim().toLowerCase(),
       appRole: isRoot ? AppRole.boss : AppRole.member,
       employeeId: id,
-      employeeRole:
-          isRoot ? EmployeeRole.boss : EmployeeRole.executiveAssistant,
+      employeeRole: employeeRole,
       homeCompanyId: 'central',
       roleLabel: isRoot ? 'Boss' : (role.isEmpty ? 'Team' : role),
       tenants: tenants,

@@ -5,12 +5,14 @@ import 'package:meeting_app/core/rbac/system_role.dart';
 
 void main() {
   group('Simplified RBAC', () {
-    test('Boss is view-only for meetings', () {
+    test('Boss can view meetings and respond / request reschedule', () {
       final set = PermissionSet.forRole(SystemRole.boss);
       expect(set.can(AppPermission.viewDashboard), isTrue);
       expect(set.can(AppPermission.viewMeetings), isTrue);
       expect(set.can(AppPermission.viewMeetingsNav), isTrue);
       expect(set.canCreateMeeting, isFalse);
+      expect(set.can(AppPermission.acceptDeclineInvitation), isTrue);
+      expect(set.can(AppPermission.rescheduleMeeting), isTrue);
       expect(set.can(AppPermission.switchCompany), isFalse);
     });
 
@@ -21,6 +23,17 @@ void main() {
       expect(set.can(AppPermission.deleteOwnMeeting), isTrue);
       expect(set.can(AppPermission.editAnyMeeting), isFalse);
       expect(set.can(AppPermission.switchCompany), isFalse);
+    });
+
+    test('Meeting Coordinator has Boss-like UI and can approve', () {
+      final set = PermissionSet.forRole(SystemRole.meetingCoordinator);
+      expect(set.usesBossScheduleUi, isTrue);
+      expect(set.isBoss, isFalse);
+      expect(set.isMeetingCoordinator, isTrue);
+      expect(set.canCreateMeeting, isTrue);
+      expect(set.canApproveMeeting, isTrue);
+      expect(set.can(AppPermission.rescheduleMeeting), isTrue);
+      expect(set.can(AppPermission.acceptDeclineInvitation), isTrue);
     });
 
     test('Boss can view any meeting; team only own', () {

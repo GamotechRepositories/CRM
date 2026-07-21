@@ -76,6 +76,7 @@ class EmployeeRoleChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (role) {
       EmployeeRole.boss => const Color(0xFF7C3AED),
+      EmployeeRole.meetingCoordinator => const Color(0xFFB45309),
       EmployeeRole.executiveAssistant => const Color(0xFF0369A1),
       EmployeeRole.manager => const Color(0xFF0F766E),
       EmployeeRole.teamLead => const Color(0xFFC2410C),

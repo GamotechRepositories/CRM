@@ -33,6 +33,17 @@ class PermissionSet extends Equatable {
   bool get canCreateMeeting =>
       can(AppPermission.createMeeting) || can(AppPermission.createTeamMeeting);
 
+  /// True CEO / Boss account (not Meeting Coordinator).
+  bool get isBoss => role == SystemRole.boss;
+
+  /// Meeting Coordinator — reviews before Boss sees the meeting.
+  bool get isMeetingCoordinator => role == SystemRole.meetingCoordinator;
+
+  /// Boss schedule layout (home / list / details actions).
+  bool get usesBossScheduleUi => isBoss || isMeetingCoordinator;
+
+  bool get canApproveMeeting => can(AppPermission.approveMeeting);
+
   bool get canEditSomeMeeting =>
       can(AppPermission.editAnyMeeting) ||
       can(AppPermission.editOwnMeeting) ||
@@ -68,8 +79,9 @@ extension MeetingPermissionX on PermissionSet {
   }) {
     if (!can(AppPermission.viewMeetings)) return false;
 
-    // Boss (view-only): sees every meeting scheduled for them.
-    if (!canCreateMeeting) return true;
+    // Boss + Meeting Coordinator see the full schedule (Boss list is
+    // filtered to approved meetings in the controller).
+    if (usesBossScheduleUi) return true;
 
     // Team members: meetings they created (for the Boss).
     if (meeting.createdByUserId == currentUserId) return true;
@@ -81,8 +93,18 @@ extension MeetingPermissionX on PermissionSet {
     required String currentUserId,
     required MeetingAccessContext meeting,
   }) {
-    return can(AppPermission.acceptDeclineInvitation) &&
-        meeting.participantIds.contains(currentUserId);
+    if (!can(AppPermission.acceptDeclineInvitation)) return false;
+    if (usesBossScheduleUi) return true;
+    return meeting.participantIds.contains(currentUserId);
+  }
+
+  bool canRequestReschedule({
+    required String currentUserId,
+    required MeetingAccessContext meeting,
+  }) {
+    if (!can(AppPermission.rescheduleMeeting)) return false;
+    if (usesBossScheduleUi) return true;
+    return canEditMeeting(currentUserId: currentUserId, meeting: meeting);
   }
 
   bool canEditMeeting({

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/extensions/context_extensions.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../services/notification_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -55,6 +56,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
 
     await ref.read(authSessionProvider.notifier).refreshFromSession();
+    if (!mounted) return;
+    await NotificationService.instance.syncDeviceTokenAfterLogin();
     if (!mounted) return;
     context.go(RoutePaths.dashboard);
   }

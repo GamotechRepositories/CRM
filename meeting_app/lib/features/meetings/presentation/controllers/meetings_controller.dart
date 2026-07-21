@@ -50,10 +50,26 @@ class MeetingsController extends StateNotifier<MeetingsState> {
     if (userId == null) return const [];
 
     return meetings.where((meeting) {
-      return _permissions.canViewMeeting(
+      if (!_permissions.canViewMeeting(
         currentUserId: userId,
         meeting: _accessContext(meeting),
-      );
+      )) {
+        return false;
+      }
+      // Boss only sees meetings approved by Meeting Coordinator.
+      if (_permissions.isBoss &&
+          meeting.coordinatorApproval != CoordinatorApproval.approved) {
+        return false;
+      }
+      // Rejected drafts are hidden from Boss (already) and from create-team
+      // members who didn't create them; coordinator still sees them.
+      if (!_permissions.isMeetingCoordinator &&
+          !_permissions.isBoss &&
+          meeting.coordinatorApproval == CoordinatorApproval.rejected &&
+          meeting.createdByUserId != userId) {
+        return false;
+      }
+      return true;
     }).toList();
   }
 
@@ -150,13 +166,149 @@ class MeetingsController extends StateNotifier<MeetingsState> {
       return false;
     }
 
+    final now = DateTime.now();
     final participants = meeting.participants.map((p) {
-      if (p.userId == userId) return p.copyWith(response: response);
+      if (p.userId == userId || p.userId == meeting.bossId) {
+        return p.copyWith(response: response);
+      }
       return p;
     }).toList();
 
+    // Boss RSVP is stored on dedicated fields (also mirrored in participants).
     return _persistUpdate(
-      meeting.copyWith(participants: participants, updatedAt: DateTime.now()),
+      meeting.copyWith(
+        participants: participants,
+        bossResponse: response,
+        bossResponseAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
+
+  /// Boss asks the team to move this meeting to a preferred slot.
+  Future<bool> requestReschedule({
+    required Meeting meeting,
+    required DateTime preferredStart,
+    required DateTime preferredEnd,
+    String reason = '',
+  }) async {
+    final userId = _currentUserId;
+    if (userId == null) return false;
+    if (!_permissions.canRequestReschedule(
+      currentUserId: userId,
+      meeting: _accessContext(meeting),
+    )) {
+      state = state.copyWith(errorMessage: 'Cannot request reschedule');
+      return false;
+    }
+
+    final now = DateTime.now();
+    return _persistUpdate(
+      meeting.copyWith(
+        rescheduleRequested: true,
+        reschedulePreferredStartAt: preferredStart,
+        reschedulePreferredEndAt: preferredEnd,
+        rescheduleReason: reason.trim(),
+        rescheduleRequestedAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
+
+  Future<bool> clearRescheduleRequest(Meeting meeting) async {
+    final userId = _currentUserId;
+    if (userId == null) return false;
+    if (!_permissions.canRequestReschedule(
+      currentUserId: userId,
+      meeting: _accessContext(meeting),
+    )) {
+      return false;
+    }
+    return _persistUpdate(
+      meeting.copyWith(
+        rescheduleRequested: false,
+        rescheduleReason: '',
+        clearReschedulePreferred: true,
+        clearRescheduleRequestedAt: true,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<bool> setBossMarkedImportant({
+    required Meeting meeting,
+    required bool important,
+  }) async {
+    if (!_permissions.isBoss) {
+      state = state.copyWith(errorMessage: 'Only Boss can mark importance');
+      return false;
+    }
+    return _persistUpdate(
+      meeting.copyWith(
+        bossMarkedImportant: important,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<bool> saveBossPersonalNote({
+    required Meeting meeting,
+    required String note,
+  }) async {
+    if (!_permissions.isBoss) {
+      state = state.copyWith(errorMessage: 'Only Boss can add this note');
+      return false;
+    }
+    return _persistUpdate(
+      meeting.copyWith(
+        bossPersonalNote: note.trim(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  /// Meeting Coordinator sends the meeting to the Boss schedule.
+  Future<bool> approveForBoss({
+    required Meeting meeting,
+    required String approverId,
+    required String approverName,
+  }) async {
+    if (!_permissions.canApproveMeeting) {
+      state = state.copyWith(errorMessage: 'Only Meeting Coordinator can approve');
+      return false;
+    }
+    final now = DateTime.now();
+    return _persistUpdate(
+      meeting.copyWith(
+        coordinatorApproval: CoordinatorApproval.approved,
+        approvedById: approverId,
+        approvedByName: approverName,
+        approvedAt: now,
+        rejectionReason: '',
+        updatedAt: now,
+      ),
+    );
+  }
+
+  Future<bool> rejectMeeting({
+    required Meeting meeting,
+    required String approverId,
+    required String approverName,
+    String reason = '',
+  }) async {
+    if (!_permissions.canApproveMeeting) {
+      state = state.copyWith(errorMessage: 'Only Meeting Coordinator can reject');
+      return false;
+    }
+    return _persistUpdate(
+      meeting.copyWith(
+        coordinatorApproval: CoordinatorApproval.rejected,
+        approvedById: approverId,
+        approvedByName: approverName,
+        clearApprovedAt: true,
+        rejectionReason: reason.trim(),
+        updatedAt: DateTime.now(),
+      ),
     );
   }
 
@@ -225,10 +377,14 @@ class MeetingsController extends StateNotifier<MeetingsState> {
     state = state.copyWith(isMutating: true, clearError: true);
     final result = await _repository.update(meeting);
     return switch (result) {
-      Success() => () {
-        final next =
-            state.meetings.map((m) => m.id == meeting.id ? meeting : m).toList()
-              ..sort((a, b) => a.startAt.compareTo(b.startAt));
+      Success(:final data) => () {
+        final saved = data;
+        final mapped = state.meetings
+            .map((m) => m.id == saved.id ? saved : m)
+            .toList();
+        final has = mapped.any((m) => m.id == saved.id);
+        final next = has ? mapped : [...mapped, saved];
+        next.sort((a, b) => a.startAt.compareTo(b.startAt));
         state = state.copyWith(
           isMutating: false,
           meetings: next,

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/error/result.dart';
 import '../../../../core/extensions/context_extensions.dart';
+import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -15,7 +16,9 @@ import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../../../shared/widgets/loading/loading_overlay.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/meeting.dart';
+import '../../domain/meeting_schedule_rules.dart';
 import '../providers/meeting_providers.dart';
+import '../states/meetings_state.dart';
 
 /// Team member schedules a meeting for the Boss.
 class MeetingFormPage extends ConsumerStatefulWidget {
@@ -46,6 +49,7 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
   bool _loading = false;
   bool _saving = false;
   String _bossName = 'Boss';
+  String? _scheduleHint;
 
   @override
   void initState() {
@@ -78,7 +82,11 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
         }
       }
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (!mounted) return;
+    await ref.read(meetingsControllerProvider.notifier).load(null);
+    if (!mounted) return;
+    setState(() => _loading = false);
+    _refreshScheduleHint();
   }
 
   @override
@@ -225,6 +233,48 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
                   ),
                 ],
               ).animate().fadeIn(delay: 160.ms).slideY(begin: 0.02, end: 0),
+              if (_scheduleHint != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: AppRadius.mdAll,
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _scheduleHint!,
+                          style: context.textTheme.bodySmall?.copyWith(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                'Past times and overlapping slots are not allowed.',
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'Details',
@@ -297,17 +347,32 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
     );
   }
 
+  List<Meeting> get _knownMeetings =>
+      ref.read(meetingsControllerProvider).meetings;
+
+  void _refreshScheduleHint() {
+    final error = MeetingScheduleRules.validateSlot(
+      start: _startAt,
+      end: _endAt,
+      existing: _knownMeetings,
+      excludeMeetingId: _existing?.id,
+    );
+    setState(() => _scheduleHint = error);
+  }
+
   Future<void> _pickDateTime({required bool isStart}) async {
     final initial = isStart ? _startAt : _endAt;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     // Avoid nested TextScaler.clamp crash inside Material date/time pickers
     // when the app already clamps text scaling.
     final rootContext = Navigator.of(context, rootNavigator: true).context;
 
     final date = await showDatePicker(
       context: rootContext,
-      initialDate: initial,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: initial.isBefore(today) ? today : initial,
+      firstDate: today,
+      lastDate: now.add(const Duration(days: 365)),
       helpText: isStart ? 'Select start date' : 'Select end date',
       builder: (context, child) {
         return MediaQuery(
@@ -321,7 +386,9 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: rootContext,
-      initialTime: TimeOfDay.fromDateTime(initial),
+      initialTime: TimeOfDay.fromDateTime(
+        initial.isBefore(now) ? now.add(const Duration(hours: 1)) : initial,
+      ),
       helpText: isStart ? 'Select start time' : 'Select end time',
       builder: (context, child) {
         return MediaQuery(
@@ -333,13 +400,30 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
       },
     );
     if (time == null || !mounted) return;
-    final next = DateTime(
+    var next = DateTime(
       date.year,
       date.month,
       date.day,
       time.hour,
       time.minute,
     );
+
+    if (isStart && MeetingScheduleRules.isInThePast(next, now: now)) {
+      context.showAppSnackBar(
+        'Cannot pick a past time. Choose a future slot.',
+        isError: true,
+      );
+      return;
+    }
+
+    if (!isStart && !next.isAfter(_startAt)) {
+      context.showAppSnackBar(
+        'End time must be after start time',
+        isError: true,
+      );
+      next = _startAt.add(const Duration(hours: 1));
+    }
+
     setState(() {
       if (isStart) {
         _startAt = next;
@@ -347,21 +431,43 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
           _endAt = _startAt.add(const Duration(hours: 1));
         }
       } else {
-        _endAt = next.isAfter(_startAt)
-            ? next
-            : _startAt.add(const Duration(hours: 1));
+        _endAt = next;
       }
     });
+    _refreshScheduleHint();
+  }
+
+  Future<void> _ensureMeetingsLoaded() async {
+    final state = ref.read(meetingsControllerProvider);
+    if (state.status == MeetingsStatus.success && state.meetings.isNotEmpty) {
+      return;
+    }
+    await ref.read(meetingsControllerProvider.notifier).load(null);
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (!_endAt.isAfter(_startAt)) {
-      context.showAppSnackBar('End time must be after start time', isError: true);
+
+    await _ensureMeetingsLoaded();
+    if (!mounted) return;
+
+    final scheduleError = MeetingScheduleRules.validateSlot(
+      start: _startAt,
+      end: _endAt,
+      existing: _knownMeetings,
+      excludeMeetingId: _existing?.id,
+    );
+    if (scheduleError != null) {
+      setState(() => _scheduleHint = scheduleError);
+      context.showAppSnackBar(scheduleError, isError: true);
       return;
     }
+
     final user = ref.read(authSessionProvider).session?.user;
     if (user == null) return;
+
+    final permissions = ref.read(permissionSetProvider);
+    final createdByCoordinator = permissions.isMeetingCoordinator;
 
     setState(() => _saving = true);
     final now = DateTime.now();
@@ -392,6 +498,18 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
           ? null
           : _locationController.text.trim(),
       notes: _notesController.text.trim(),
+      coordinatorApproval: _existing?.coordinatorApproval ??
+          (createdByCoordinator
+              ? CoordinatorApproval.approved
+              : CoordinatorApproval.pending),
+      approvedById: _existing?.approvedById ??
+          (createdByCoordinator ? user.id : ''),
+      approvedByName: _existing?.approvedByName ??
+          (createdByCoordinator
+              ? (user.displayName ?? user.email ?? 'Meeting Coordinator')
+              : ''),
+      approvedAt: _existing?.approvedAt ??
+          (createdByCoordinator ? now : null),
       createdAt: _existing?.createdAt ?? now,
       updatedAt: now,
     );
@@ -408,7 +526,11 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
     setState(() => _saving = false);
     if (ok) {
       context.showAppSnackBar(
-        widget.isEditing ? 'Meeting updated' : 'Meeting created for Boss',
+        widget.isEditing
+            ? 'Meeting updated'
+            : createdByCoordinator
+                ? 'Meeting created for Boss'
+                : 'Meeting created — waiting for Meeting Coordinator approval',
       );
       context.pop();
     } else {

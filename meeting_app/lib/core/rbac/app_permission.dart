@@ -38,4 +38,6 @@ enum AppPermission {
   updateMeetingStatus,
   acceptDeclineInvitation,
   joinMeeting,
+  /// Meeting Coordinator can send a draft meeting to the Boss.
+  approveMeeting,
 }

@@ -1,13 +1,21 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 
-enum EmployeeRole { boss, executiveAssistant, manager, teamLead, employee }
+enum EmployeeRole {
+  boss,
+  meetingCoordinator,
+  executiveAssistant,
+  manager,
+  teamLead,
+  employee,
+}
 
 enum EmployeeStatus { active, inactive }
 
 extension EmployeeRoleX on EmployeeRole {
   String get label => switch (this) {
     EmployeeRole.boss => 'Boss',
+    EmployeeRole.meetingCoordinator => 'Meeting Coordinator',
     EmployeeRole.executiveAssistant => 'Executive Assistant',
     EmployeeRole.manager => 'Manager',
     EmployeeRole.teamLead => 'Team Lead',

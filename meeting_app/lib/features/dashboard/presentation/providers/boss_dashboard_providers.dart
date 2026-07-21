@@ -6,11 +6,11 @@ import '../../../meetings/presentation/providers/meeting_providers.dart';
 import '../controllers/boss_dashboard_controller.dart';
 import '../states/boss_dashboard_state.dart';
 
-/// Boss = view-only (cannot create meetings).
+/// Boss + Meeting Coordinator share the schedule dashboard layout.
 final canViewBossDashboardProvider = Provider<bool>((ref) {
   final permissions = ref.watch(permissionSetProvider);
   return permissions.can(AppPermission.viewDashboard) &&
-      !permissions.canCreateMeeting;
+      permissions.usesBossScheduleUi;
 });
 
 /// Kept for legacy BossDashboardView; prefer SimpleMeetingDashboard.

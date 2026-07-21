@@ -23,7 +23,8 @@ import {
   listMeetings,
   updateMeeting,
 } from '../controllers/centralAdminMeetingController.js';
-import { optionalAuth } from '../utils/jwtAuth.js';
+import { registerDevice } from '../controllers/notification.controller.js';
+import { optionalAuth, requireAuth } from '../utils/jwtAuth.js';
 
 const router = Router();
 
@@ -44,6 +45,7 @@ router.patch('/companies/:tenantId/leaves/:leaveId/status', updateTenantLeaveFin
 
 // Meeting app (CEO + create-team members)
 router.use(optionalAuth);
+router.post('/device/register', requireAuth, registerDevice);
 router.get('/boss', getBoss);
 router.get('/meetings', listMeetings);
 router.get('/meetings/:id', getMeetingById);

@@ -205,6 +205,50 @@ class MeetingListCard extends StatelessWidget {
                             label: meeting.priority.label,
                             color: meetingPriorityColor(meeting.priority),
                           ),
+                        if (meeting.bossMarkedImportant)
+                          MeetingTag(
+                            label: 'Important',
+                            color: AppColors.warning,
+                          ),
+                        if (meeting.coordinatorApproval ==
+                            CoordinatorApproval.pending)
+                          MeetingTag(
+                            label: 'Waiting for approval',
+                            color: AppColors.warning,
+                          ),
+                        if (meeting.coordinatorApproval ==
+                            CoordinatorApproval.approved)
+                          MeetingTag(
+                            label: 'Approved',
+                            color: AppColors.success,
+                          ),
+                        if (meeting.coordinatorApproval ==
+                            CoordinatorApproval.rejected)
+                          MeetingTag(
+                            label: 'Rejected',
+                            color: AppColors.error,
+                          ),
+                        if (meeting.rescheduleRequested)
+                          MeetingTag(
+                            label: 'Reschedule',
+                            color: AppColors.warning,
+                          ),
+                        if (meeting.bossResponse == InvitationResponse.accepted)
+                          MeetingTag(
+                            label: 'Boss attending',
+                            color: AppColors.success,
+                          ),
+                        if (meeting.bossResponse == InvitationResponse.declined)
+                          MeetingTag(
+                            label: 'Boss declined',
+                            color: AppColors.error,
+                          ),
+                        if (meeting.bossResponse == InvitationResponse.pending &&
+                            showOrganizer)
+                          MeetingTag(
+                            label: 'Awaiting Boss',
+                            color: AppColors.info,
+                          ),
                       ],
                     ).animate().fadeIn(duration: 220.ms),
                     const SizedBox(height: 8),

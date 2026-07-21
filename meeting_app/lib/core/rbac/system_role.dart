@@ -2,11 +2,19 @@ import '../../features/auth/domain/entities/auth_user.dart';
 import '../../features/employees/domain/entities/employee.dart';
 
 /// Canonical application roles used by RBAC.
-enum SystemRole { boss, executiveAssistant, manager, teamLead, employee }
+enum SystemRole {
+  boss,
+  meetingCoordinator,
+  executiveAssistant,
+  manager,
+  teamLead,
+  employee,
+}
 
 extension SystemRoleX on SystemRole {
   String get label => switch (this) {
     SystemRole.boss => 'Boss',
+    SystemRole.meetingCoordinator => 'Meeting Coordinator',
     SystemRole.executiveAssistant => 'Executive Assistant',
     SystemRole.manager => 'Manager',
     SystemRole.teamLead => 'Team Lead',
@@ -23,6 +31,7 @@ abstract final class RoleResolver {
 
     return switch (user.employeeRole) {
       EmployeeRole.boss => SystemRole.boss,
+      EmployeeRole.meetingCoordinator => SystemRole.meetingCoordinator,
       EmployeeRole.executiveAssistant => SystemRole.executiveAssistant,
       EmployeeRole.manager => SystemRole.manager,
       EmployeeRole.teamLead => SystemRole.teamLead,

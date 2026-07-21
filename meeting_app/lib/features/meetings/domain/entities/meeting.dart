@@ -76,6 +76,21 @@ class Meeting extends Equatable {
     this.actionItems = const [],
     this.teamLeadId,
     this.isTeamMeeting = false,
+    this.bossResponse = InvitationResponse.pending,
+    this.bossResponseNote = '',
+    this.bossResponseAt,
+    this.rescheduleRequested = false,
+    this.reschedulePreferredStartAt,
+    this.reschedulePreferredEndAt,
+    this.rescheduleReason = '',
+    this.rescheduleRequestedAt,
+    this.bossMarkedImportant = false,
+    this.bossPersonalNote = '',
+    this.coordinatorApproval = CoordinatorApproval.approved,
+    this.approvedById = '',
+    this.approvedByName = '',
+    this.approvedAt,
+    this.rejectionReason = '',
   });
 
   final String id;
@@ -104,6 +119,30 @@ class Meeting extends Equatable {
   final List<String> actionItems;
   final String? teamLeadId;
   final bool isTeamMeeting;
+
+  /// Boss RSVP: pending / accepted (will attend) / declined.
+  final InvitationResponse bossResponse;
+  final String bossResponseNote;
+  final DateTime? bossResponseAt;
+
+  /// Boss asked team to move this meeting.
+  final bool rescheduleRequested;
+  final DateTime? reschedulePreferredStartAt;
+  final DateTime? reschedulePreferredEndAt;
+  final String rescheduleReason;
+  final DateTime? rescheduleRequestedAt;
+
+  /// Boss flagged as important + optional note for the team.
+  final bool bossMarkedImportant;
+  final String bossPersonalNote;
+
+  /// Meeting Coordinator must approve before Boss sees this meeting.
+  final CoordinatorApproval coordinatorApproval;
+  final String approvedById;
+  final String approvedByName;
+  final DateTime? approvedAt;
+  final String rejectionReason;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -150,6 +189,25 @@ class Meeting extends Equatable {
     bool? isTeamMeeting,
     DateTime? createdAt,
     DateTime? updatedAt,
+    InvitationResponse? bossResponse,
+    String? bossResponseNote,
+    DateTime? bossResponseAt,
+    bool clearBossResponseAt = false,
+    bool? rescheduleRequested,
+    DateTime? reschedulePreferredStartAt,
+    DateTime? reschedulePreferredEndAt,
+    bool clearReschedulePreferred = false,
+    String? rescheduleReason,
+    DateTime? rescheduleRequestedAt,
+    bool clearRescheduleRequestedAt = false,
+    bool? bossMarkedImportant,
+    String? bossPersonalNote,
+    CoordinatorApproval? coordinatorApproval,
+    String? approvedById,
+    String? approvedByName,
+    DateTime? approvedAt,
+    bool clearApprovedAt = false,
+    String? rejectionReason,
   }) {
     return Meeting(
       id: id ?? this.id,
@@ -179,6 +237,29 @@ class Meeting extends Equatable {
       isTeamMeeting: isTeamMeeting ?? this.isTeamMeeting,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      bossResponse: bossResponse ?? this.bossResponse,
+      bossResponseNote: bossResponseNote ?? this.bossResponseNote,
+      bossResponseAt: clearBossResponseAt
+          ? null
+          : (bossResponseAt ?? this.bossResponseAt),
+      rescheduleRequested: rescheduleRequested ?? this.rescheduleRequested,
+      reschedulePreferredStartAt: clearReschedulePreferred
+          ? null
+          : (reschedulePreferredStartAt ?? this.reschedulePreferredStartAt),
+      reschedulePreferredEndAt: clearReschedulePreferred
+          ? null
+          : (reschedulePreferredEndAt ?? this.reschedulePreferredEndAt),
+      rescheduleReason: rescheduleReason ?? this.rescheduleReason,
+      rescheduleRequestedAt: clearRescheduleRequestedAt
+          ? null
+          : (rescheduleRequestedAt ?? this.rescheduleRequestedAt),
+      bossMarkedImportant: bossMarkedImportant ?? this.bossMarkedImportant,
+      bossPersonalNote: bossPersonalNote ?? this.bossPersonalNote,
+      coordinatorApproval: coordinatorApproval ?? this.coordinatorApproval,
+      approvedById: approvedById ?? this.approvedById,
+      approvedByName: approvedByName ?? this.approvedByName,
+      approvedAt: clearApprovedAt ? null : (approvedAt ?? this.approvedAt),
+      rejectionReason: rejectionReason ?? this.rejectionReason,
     );
   }
 
@@ -211,5 +292,20 @@ class Meeting extends Equatable {
     isTeamMeeting,
     createdAt,
     updatedAt,
+    bossResponse,
+    bossResponseNote,
+    bossResponseAt,
+    rescheduleRequested,
+    reschedulePreferredStartAt,
+    reschedulePreferredEndAt,
+    rescheduleReason,
+    rescheduleRequestedAt,
+    bossMarkedImportant,
+    bossPersonalNote,
+    coordinatorApproval,
+    approvedById,
+    approvedByName,
+    approvedAt,
+    rejectionReason,
   ];
 }

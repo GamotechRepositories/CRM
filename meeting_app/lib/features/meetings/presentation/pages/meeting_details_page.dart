@@ -14,6 +14,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/meeting_link_launcher.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/meeting.dart';
 import '../providers/meeting_providers.dart';
 import '../widgets/meeting_ui.dart';
@@ -30,6 +31,7 @@ class MeetingDetailsPage extends ConsumerStatefulWidget {
 class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   Meeting? _meeting;
   bool _loading = true;
+  bool _busy = false;
   String? _error;
 
   @override
@@ -112,8 +114,10 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
       currentUserId: userId,
       meeting: access,
     );
-    // Boss = view-only (cannot create meetings).
-    final isBossView = !permissions.canCreateMeeting;
+    // Boss = CEO schedule UI. Coordinator = same layout + approve gate.
+    final isBossView = permissions.isBoss;
+    final isCoordinatorView = permissions.isMeetingCoordinator;
+    final usesScheduleUi = permissions.usesBossScheduleUi;
 
     final start = meeting.startAt.toLocal();
     final end = meeting.endAt.toLocal();
@@ -148,7 +152,7 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
       maxContentWidth: 720,
       appBar: AppBar(
         surfaceTintColor: Colors.transparent,
-        title: Text(isBossView ? 'Your meeting' : 'Meeting details'),
+        title: Text(usesScheduleUi ? 'Your meeting' : 'Meeting details'),
         actions: [
           if (canEdit)
             IconButton(
@@ -199,6 +203,27 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
                   color: meetingPriorityColor(meeting.priority),
                 ),
               MeetingTag(label: whenHint, color: AppColors.info),
+              if (meeting.bossMarkedImportant)
+                MeetingTag(label: 'Important', color: AppColors.warning),
+              if (meeting.coordinatorApproval == CoordinatorApproval.pending)
+                MeetingTag(
+                  label: 'Awaiting coordinator',
+                  color: AppColors.warning,
+                ),
+              if (meeting.coordinatorApproval == CoordinatorApproval.rejected)
+                MeetingTag(label: 'Rejected', color: AppColors.error),
+              // Attendance tags only for team — Boss card already shows status.
+              if (!usesScheduleUi &&
+                  meeting.bossResponse == InvitationResponse.accepted)
+                MeetingTag(label: 'Boss attending', color: AppColors.success),
+              if (!usesScheduleUi &&
+                  meeting.bossResponse == InvitationResponse.declined)
+                MeetingTag(label: 'Boss not attending', color: AppColors.error),
+              if (meeting.rescheduleRequested)
+                MeetingTag(
+                  label: 'Reschedule requested',
+                  color: AppColors.warning,
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -284,6 +309,66 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
           ).animate().fadeIn(delay: 80.ms),
           const SizedBox(height: AppSpacing.md),
 
+          if (isCoordinatorView) ...[
+            _CoordinatorActionsCard(
+              meeting: meeting,
+              busy: _busy,
+              readOnly: isPast,
+              onApprove: () => _approveForBoss(meeting),
+              onReject: () => _rejectMeeting(meeting),
+              onRequestReschedule: () => _showRescheduleSheet(meeting),
+              onClearReschedule: meeting.rescheduleRequested
+                  ? () => _clearReschedule(meeting)
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          if (isBossView) ...[
+            _BossActionsCard(
+              key: ValueKey(
+                'boss-actions-${meeting.bossResponse.name}-'
+                '${meeting.rescheduleRequested}-'
+                '${meeting.bossMarkedImportant}-'
+                '${meeting.bossPersonalNote}',
+              ),
+              meeting: meeting,
+              busy: _busy,
+              readOnly: isPast,
+              onAttend: () => _setAttendance(
+                meeting,
+                InvitationResponse.accepted,
+              ),
+              onDecline: () => _setAttendance(
+                meeting,
+                InvitationResponse.declined,
+              ),
+              onRequestReschedule: () => _showRescheduleSheet(meeting),
+              onClearReschedule: meeting.rescheduleRequested
+                  ? () => _clearReschedule(meeting)
+                  : null,
+              onToggleImportant: () => _toggleImportant(meeting),
+              onEditNote: () => _editBossNote(meeting),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
+          if (!usesScheduleUi) ...[
+            _TeamBossFeedbackCard(
+              meeting: meeting,
+              canEdit: canEdit,
+              onEdit: canEdit
+                  ? () async {
+                      await context.push(
+                        RoutePaths.meetingEditPath(meeting.id),
+                      );
+                      _load();
+                    }
+                  : null,
+            ).animate().fadeIn(delay: 90.ms),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
           // WHAT — agenda / notes combined
           _Card(
             child: Column(
@@ -337,7 +422,7 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isBossView ? 'Scheduled by your team' : 'Created by',
+                        usesScheduleUi ? 'Scheduled by your team' : 'Created by',
                         style: context.textTheme.labelMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -363,7 +448,7 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
             ),
           ).animate().fadeIn(delay: 120.ms),
 
-          if (!isBossView && meeting.participants.isNotEmpty) ...[
+          if (!usesScheduleUi && meeting.participants.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.md),
             _Card(
               child: Column(
@@ -417,7 +502,7 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
             ),
           ],
 
-          if (!isBossView) ...[
+          if (!usesScheduleUi) ...[
             const SizedBox(height: AppSpacing.md),
             _Card(
               child: Column(
@@ -527,6 +612,354 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
         isError: true,
       );
     }
+  }
+
+  Future<void> _runBossAction(
+    Meeting Function() optimisticMeeting,
+    Future<bool> Function() action, {
+    required String successMessage,
+  }) async {
+    if (_busy) return;
+    final previous = _meeting;
+    // Instant UI confirmation — don't wait for network.
+    setState(() {
+      _busy = true;
+      _meeting = optimisticMeeting();
+    });
+    final ok = await action();
+    if (!mounted) return;
+    if (ok) {
+      final matches = ref
+          .read(meetingsControllerProvider)
+          .meetings
+          .where((m) => m.id == previous?.id);
+      setState(() {
+        _busy = false;
+        if (matches.isNotEmpty) _meeting = matches.first;
+      });
+      context.showAppSnackBar(successMessage);
+    } else {
+      setState(() {
+        _busy = false;
+        _meeting = previous;
+      });
+      final err =
+          ref.read(meetingsControllerProvider).errorMessage ??
+          'Could not update meeting';
+      context.showAppSnackBar(err, isError: true);
+    }
+  }
+
+  Future<void> _approveForBoss(Meeting meeting) async {
+    final user = ref.read(authSessionProvider).session?.user;
+    if (user == null) return;
+    await _runBossAction(
+      () => meeting.copyWith(
+        coordinatorApproval: CoordinatorApproval.approved,
+        approvedById: user.id,
+        approvedByName: user.displayName ?? user.email ?? 'Coordinator',
+        approvedAt: DateTime.now(),
+        rejectionReason: '',
+        updatedAt: DateTime.now(),
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).approveForBoss(
+        meeting: meeting,
+        approverId: user.id,
+        approverName: user.displayName ?? user.email ?? 'Coordinator',
+      ),
+      successMessage: 'Approved — Boss can now see this meeting',
+    );
+  }
+
+  Future<void> _rejectMeeting(Meeting meeting) async {
+    final user = ref.read(authSessionProvider).session?.user;
+    if (user == null) return;
+    final reasonController = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject meeting?'),
+        content: TextField(
+          controller: reasonController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'Reason (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, reasonController.text),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    reasonController.dispose();
+    if (reason == null || !mounted) return;
+
+    await _runBossAction(
+      () => meeting.copyWith(
+        coordinatorApproval: CoordinatorApproval.rejected,
+        approvedById: user.id,
+        approvedByName: user.displayName ?? user.email ?? 'Coordinator',
+        clearApprovedAt: true,
+        rejectionReason: reason.trim(),
+        updatedAt: DateTime.now(),
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).rejectMeeting(
+        meeting: meeting,
+        approverId: user.id,
+        approverName: user.displayName ?? user.email ?? 'Coordinator',
+        reason: reason,
+      ),
+      successMessage: 'Meeting rejected — Boss will not see it',
+    );
+  }
+
+  Future<void> _setAttendance(
+    Meeting meeting,
+    InvitationResponse response,
+  ) async {
+    final now = DateTime.now();
+    await _runBossAction(
+      () => meeting.copyWith(
+        bossResponse: response,
+        bossResponseAt: now,
+        updatedAt: now,
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).respondToInvitation(
+        meeting: meeting,
+        response: response,
+      ),
+      successMessage: response == InvitationResponse.accepted
+          ? 'Confirmed — you will attend'
+          : 'Confirmed — you will not attend',
+    );
+  }
+
+  Future<void> _toggleImportant(Meeting meeting) async {
+    final next = !meeting.bossMarkedImportant;
+    await _runBossAction(
+      () => meeting.copyWith(
+        bossMarkedImportant: next,
+        updatedAt: DateTime.now(),
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).setBossMarkedImportant(
+        meeting: meeting,
+        important: next,
+      ),
+      successMessage: next ? 'Marked as important' : 'Important flag removed',
+    );
+  }
+
+  Future<void> _clearReschedule(Meeting meeting) async {
+    await _runBossAction(
+      () => meeting.copyWith(
+        rescheduleRequested: false,
+        rescheduleReason: '',
+        clearReschedulePreferred: true,
+        clearRescheduleRequestedAt: true,
+        updatedAt: DateTime.now(),
+      ),
+      () => ref
+          .read(meetingsControllerProvider.notifier)
+          .clearRescheduleRequest(meeting),
+      successMessage: 'Reschedule request cancelled',
+    );
+  }
+
+  Future<void> _editBossNote(Meeting meeting) async {
+    final controller = TextEditingController(text: meeting.bossPersonalNote);
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Note for your team'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Keep this short — I have a hard stop at 4pm',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (saved == null || !mounted) return;
+    await _runBossAction(
+      () => meeting.copyWith(
+        bossPersonalNote: saved.trim(),
+        updatedAt: DateTime.now(),
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).saveBossPersonalNote(
+        meeting: meeting,
+        note: saved,
+      ),
+      successMessage: 'Note saved for your team',
+    );
+  }
+
+  Future<void> _showRescheduleSheet(Meeting meeting) async {
+    var preferredStart = meeting.reschedulePreferredStartAt?.toLocal() ??
+        meeting.startAt.toLocal().add(const Duration(days: 1));
+    var preferredEnd = meeting.reschedulePreferredEndAt?.toLocal() ??
+        preferredStart.add(meeting.endAt.difference(meeting.startAt));
+    final reasonController = TextEditingController(
+      text: meeting.rescheduleReason,
+    );
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 8,
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20,
+          ),
+          child: StatefulBuilder(
+            builder: (ctx, setSheet) {
+              Future<void> pickDateTime({required bool isStart}) async {
+                final initial = isStart ? preferredStart : preferredEnd;
+                final date = await showDatePicker(
+                  context: ctx,
+                  initialDate: initial,
+                  firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date == null || !ctx.mounted) return;
+                final time = await showTimePicker(
+                  context: ctx,
+                  initialTime: TimeOfDay.fromDateTime(initial),
+                );
+                if (time == null || !ctx.mounted) return;
+                final next = DateTime(
+                  date.year,
+                  date.month,
+                  date.day,
+                  time.hour,
+                  time.minute,
+                );
+                setSheet(() {
+                  if (isStart) {
+                    final duration = preferredEnd.difference(preferredStart);
+                    preferredStart = next;
+                    preferredEnd = next.add(
+                      duration.isNegative
+                          ? const Duration(hours: 1)
+                          : duration,
+                    );
+                  } else {
+                    preferredEnd = next.isAfter(preferredStart)
+                        ? next
+                        : preferredStart.add(const Duration(hours: 1));
+                  }
+                });
+              }
+
+              String fmt(DateTime d) =>
+                  DateFormat('EEE, MMM d · h:mm a').format(d);
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Request reschedule',
+                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your team will get a preferred new time and reason.',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event_available_rounded),
+                    title: const Text('Preferred start'),
+                    subtitle: Text(fmt(preferredStart)),
+                    onTap: () => pickDateTime(isStart: true),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event_busy_rounded),
+                    title: const Text('Preferred end'),
+                    subtitle: Text(fmt(preferredEnd)),
+                    onTap: () => pickDateTime(isStart: false),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason (optional)',
+                      hintText: 'e.g. Conflict with investor call',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Send request to team'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    final reason = reasonController.text;
+    reasonController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    await _runBossAction(
+      () => meeting.copyWith(
+        rescheduleRequested: true,
+        reschedulePreferredStartAt: preferredStart,
+        reschedulePreferredEndAt: preferredEnd,
+        rescheduleReason: reason.trim(),
+        rescheduleRequestedAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+      () => ref.read(meetingsControllerProvider.notifier).requestReschedule(
+        meeting: meeting,
+        preferredStart: preferredStart,
+        preferredEnd: preferredEnd,
+        reason: reason,
+      ),
+      successMessage: 'Reschedule request sent to your team',
+    );
   }
 }
 
@@ -677,6 +1110,785 @@ class _MetaRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CoordinatorActionsCard extends StatelessWidget {
+  const _CoordinatorActionsCard({
+    required this.meeting,
+    required this.busy,
+    required this.readOnly,
+    required this.onApprove,
+    required this.onReject,
+    required this.onRequestReschedule,
+    this.onClearReschedule,
+  });
+
+  final Meeting meeting;
+  final bool busy;
+  final bool readOnly;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+  final VoidCallback onRequestReschedule;
+  final VoidCallback? onClearReschedule;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final pending =
+        meeting.coordinatorApproval == CoordinatorApproval.pending;
+    final approved =
+        meeting.coordinatorApproval == CoordinatorApproval.approved;
+    final rejected =
+        meeting.coordinatorApproval == CoordinatorApproval.rejected;
+    final statusColor = approved
+        ? AppColors.success
+        : rejected
+            ? AppColors.error
+            : AppColors.warning;
+
+    return AnimatedContainer(
+      duration: 320.ms,
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Meeting Coordinator review',
+            style: context.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  approved
+                      ? 'Approved — visible to Boss'
+                      : rejected
+                          ? 'Rejected — Boss will not see this'
+                          : 'Waiting for your approval',
+                  style: context.textTheme.titleSmall?.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  approved
+                      ? 'Boss can now see and respond to this meeting.'
+                      : rejected
+                          ? (meeting.rejectionReason.trim().isEmpty
+                              ? 'Ask the team to create a new time if needed.'
+                              : meeting.rejectionReason.trim())
+                          : 'Approve to send this meeting to the Boss schedule. You can also request a reschedule first.',
+                  style: context.textTheme.bodySmall?.copyWith(height: 1.35),
+                ),
+              ],
+            ),
+          ),
+          if (!readOnly && pending) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: busy ? null : onApprove,
+              icon: const Icon(Icons.verified_rounded),
+              label: const Text('Approve for Boss'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.success,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : onReject,
+              icon: const Icon(Icons.block_rounded),
+              label: const Text('Reject'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ],
+          if (!readOnly && rejected) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: busy ? null : onApprove,
+              icon: const Icon(Icons.verified_rounded),
+              label: const Text('Approve anyway for Boss'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.success,
+              ),
+            ),
+          ],
+          if (!readOnly) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Text(
+              'Need a different time?',
+              style: context.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Request a reschedule — same as Boss. Team will update the slot.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy ? null : onRequestReschedule,
+              icon: const Icon(Icons.event_repeat_rounded),
+              label: Text(
+                meeting.rescheduleRequested
+                    ? 'Update reschedule request'
+                    : 'Request reschedule',
+              ),
+            ),
+            if (onClearReschedule != null)
+              TextButton(
+                onPressed: busy ? null : onClearReschedule,
+                child: const Text('Cancel reschedule request'),
+              ),
+          ],
+          if (meeting.rescheduleRequested) ...[
+            const SizedBox(height: 12),
+            Text(
+              [
+                'Reschedule requested',
+                if (meeting.reschedulePreferredStartAt != null)
+                  'Preferred: ${DateFormat('EEE, MMM d · h:mm a').format(meeting.reschedulePreferredStartAt!.toLocal())}',
+                if (meeting.rescheduleReason.trim().isNotEmpty)
+                  meeting.rescheduleReason.trim(),
+              ].join('\n'),
+              style: context.textTheme.bodySmall?.copyWith(
+                color: AppColors.warning,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BossActionsCard extends StatefulWidget {
+  const _BossActionsCard({
+    super.key,
+    required this.meeting,
+    required this.busy,
+    required this.readOnly,
+    required this.onAttend,
+    required this.onDecline,
+    required this.onRequestReschedule,
+    required this.onToggleImportant,
+    required this.onEditNote,
+    this.onClearReschedule,
+  });
+
+  final Meeting meeting;
+  final bool busy;
+  final bool readOnly;
+  final VoidCallback onAttend;
+  final VoidCallback onDecline;
+  final VoidCallback onRequestReschedule;
+  final VoidCallback? onClearReschedule;
+  final VoidCallback onToggleImportant;
+  final VoidCallback onEditNote;
+
+  @override
+  State<_BossActionsCard> createState() => _BossActionsCardState();
+}
+
+class _BossActionsCardState extends State<_BossActionsCard> {
+  bool _changeResponse = false;
+
+  @override
+  void didUpdateWidget(covariant _BossActionsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.meeting.bossResponse != widget.meeting.bossResponse) {
+      _changeResponse = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meeting = widget.meeting;
+    final scheme = context.colorScheme;
+    final attending = meeting.bossResponse == InvitationResponse.accepted;
+    final declining = meeting.bossResponse == InvitationResponse.declined;
+    final pending = meeting.bossResponse == InvitationResponse.pending;
+    final showChoices =
+        !widget.readOnly && (pending || _changeResponse);
+
+    final statusColor = attending
+        ? AppColors.success
+        : declining
+            ? AppColors.error
+            : AppColors.warning;
+
+    return AnimatedContainer(
+      duration: 320.ms,
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: attending
+            ? AppColors.success.withValues(alpha: 0.08)
+            : declining
+                ? AppColors.error.withValues(alpha: 0.08)
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Confirm for your team',
+            style: context.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AnimatedSwitcher(
+            duration: 380.ms,
+            switchInCurve: Curves.easeOutBack,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.92, end: 1).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: _ConfirmedBanner(
+              key: ValueKey(meeting.bossResponse.name),
+              attending: attending,
+              declining: declining,
+              pending: pending,
+              statusColor: statusColor,
+            ),
+          ),
+          AnimatedSize(
+            duration: 280.ms,
+            curve: Curves.easeOutCubic,
+            child: showChoices
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 14),
+                      Text(
+                        pending
+                            ? 'Will you join this meeting?'
+                            : 'Change your reply',
+                        style: context.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: widget.busy ? null : widget.onAttend,
+                        icon: const Icon(Icons.check_rounded),
+                        label: const Text('Yes, I will attend'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: scheme.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: widget.busy ? null : widget.onDecline,
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('No, I cannot attend'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                      if (_changeResponse) ...[
+                        const SizedBox(height: 4),
+                        TextButton(
+                          onPressed: widget.busy
+                              ? null
+                              : () => setState(() => _changeResponse = false),
+                          child: const Text('Keep current reply'),
+                        ),
+                      ],
+                    ],
+                  )
+                : (!widget.readOnly && !pending
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: TextButton.icon(
+                          onPressed: widget.busy
+                              ? null
+                              : () => setState(() => _changeResponse = true),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Change my reply'),
+                        ),
+                      )
+                    : const SizedBox.shrink()),
+          ),
+          if (!widget.readOnly) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Text(
+              'Need a different time?',
+              style: context.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ask your team to move this meeting.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: widget.busy ? null : widget.onRequestReschedule,
+              icon: const Icon(Icons.event_repeat_rounded),
+              label: Text(
+                meeting.rescheduleRequested
+                    ? 'Update reschedule request'
+                    : 'Request reschedule',
+              ),
+            ),
+            if (widget.onClearReschedule != null) ...[
+              TextButton(
+                onPressed: widget.busy ? null : widget.onClearReschedule,
+                child: const Text('Cancel reschedule request'),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              'Extra for your team (optional)',
+              style: context.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: widget.busy ? null : widget.onToggleImportant,
+                    icon: Icon(
+                      meeting.bossMarkedImportant
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                    ),
+                    label: Text(
+                      meeting.bossMarkedImportant
+                          ? 'Important'
+                          : 'Mark important',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: widget.busy ? null : widget.onEditNote,
+                    icon: const Icon(Icons.sticky_note_2_outlined),
+                    label: Text(
+                      meeting.bossPersonalNote.trim().isEmpty
+                          ? 'Add note'
+                          : 'Edit note',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (meeting.bossPersonalNote.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Your note',
+              style: context.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              meeting.bossPersonalNote.trim(),
+              style: context.textTheme.bodyMedium?.copyWith(
+                fontStyle: FontStyle.italic,
+                height: 1.4,
+              ),
+            ),
+          ],
+          if (meeting.rescheduleRequested) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Reschedule request sent',
+                    style: context.textTheme.labelLarge?.copyWith(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (meeting.reschedulePreferredStartAt != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Preferred: ${DateFormat('EEE, MMM d · h:mm a').format(meeting.reschedulePreferredStartAt!.toLocal())}'
+                      '${meeting.reschedulePreferredEndAt != null ? ' – ${DateFormat('h:mm a').format(meeting.reschedulePreferredEndAt!.toLocal())}' : ''}',
+                      style: context.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (meeting.rescheduleReason.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      meeting.rescheduleReason.trim(),
+                      style: context.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfirmedBanner extends StatelessWidget {
+  const _ConfirmedBanner({
+    super.key,
+    required this.attending,
+    required this.declining,
+    required this.pending,
+    required this.statusColor,
+  });
+
+  final bool attending;
+  final bool declining;
+  final bool pending;
+  final Color statusColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final icon = attending
+        ? Icons.check_circle_rounded
+        : declining
+            ? Icons.cancel_rounded
+            : Icons.mark_email_unread_outlined;
+    final title = attending
+        ? 'Confirmed — you will attend'
+        : declining
+            ? 'Confirmed — you will not attend'
+            : 'Waiting for your reply';
+    final subtitle = attending
+        ? 'Your team can already see this confirmation.'
+        : declining
+            ? 'Your team can see you declined this meeting.'
+            : 'Choose Yes or No below. Your scheduler will see it.';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: statusColor, size: 36)
+              .animate(target: attending || declining ? 1 : 0)
+              .scale(
+                begin: const Offset(0.6, 0.6),
+                end: const Offset(1, 1),
+                duration: 420.ms,
+                curve: Curves.easeOutBack,
+              ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: context.textTheme.titleSmall?.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurface,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamBossFeedbackCard extends StatelessWidget {
+  const _TeamBossFeedbackCard({
+    required this.meeting,
+    this.canEdit = false,
+    this.onEdit,
+  });
+
+  final Meeting meeting;
+  final bool canEdit;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final attending = meeting.bossResponse == InvitationResponse.accepted;
+    final declining = meeting.bossResponse == InvitationResponse.declined;
+    final pending = meeting.bossResponse == InvitationResponse.pending;
+    final needsAction = meeting.rescheduleRequested || declining;
+
+    final accent = meeting.rescheduleRequested
+        ? AppColors.warning
+        : declining
+            ? AppColors.error
+            : attending
+                ? AppColors.success
+                : AppColors.info;
+
+    final attendanceLabel = switch (meeting.bossResponse) {
+      InvitationResponse.accepted => 'Boss confirmed: WILL ATTEND',
+      InvitationResponse.declined => 'Boss confirmed: WILL NOT ATTEND',
+      InvitationResponse.pending => 'Boss has not replied yet',
+    };
+    final attendanceHint = switch (meeting.bossResponse) {
+      InvitationResponse.accepted =>
+        'Boss is coming. Keep the meeting as scheduled unless something changes.',
+      InvitationResponse.declined =>
+        'Boss cannot join. Cancel this meeting or pick a new time.',
+      InvitationResponse.pending =>
+        'Waiting for Boss to confirm attendance on their app.',
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.campaign_rounded, color: accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Boss response',
+                  style: context.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (needsAction)
+                MeetingTag(label: 'Action needed', color: accent),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Updates from Boss for the meeting you scheduled.',
+            style: context.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _FeedbackRow(
+            icon: meeting.coordinatorApproval == CoordinatorApproval.approved
+                ? Icons.verified_rounded
+                : meeting.coordinatorApproval == CoordinatorApproval.rejected
+                    ? Icons.block_rounded
+                    : Icons.hourglass_top_rounded,
+            color: meeting.coordinatorApproval == CoordinatorApproval.approved
+                ? AppColors.success
+                : meeting.coordinatorApproval == CoordinatorApproval.rejected
+                    ? AppColors.error
+                    : AppColors.warning,
+            title: switch (meeting.coordinatorApproval) {
+              CoordinatorApproval.approved => 'Coordinator approved for Boss',
+              CoordinatorApproval.rejected => 'Coordinator rejected',
+              CoordinatorApproval.pending =>
+                'Waiting for Meeting Coordinator approval',
+            },
+            subtitle: switch (meeting.coordinatorApproval) {
+              CoordinatorApproval.approved =>
+                'Boss can see this meeting on their schedule.',
+              CoordinatorApproval.rejected => meeting.rejectionReason.trim().isEmpty
+                  ? 'This meeting was not sent to Boss.'
+                  : meeting.rejectionReason.trim(),
+              CoordinatorApproval.pending =>
+                'Boss will not see this until the Meeting Coordinator approves.',
+            },
+          ),
+          const SizedBox(height: 12),
+          _FeedbackRow(
+            icon: attending
+                ? Icons.check_circle_rounded
+                : declining
+                    ? Icons.cancel_rounded
+                    : Icons.hourglass_top_rounded,
+            color: attending
+                ? AppColors.success
+                : declining
+                    ? AppColors.error
+                    : AppColors.warning,
+            title: attendanceLabel,
+            subtitle: attendanceHint,
+          ),
+          if (meeting.rescheduleRequested) ...[
+            const SizedBox(height: 12),
+            _FeedbackRow(
+              icon: Icons.event_repeat_rounded,
+              color: AppColors.warning,
+              title: 'Boss requested a reschedule',
+              subtitle: [
+                if (meeting.reschedulePreferredStartAt != null)
+                  'Preferred time: ${DateFormat('EEE, MMM d · h:mm a').format(meeting.reschedulePreferredStartAt!.toLocal())}'
+                  '${meeting.reschedulePreferredEndAt != null ? ' – ${DateFormat('h:mm a').format(meeting.reschedulePreferredEndAt!.toLocal())}' : ''}',
+                if (meeting.rescheduleReason.trim().isNotEmpty)
+                  'Reason: ${meeting.rescheduleReason.trim()}',
+                if (meeting.reschedulePreferredStartAt == null &&
+                    meeting.rescheduleReason.trim().isEmpty)
+                  'Open Edit meeting and set a new date & time.',
+              ].where((e) => e.isNotEmpty).join('\n'),
+            ),
+          ],
+          if (meeting.bossMarkedImportant) ...[
+            const SizedBox(height: 12),
+            _FeedbackRow(
+              icon: Icons.star_rounded,
+              color: AppColors.warning,
+              title: 'Boss marked this important',
+              subtitle: 'Treat this meeting as high priority.',
+            ),
+          ],
+          if (meeting.bossPersonalNote.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _FeedbackRow(
+              icon: Icons.sticky_note_2_outlined,
+              color: AppColors.info,
+              title: 'Note from Boss',
+              subtitle: meeting.bossPersonalNote.trim(),
+            ),
+          ],
+          if (pending &&
+              !meeting.rescheduleRequested &&
+              !meeting.bossMarkedImportant &&
+              meeting.bossPersonalNote.trim().isEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'No extra instructions yet. You will see attendance, reschedule requests, and notes here when Boss replies.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (canEdit && onEdit != null && needsAction) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_calendar_rounded),
+              label: Text(
+                meeting.rescheduleRequested
+                    ? 'Edit meeting time'
+                    : 'Edit / cancel meeting',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedbackRow extends StatelessWidget {
+  const _FeedbackRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: context.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: context.colorScheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

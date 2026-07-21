@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { pushNotificationEntrySchema } from '../../utils/pushNotificationFields.js';
+import { notificationPreferencesSchema } from '../../utils/notificationPreferencesFields.js';
 
 export const CENTRAL_TENANTS = [
   'adsResearchGlobal',
@@ -71,6 +73,16 @@ const centralAdminUserSchema = new mongoose.Schema(
     phone: {
       type: String,
       default: '',
+    },
+    /** FCM device tokens — multiple devices per user, no duplicates. */
+    notifications: {
+      type: [pushNotificationEntrySchema],
+      default: [],
+    },
+    /** Push notification channel preferences. */
+    notificationPreferences: {
+      type: notificationPreferencesSchema,
+      default: () => ({}),
     },
   },
   { timestamps: true }

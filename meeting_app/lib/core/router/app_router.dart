@@ -22,13 +22,18 @@ import '../../features/shell/presentation/widgets/tab_swipe_shell.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../rbac/app_permission.dart';
 import '../rbac/rbac_providers.dart';
+import '../../services/notification_navigator.dart';
 import 'page_transitions.dart';
 import 'route_names.dart';
 import 'shell_nav_catalog.dart';
 
+/// Root navigator for deep links from push notifications.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final rootNavigatorKey = GlobalKey<NavigatorState>();
   final authListenable = _AuthRefreshListenable(ref);
+
+  NotificationNavigator.bind(rootNavigatorKey);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,

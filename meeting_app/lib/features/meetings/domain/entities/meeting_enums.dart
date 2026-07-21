@@ -97,3 +97,21 @@ extension InvitationResponseX on InvitationResponse {
     );
   }
 }
+
+/// Meeting Coordinator gate before Boss can see the meeting.
+enum CoordinatorApproval { pending, approved, rejected }
+
+extension CoordinatorApprovalX on CoordinatorApproval {
+  String get label => switch (this) {
+    CoordinatorApproval.pending => 'Pending approval',
+    CoordinatorApproval.approved => 'Approved for Boss',
+    CoordinatorApproval.rejected => 'Rejected',
+  };
+
+  static CoordinatorApproval fromStorage(String? value) {
+    return CoordinatorApproval.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => CoordinatorApproval.approved,
+    );
+  }
+}

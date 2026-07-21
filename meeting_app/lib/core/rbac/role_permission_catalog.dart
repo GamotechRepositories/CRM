@@ -1,10 +1,11 @@
 import 'app_permission.dart';
 import 'system_role.dart';
 
-/// Simple two-role matrix for the meeting app.
+/// Role matrix for the meeting app.
 ///
-/// - Boss (CEO): view meetings created for them
-/// - Team (EA / Coordinator / etc.): create & manage meetings for the Boss
+/// - Boss (CEO): sees approved meetings only; RSVP / reschedule
+/// - Meeting Coordinator: Boss-like UI; can create for Boss; approve team drafts; reschedule
+/// - Team (EA / etc.): create meetings (pending until Coordinator approves)
 abstract final class RolePermissionCatalog {
   static const Map<SystemRole, Set<AppPermission>> matrix = {
     SystemRole.boss: {
@@ -15,6 +16,26 @@ abstract final class RolePermissionCatalog {
       AppPermission.receiveNotifications,
       AppPermission.downloadAttachments,
       AppPermission.joinMeeting,
+      AppPermission.acceptDeclineInvitation,
+      AppPermission.rescheduleMeeting,
+    },
+    SystemRole.meetingCoordinator: {
+      AppPermission.viewDashboard,
+      AppPermission.viewSettings,
+      AppPermission.viewMeetingsNav,
+      AppPermission.viewMeetings,
+      AppPermission.receiveNotifications,
+      AppPermission.createMeeting,
+      AppPermission.editOwnMeeting,
+      AppPermission.deleteOwnMeeting,
+      AppPermission.downloadAttachments,
+      AppPermission.uploadAttachments,
+      AppPermission.joinMeeting,
+      AppPermission.acceptDeclineInvitation,
+      AppPermission.rescheduleMeeting,
+      AppPermission.approveMeeting,
+      AppPermission.editAnyMeeting,
+      AppPermission.updateMeetingStatus,
     },
     SystemRole.executiveAssistant: {
       AppPermission.viewDashboard,

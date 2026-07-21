@@ -40,7 +40,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
     final state = ref.watch(meetingsControllerProvider);
     final permissions = ref.watch(permissionSetProvider);
     final userId = ref.watch(currentUserIdProvider);
-    final isBoss = !permissions.canCreateMeeting;
+    final isBoss = permissions.usesBossScheduleUi;
     final stats = _MeetingStats.from(state.meetings);
 
     return AppScaffold(
@@ -85,7 +85,7 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                     )
                   else
                     Text(
-                      'Meetings you create appear on the Boss schedule.',
+                      'Meetings you create appear on the Boss schedule after Meeting Coordinator approval.',
                       style: context.textTheme.bodyMedium?.copyWith(
                         color: context.colorScheme.onSurfaceVariant,
                       ),

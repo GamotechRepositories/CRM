@@ -29,11 +29,15 @@ class SettingsPage extends ConsumerWidget {
     final permissions = ref.watch(permissionSetProvider);
     final user = ref.watch(authSessionProvider).session?.user;
     final meetings = ref.watch(meetingsControllerProvider).meetings;
-    final isBoss = !permissions.canCreateMeeting;
+    final isBoss = permissions.usesBossScheduleUi;
     final roleLabel =
         user?.roleLabel?.trim().isNotEmpty == true
             ? user!.roleLabel!
-            : (isBoss ? 'Boss' : 'Team');
+            : (permissions.isBoss
+                ? 'Boss'
+                : permissions.isMeetingCoordinator
+                    ? 'Meeting Coordinator'
+                    : 'Team');
     final companies = CrmCompanies.forTenantIds(user?.tenants ?? const []);
     final now = DateTime.now();
     final upcomingCount = meetings.where((m) => m.startAt.isAfter(now)).length;

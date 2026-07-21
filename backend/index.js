@@ -2,8 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
+import { getFirebaseAdmin } from './config/firebase.js';
+import { startNotificationWorker } from './worker/notification.worker.js';
+import { startMeetingReminderJob } from './jobs/meetingReminder.job.js';
+import { cleanupOrphanTokens } from './utils/pushTokenStore.js';
+import { mountSwaggerDocs } from './config/swagger.js';
 
 dotenv.config();
+
+// Eager Firebase init (validates credentials at startup)
+getFirebaseAdmin();
 
 const app = express();
 const PORT = process.env.PORT || 5011;
@@ -95,6 +103,9 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// OpenAPI 3.1 documentation (Swagger UI)
+mountSwaggerDocs(app);
+
 // Health route
 app.get('/', (req, res) => {
   res.send('Welcome to the CRM API');
@@ -148,6 +159,17 @@ for (const company of PROPERTY_TENANTS) {
 // Centralized admin panel: /api/v1/admin/*
 const centralAdminRoute = await import('./routes/centralAdminRoute.js');
 app.use('/api/v1/admin', centralAdminRoute.default);
+
+// Push notifications (FCM device registration + history)
+const notificationRoutes = await import('./routes/notification.routes.js');
+app.use('/api', notificationRoutes.default);
+
+// Background: FCM worker + meeting reminder cron + token cleanup
+startNotificationWorker();
+startMeetingReminderJob();
+cleanupOrphanTokens().catch((e) =>
+  console.warn('[PushToken] Orphan token cleanup skipped:', e?.message),
+);
 
 // Server start
 app.listen(PORT, '0.0.0.0', () => {

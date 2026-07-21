@@ -29,7 +29,7 @@ class SimpleMeetingDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final permissions = ref.watch(permissionSetProvider);
-    final isBoss = !permissions.canCreateMeeting;
+    final isBoss = permissions.usesBossScheduleUi;
     if (isBoss) return const _BossHomeView();
     return const _TeamHomeView();
   }
@@ -147,6 +147,14 @@ class _BossHomeView extends ConsumerWidget {
           ),
         ],
       ),
+      floatingActionButton: PermissionGate(
+        permission: AppPermission.createMeeting,
+        child: FloatingActionButton.extended(
+          onPressed: () => context.push(RoutePaths.meetingCreate),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('New meeting'),
+        ).animate().fadeIn().scale(begin: const Offset(0.92, 0.92)),
+      ),
       body: meetingsState.isLoading && meetingsState.meetings.isEmpty
           ? const Padding(
               padding: EdgeInsets.all(AppSpacing.md),
@@ -170,6 +178,11 @@ class _BossHomeView extends ConsumerWidget {
 
                   _BossGreetingCard(
                     name: name,
+                    roleLabel: user?.roleLabel?.trim().isNotEmpty == true
+                        ? user!.roleLabel!.trim()
+                        : (ref.watch(permissionSetProvider).isMeetingCoordinator
+                            ? 'Meeting Coordinator'
+                            : 'Boss'),
                     greeting: _greeting(now),
                     dateLabel: dateLabel,
                     freeUntil: next == null
@@ -323,6 +336,7 @@ class _BossHomeView extends ConsumerWidget {
 class _BossGreetingCard extends StatelessWidget {
   const _BossGreetingCard({
     required this.name,
+    required this.roleLabel,
     required this.greeting,
     required this.dateLabel,
     required this.freeUntil,
@@ -330,6 +344,7 @@ class _BossGreetingCard extends StatelessWidget {
   });
 
   final String name;
+  final String roleLabel;
   final String greeting;
   final String dateLabel;
   final String freeUntil;
@@ -383,7 +398,7 @@ class _BossGreetingCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Boss',
+                      roleLabel,
                       style: context.textTheme.labelMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -1111,6 +1126,7 @@ class _BossTimelineCard extends StatelessWidget {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
+                            _approvalTag(meeting),
                             MeetingTag(
                               label: meeting.status.label,
                               color: meetingStatusColor(meeting.status),
@@ -1127,6 +1143,9 @@ class _BossTimelineCard extends StatelessWidget {
                               ),
                           ],
                         ),
+                      ] else ...[
+                        const SizedBox(height: 6),
+                        _approvalTag(meeting),
                       ],
                     ],
                   ),
@@ -1144,6 +1163,23 @@ class _BossTimelineCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _approvalTag(Meeting meeting) {
+    return switch (meeting.coordinatorApproval) {
+      CoordinatorApproval.pending => const MeetingTag(
+        label: 'Waiting for approval',
+        color: AppColors.warning,
+      ),
+      CoordinatorApproval.approved => const MeetingTag(
+        label: 'Approved',
+        color: AppColors.success,
+      ),
+      CoordinatorApproval.rejected => const MeetingTag(
+        label: 'Rejected',
+        color: AppColors.error,
+      ),
+    };
   }
 }
 
