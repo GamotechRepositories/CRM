@@ -251,7 +251,7 @@ class NotificationService {
     const tpl = template({ meeting });
     const priority = tpl.priority || 'normal';
 
-    // Real-time delivery for online users
+    // In-app realtime toast/event (does not replace FCM).
     const socketPayload = {
       title: tpl.title,
       body: tpl.body,
@@ -259,9 +259,15 @@ class NotificationService {
       data: tpl.data,
       priority,
     };
-    const { offline } = pipeline.deliverRealtime(eligibleUserIds, socketPayload);
+    pipeline.deliverRealtime(eligibleUserIds, socketPayload);
 
-    const { tokens, tokenOwnerMap } = await collectTokensForUserIds(offline, type);
+    // Always attempt FCM for every eligible user that has a device token.
+    // Socket "online" only means the app process is connected — the user may
+    // still need a system tray push (background / screen off / other tab).
+    const { tokens, tokenOwnerMap } = await collectTokensForUserIds(
+      eligibleUserIds,
+      type,
+    );
 
     const reminderExpiry =
       type === 'meeting_reminder' && meeting?.endAt
@@ -277,13 +283,13 @@ class NotificationService {
       meetingId: tpl.data?.meetingId || '',
       companyId: tpl.data?.companyId || companyId,
       priority,
-      status: tokens.length ? 'queued' : offline.length ? 'sent' : 'failed',
+      status: tokens.length ? 'queued' : 'failed',
       data: tpl.data,
       image: tpl.image || '',
       dedupeKey: guard.dedupeKey || '',
       expiresAt: reminderExpiry,
-      deliveryChannel: tokens.length ? (offline.length ? 'both' : 'fcm') : offline.length ? 'socket' : 'fcm',
-      error: tokens.length || offline.length ? '' : 'No recipients or device tokens',
+      deliveryChannel: tokens.length ? 'both' : 'socket',
+      error: tokens.length ? '' : 'No device tokens',
     }));
 
     const saved = records.length ? await PushNotification.insertMany(records) : [];
@@ -305,8 +311,8 @@ class NotificationService {
 
     if (!tokens.length) {
       return {
-        sent: offline.length > 0,
-        reason: offline.length ? 'socket_only' : 'no_tokens',
+        sent: false,
+        reason: 'no_tokens',
         notifications: saved,
       };
     }

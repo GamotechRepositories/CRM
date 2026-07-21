@@ -4,6 +4,7 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../core/config/env_config.dart';
 import '../core/utils/logger.dart';
+import 'local_notification_service.dart';
 
 /// Live meeting-list sync via Socket.IO (`meetings:changed`).
 class MeetingRealtimeService {
@@ -68,8 +69,48 @@ class MeetingRealtimeService {
       }
     });
 
+    // Push-style alert while app is connected (complements FCM).
+    socket.on('notification', (payload) {
+      AppLogger.info('notification received · $payload', tag: 'Socket');
+      unawaited(_showLocalFromSocket(payload));
+    });
+
     _socket = socket;
     socket.connect();
+  }
+
+  Future<void> _showLocalFromSocket(dynamic payload) async {
+    try {
+      if (payload is! Map) return;
+      final data = Map<String, dynamic>.from(payload);
+      final title = data['title']?.toString().trim();
+      final body = data['body']?.toString().trim();
+      if (title == null || title.isEmpty) return;
+
+      final nested = data['data'];
+      final Map<String, dynamic> extra = nested is Map
+          ? Map<String, dynamic>.from(nested)
+          : <String, dynamic>{};
+
+      await LocalNotificationService.instance.showNotification(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        title: title,
+        body: (body == null || body.isEmpty) ? 'Meeting update' : body,
+        payload: {
+          'type':
+              data['type']?.toString() ?? extra['type']?.toString() ?? 'meeting',
+          'meetingId': extra['meetingId']?.toString() ??
+              data['meetingId']?.toString() ??
+              '',
+          ...extra,
+        },
+      );
+    } catch (error) {
+      AppLogger.warning(
+        'Socket local notification failed: $error',
+        tag: 'Socket',
+      );
+    }
   }
 
   void disconnect() {
