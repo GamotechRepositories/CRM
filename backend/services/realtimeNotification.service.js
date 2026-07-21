@@ -66,6 +66,25 @@ export function emitToUser(userId, payload) {
 }
 
 /**
+ * Emit meeting list change event to user(s).
+ * @param {string[]} userIds
+ * @param {{ action: string, meetingId?: string }} payload
+ */
+export function emitMeetingChange(userIds = [], payload = {}) {
+  if (!io || !Array.isArray(userIds) || !userIds.length) return 0;
+  const eventPayload = {
+    action: String(payload.action || 'updated'),
+    meetingId: payload.meetingId ? String(payload.meetingId) : undefined,
+    ts: new Date().toISOString(),
+  };
+  const uniqueIds = [...new Set(userIds.map((id) => String(id)).filter(Boolean))];
+  uniqueIds.forEach((userId) => {
+    io.to(userRoom(userId)).emit('meetings:changed', eventPayload);
+  });
+  return uniqueIds.length;
+}
+
+/**
  * Split user ids into online (socket) vs offline (FCM).
  * @param {string[]} userIds
  */
@@ -84,5 +103,6 @@ export default {
   isRealtimeEnabled,
   isUserOnline,
   emitToUser,
+  emitMeetingChange,
   partitionByOnlineStatus,
 };

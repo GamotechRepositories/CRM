@@ -1,12 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import connectDB from './config/db.js';
 import { getFirebaseAdmin } from './config/firebase.js';
 import { startNotificationWorker } from './worker/notification.worker.js';
 import { startMeetingReminderJob } from './jobs/meetingReminder.job.js';
 import { cleanupOrphanTokens } from './utils/pushTokenStore.js';
 import { mountSwaggerDocs } from './config/swagger.js';
+import { bindSocketServer } from './services/realtimeNotification.service.js';
 
 dotenv.config();
 
@@ -172,6 +175,16 @@ cleanupOrphanTokens().catch((e) =>
 );
 
 // Server start
-app.listen(PORT, '0.0.0.0', () => {
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: corsOptions.origin,
+    methods: corsOptions.methods,
+    credentials: true,
+  },
+});
+bindSocketServer(io);
+
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,7 @@ import '../../../../shared/widgets/feedback/error_view.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../../../shared/widgets/loading/loading_overlay.dart';
 import '../../../../shared/widgets/loading/skeleton_loader.dart';
+import '../../../../services/meeting_realtime_service.dart';
 import '../../domain/entities/meeting.dart';
 import '../providers/meeting_providers.dart';
 import '../states/meetings_state.dart';
@@ -34,6 +37,33 @@ class MeetingsPage extends ConsumerStatefulWidget {
 
 class _MeetingsPageState extends ConsumerState<MeetingsPage> {
   _MeetingFilter _filter = _MeetingFilter.all;
+  StreamSubscription<Map<String, dynamic>>? _realtimeSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(() {
+      if (!mounted) return;
+      final userId = ref.read(currentUserIdProvider);
+      if (userId == null || userId.trim().isEmpty) return;
+      MeetingRealtimeService.instance.connect(userId: userId);
+      _realtimeSubscription ??=
+          MeetingRealtimeService.instance.changes.listen((_) {
+            if (!mounted) return;
+            ref.read(meetingsControllerProvider.notifier).load(
+              null,
+              showLoader: false,
+            );
+          });
+    });
+  }
+
+  @override
+  void dispose() {
+    _realtimeSubscription?.cancel();
+    MeetingRealtimeService.instance.disconnect();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

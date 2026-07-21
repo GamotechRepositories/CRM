@@ -21,7 +21,7 @@ class MeetingsController extends StateNotifier<MeetingsState> {
   final PermissionSet _permissions;
   final String? _currentUserId;
 
-  Future<void> load(String? companyId) async {
+  Future<void> load(String? companyId, {bool showLoader = true}) async {
     if (!_permissions.can(AppPermission.viewMeetings)) {
       state = state.copyWith(
         status: MeetingsStatus.error,
@@ -30,7 +30,11 @@ class MeetingsController extends StateNotifier<MeetingsState> {
       return;
     }
 
-    state = state.copyWith(status: MeetingsStatus.loading, clearError: true);
+    if (showLoader || state.meetings.isEmpty) {
+      state = state.copyWith(status: MeetingsStatus.loading, clearError: true);
+    } else {
+      state = state.copyWith(clearError: true);
+    }
     // Central admin meetings — one list for Boss + team (no company switch).
     final result = await _repository.getAll();
     state = switch (result) {

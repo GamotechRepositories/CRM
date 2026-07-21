@@ -6,6 +6,7 @@ import {
   notifyMeetingUpdated,
   notifyMeetingCancelled,
 } from './notification.controller.js';
+import { emitMeetingChange } from '../services/realtimeNotification.service.js';
 
 const isBossAuth = (auth) =>
   Boolean(auth?.isRoot) || String(auth?.role || '').toUpperCase() === 'CEO';
@@ -71,6 +72,21 @@ const toApi = (doc) => {
     updatedAt: obj.updatedAt,
   };
 };
+
+async function emitRealtimeMeetingChange(action, meeting) {
+  try {
+    const users = await CentralAdminUser.find({ status: 'Active' }).select('_id').lean();
+    emitMeetingChange(
+      users.map((u) => String(u._id)),
+      {
+        action,
+        meetingId: meeting?._id ? String(meeting._id) : meeting?.id ? String(meeting.id) : undefined,
+      },
+    );
+  } catch (_error) {
+    // Real-time sync is best-effort; API response should not fail because of socket issues.
+  }
+}
 
 /** Resolve the single Boss (CEO / isRoot) for meeting targeting */
 export const getBoss = async (_req, res) => {
@@ -250,6 +266,7 @@ export const createMeeting = async (req, res) => {
     } else {
       notifyMeetingPendingApproval(meeting);
     }
+    emitRealtimeMeetingChange('created', meeting);
 
     return res.status(201).json({
       message: createdByCoordinator
@@ -383,6 +400,7 @@ export const updateMeeting = async (req, res) => {
     ) {
       notifyMeetingUpdated(meeting, req.auth?.sub);
     }
+    emitRealtimeMeetingChange('updated', meeting);
 
     return res.status(200).json({ message: 'Meeting updated', meeting: toApi(meeting) });
   } catch (error) {
@@ -394,6 +412,7 @@ export const deleteMeeting = async (req, res) => {
   try {
     const meeting = await CentralMeeting.findByIdAndDelete(req.params.id);
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+    emitRealtimeMeetingChange('deleted', meeting);
     return res.status(200).json({ message: 'Meeting deleted' });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to delete meeting', error: error?.message || error });
