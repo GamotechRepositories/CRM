@@ -7,6 +7,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/config/env_config.dart';
+import '../core/constants/app_constants.dart';
 import '../core/utils/logger.dart';
 import '../firebase_options.dart';
 import '../models/notification_model.dart';
@@ -22,13 +23,25 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _messaging;
   final LocalNotificationService _local = LocalNotificationService.instance;
 
   bool _initialized = false;
   bool _listenersAttached = false;
   AuthTokenProvider? _authTokenProvider;
   StreamSubscription<String>? _tokenRefreshSubscription;
+
+  FirebaseMessaging get _messagingOrThrow {
+    final messaging = _messaging;
+    if (messaging == null) {
+      throw StateError(
+        'NotificationService not initialized — call initialize() first',
+      );
+    }
+    return messaging;
+  }
+
+  bool get isInitialized => _initialized;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -50,6 +63,7 @@ class NotificationService {
       Error.throwWithStackTrace(error, stack);
     }
 
+    _messaging = FirebaseMessaging.instance;
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     await _local.initialize();
@@ -63,8 +77,10 @@ class NotificationService {
   }
 
   Future<bool> requestPermission() async {
+    if (!_initialized) return false;
+
     try {
-      final settings = await _messaging.requestPermission(
+      final settings = await _messagingOrThrow.requestPermission(
         alert: true,
         announcement: false,
         badge: true,
@@ -112,8 +128,19 @@ class NotificationService {
   }
 
   Future<String?> getFCMToken() async {
+    if (!_initialized) return null;
+
     try {
-      final token = await _messaging.getToken();
+      final token = await _messagingOrThrow.getToken().timeout(
+        AppConstants.networkTimeout,
+        onTimeout: () {
+          AppLogger.warning(
+            'FCM token request timed out',
+            tag: NotificationConstants.logTag,
+          );
+          return null;
+        },
+      );
       if (token == null || token.trim().isEmpty) {
         AppLogger.warning(
           'FCM token is null or empty',
@@ -137,8 +164,10 @@ class NotificationService {
   }
 
   Future<String?> refreshToken() async {
+    if (!_initialized) return null;
+
     try {
-      await _messaging.deleteToken();
+      await _messagingOrThrow.deleteToken();
       final token = await getFCMToken();
       if (token != null) {
         await _registerTokenWithBackend(token);
@@ -156,6 +185,7 @@ class NotificationService {
 
   /// Call after login when an auth token is available.
   Future<void> syncDeviceTokenAfterLogin() async {
+    if (!_initialized) return;
     final token = await getFCMToken();
     if (token == null) return;
     await _registerTokenWithBackend(token);
@@ -163,8 +193,10 @@ class NotificationService {
 
   /// Stop listening and clear push registration on logout.
   Future<void> onLogout() async {
+    if (!_initialized) return;
+
     try {
-      await _messaging.deleteToken();
+      await _messagingOrThrow.deleteToken();
       AppLogger.info('FCM token deleted on logout', tag: NotificationConstants.logTag);
     } catch (error) {
       AppLogger.warning(
@@ -181,7 +213,7 @@ class NotificationService {
     FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
 
     _tokenRefreshSubscription?.cancel();
-    _tokenRefreshSubscription = _messaging.onTokenRefresh.listen(
+    _tokenRefreshSubscription = _messagingOrThrow.onTokenRefresh.listen(
       (token) async {
         AppLogger.info('Token refreshed', tag: NotificationConstants.logTag);
         await _registerTokenWithBackend(token);
@@ -199,8 +231,10 @@ class NotificationService {
   }
 
   Future<void> handleInitialMessage() async {
+    if (!_initialized) return;
+
     try {
-      final message = await _messaging.getInitialMessage();
+      final message = await _messagingOrThrow.getInitialMessage();
       if (message == null) return;
       AppLogger.info(
         'App opened from terminated notification',

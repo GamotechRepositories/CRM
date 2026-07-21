@@ -66,9 +66,72 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
       body: LoadingOverlay(
         isLoading: state.isMutating,
         message: 'Working…',
-        child: Column(
-          children: [
-            Padding(
+        child: _MeetingsScrollView(
+          state: state,
+          permissions: permissions,
+          userId: userId,
+          isBoss: isBoss,
+          filter: _filter,
+          stats: stats,
+          onFilterChanged: (value) => setState(() => _filter = value),
+        ),
+      ),
+    );
+  }
+}
+
+class _MeetingsScrollView extends ConsumerWidget {
+  const _MeetingsScrollView({
+    required this.state,
+    required this.permissions,
+    required this.userId,
+    required this.isBoss,
+    required this.filter,
+    required this.stats,
+    required this.onFilterChanged,
+  });
+
+  final MeetingsState state;
+  final PermissionSet permissions;
+  final String? userId;
+  final bool isBoss;
+  final _MeetingFilter filter;
+  final _MeetingStats stats;
+  final ValueChanged<_MeetingFilter> onFilterChanged;
+
+  List<Meeting> _filtered(List<Meeting> source) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    return switch (filter) {
+      _MeetingFilter.all => source,
+      _MeetingFilter.today => source
+          .where(
+            (m) =>
+                !m.startAt.isBefore(todayStart) && m.startAt.isBefore(todayEnd),
+          )
+          .toList(),
+      _MeetingFilter.upcoming =>
+        source.where((m) => m.startAt.isAfter(now)).toList(),
+      _MeetingFilter.priority => source
+          .where(
+            (m) =>
+                m.priority == MeetingPriority.high ||
+                m.priority == MeetingPriority.critical,
+          )
+          .toList(),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(meetingsControllerProvider.notifier).load(null),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.md,
                 AppSpacing.sm,
@@ -78,19 +141,14 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isBoss)
-                    _BossMeetingsHeader(
-                      total: stats.total,
-                      upcoming: stats.upcoming,
-                    )
-                  else
+                  if (!isBoss)
                     Text(
                       'Meetings you create appear on the Boss schedule after Meeting Coordinator approval.',
                       style: context.textTheme.bodyMedium?.copyWith(
                         color: context.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  const SizedBox(height: AppSpacing.md),
+                  if (!isBoss) const SizedBox(height: AppSpacing.md),
                   _StatsRow(stats: stats),
                   if (stats.nextMeeting != null) ...[
                     const SizedBox(height: AppSpacing.md),
@@ -125,111 +183,120 @@ class _MeetingsPageState extends ConsumerState<MeetingsPage> {
                           icon: const Icon(Icons.flag_rounded, size: 18),
                         ),
                       ],
-                      selected: {_filter},
+                      selected: {filter},
                       onSelectionChanged: (value) {
-                        setState(() => _filter = value.first);
+                        onFilterChanged(value.first);
                       },
                       showSelectedIcon: false,
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.sm),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            Expanded(
-              child: _MeetingsBody(
-                state: state,
-                permissions: permissions,
-                userId: userId,
-                isBoss: isBoss,
-                filter: _filter,
-              ),
-            ),
-          ],
-        ),
+          ),
+          ..._meetingSlivers(context, ref),
+        ],
       ),
     );
   }
-}
 
-class _BossMeetingsHeader extends StatelessWidget {
-  const _BossMeetingsHeader({
-    required this.total,
-    required this.upcoming,
-  });
-
-  final int total;
-  final int upcoming;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: AppRadius.lgAll,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [
-                  AppColors.secondary.withValues(alpha: 0.28),
-                  AppColors.primary.withValues(alpha: 0.18),
-                ]
-              : const [
-                  Color(0xFFCCFBF1),
-                  Color(0xFFDBEAFE),
-                ],
+  List<Widget> _meetingSlivers(BuildContext context, WidgetRef ref) {
+    if (state.isLoading && state.meetings.isEmpty) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.md),
+            child: SkeletonLoader(itemCount: 5),
+          ),
         ),
-        border: Border.all(
-          color: isDark
-              ? AppColors.secondary.withValues(alpha: 0.35)
-              : AppColors.secondary.withValues(alpha: 0.2),
+      ];
+    }
+
+    if (state.status == MeetingsStatus.error && state.meetings.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: ErrorView(
+            failure: UnknownFailure(state.errorMessage ?? 'Failed to load'),
+            onRetry: () {
+              ref.read(meetingsControllerProvider.notifier).load(null);
+            },
+          ),
+        ),
+      ];
+    }
+
+    final meetings = _filtered(
+      [...state.meetings]..sort((a, b) => a.startAt.compareTo(b.startAt)),
+    );
+
+    if (state.meetings.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: MeetingEmptyState(
+            icon: Icons.event_note_rounded,
+            title: 'No meetings yet',
+            message: isBoss
+                ? 'Your team will create meetings for you. Pull down to refresh.'
+                : 'Create a meeting for the Boss. Keep title, time, and agenda clear.',
+            actionLabel: isBoss ? null : 'New meeting',
+            onAction: isBoss
+                ? null
+                : () => context.push(RoutePaths.meetingCreate),
+          ),
+        ),
+      ];
+    }
+
+    if (meetings.isEmpty) {
+      return [
+        const SliverFillRemaining(
+          hasScrollBody: false,
+          child: MeetingEmptyState(
+            icon: Icons.filter_alt_outlined,
+            title: 'Nothing in this filter',
+            message: 'Try All, Today, Soon, or Priority to see your meetings.',
+          ),
+        ),
+      ];
+    }
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          0,
+          AppSpacing.md,
+          AppSpacing.xl,
+        ),
+        sliver: SliverList.separated(
+          itemCount: meetings.length,
+          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+          itemBuilder: (context, index) {
+            final meeting = meetings[index];
+            final canEdit =
+                userId != null &&
+                permissions.canEditMeeting(
+                  currentUserId: userId!,
+                  meeting: MeetingAccessContext(
+                    createdByUserId: meeting.createdByUserId,
+                  ),
+                );
+            return MeetingListCard(
+              key: ValueKey('meeting-${meeting.id}'),
+              meeting: meeting,
+              showOrganizer: isBoss,
+              canEdit: canEdit,
+              onEdit: canEdit
+                  ? () => context.push(RoutePaths.meetingEditPath(meeting.id))
+                  : null,
+            ).animate().fadeIn(delay: (40 * index).ms).slideY(begin: 0.04, end: 0);
+          },
         ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.secondary.withValues(alpha: 0.18),
-              borderRadius: AppRadius.mdAll,
-            ),
-            child: const Icon(
-              Icons.calendar_month_rounded,
-              color: AppColors.secondary,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Scheduled by your team',
-                  style: context.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  total == 0
-                      ? 'No meetings yet — pull to refresh when your team adds one.'
-                      : '$upcoming upcoming · $total total on your calendar',
-                  style: context.textTheme.bodySmall?.copyWith(
-                    color: context.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 280.ms);
+    ];
   }
 }
 
@@ -486,149 +553,6 @@ class _NextMeetingBanner extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _MeetingsBody extends ConsumerWidget {
-  const _MeetingsBody({
-    required this.state,
-    required this.permissions,
-    required this.userId,
-    required this.isBoss,
-    required this.filter,
-  });
-
-  final MeetingsState state;
-  final PermissionSet permissions;
-  final String? userId;
-  final bool isBoss;
-  final _MeetingFilter filter;
-
-  List<Meeting> _filtered(List<Meeting> source) {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(const Duration(days: 1));
-    return switch (filter) {
-      _MeetingFilter.all => source,
-      _MeetingFilter.today => source
-          .where(
-            (m) =>
-                !m.startAt.isBefore(todayStart) && m.startAt.isBefore(todayEnd),
-          )
-          .toList(),
-      _MeetingFilter.upcoming =>
-        source.where((m) => m.startAt.isAfter(now)).toList(),
-      _MeetingFilter.priority => source
-          .where(
-            (m) =>
-                m.priority == MeetingPriority.high ||
-                m.priority == MeetingPriority.critical,
-          )
-          .toList(),
-    };
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Widget bodyChild;
-    Key bodyKey;
-
-    if (state.isLoading && state.meetings.isEmpty) {
-      bodyKey = const ValueKey('loading');
-      bodyChild = const Padding(
-        padding: EdgeInsets.all(AppSpacing.md),
-        child: SkeletonLoader(itemCount: 5),
-      );
-    } else if (state.status == MeetingsStatus.error && state.meetings.isEmpty) {
-      bodyKey = const ValueKey('error');
-      bodyChild = ErrorView(
-        failure: UnknownFailure(state.errorMessage ?? 'Failed to load'),
-        onRetry: () {
-          ref.read(meetingsControllerProvider.notifier).load(null);
-        },
-      );
-    } else {
-      final meetings = _filtered(
-        [...state.meetings]..sort((a, b) => a.startAt.compareTo(b.startAt)),
-      );
-
-      if (state.meetings.isEmpty) {
-        bodyKey = const ValueKey('empty');
-        bodyChild = MeetingEmptyState(
-          icon: Icons.event_note_rounded,
-          title: 'No meetings yet',
-          message: isBoss
-              ? 'Your team will create meetings for you. Pull down to refresh.'
-              : 'Create a meeting for the Boss. Keep title, time, and agenda clear.',
-          actionLabel: isBoss ? null : 'New meeting',
-          onAction: isBoss
-              ? null
-              : () => context.push(RoutePaths.meetingCreate),
-        );
-      } else if (meetings.isEmpty) {
-        bodyKey = ValueKey('filter-${filter.name}');
-        bodyChild = const MeetingEmptyState(
-          icon: Icons.filter_alt_outlined,
-          title: 'Nothing in this filter',
-          message: 'Try All, Today, Soon, or Priority to see your meetings.',
-        );
-      } else {
-        bodyKey = ValueKey('list-${filter.name}-${meetings.length}');
-        bodyChild = RefreshIndicator(
-          onRefresh: () =>
-              ref.read(meetingsControllerProvider.notifier).load(null),
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.sm,
-              AppSpacing.md,
-              AppSpacing.md,
-            ),
-            itemCount: meetings.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final meeting = meetings[index];
-              final canEdit =
-                  userId != null &&
-                  permissions.canEditMeeting(
-                    currentUserId: userId!,
-                    meeting: MeetingAccessContext(
-                      createdByUserId: meeting.createdByUserId,
-                    ),
-                  );
-              return MeetingListCard(
-                key: ValueKey('meeting-${meeting.id}'),
-                meeting: meeting,
-                showOrganizer: isBoss,
-                canEdit: canEdit,
-                onEdit: canEdit
-                    ? () => context.push(RoutePaths.meetingEditPath(meeting.id))
-                    : null,
-              ).animate().fadeIn(delay: (40 * index).ms).slideY(begin: 0.04, end: 0);
-            },
-          ),
-        );
-      }
-    }
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 320),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.0, 0.02),
-              end: Offset.zero,
-            ).animate(animation),
-            child: child,
-          ),
-        );
-      },
-      child: KeyedSubtree(key: bodyKey, child: bodyChild),
     );
   }
 }

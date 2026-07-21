@@ -38,6 +38,8 @@ migrate_working_dir/
 .env.local
 .env.*.local
 
+# Firebase client config is committed for Android builds; Admin SDK keys must never be committed.
+# google-services.json and lib/firebase_options.dart are intentionally tracked.
 
 # Symbolication related
 app.*.symbols

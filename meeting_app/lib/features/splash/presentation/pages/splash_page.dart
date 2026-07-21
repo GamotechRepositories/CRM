@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,7 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/router/shell_nav_catalog.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../shared/widgets/loading/lottie_loading.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/states/auth_session_state.dart';
@@ -28,23 +31,48 @@ class _SplashPageState extends ConsumerState<SplashPage> {
   }
 
   Future<void> _bootstrap() async {
-    await Future.wait([
-      Future<void>.delayed(AppConstants.splashDuration),
-      ref.read(authSessionProvider.notifier).bootstrap(),
-    ]);
+    try {
+      await Future.wait([
+        Future<void>.delayed(AppConstants.splashDuration),
+        ref.read(authSessionProvider.notifier).bootstrap(),
+      ]);
+    } catch (error, stack) {
+      AppLogger.error(
+        'Splash bootstrap failed: $error\n$stack',
+      );
+    }
 
     if (!mounted) return;
 
     final auth = ref.read(authSessionProvider);
+    final permissions = ref.read(permissionSetProvider);
+    final destination = auth.status == AuthSessionStatus.authenticated
+        ? ShellNavCatalog.homeLocation(permissions.can)
+        : RoutePaths.login;
+
+    context.go(destination);
+
     if (auth.status == AuthSessionStatus.authenticated) {
-      await NotificationService.instance.syncDeviceTokenAfterLogin();
-      if (!mounted) return;
+      unawaited(_syncPushNotifications());
+    }
+  }
+
+  Future<void> _syncPushNotifications() async {
+    try {
+      if (!NotificationService.instance.isInitialized) {
+        await NotificationService.instance
+            .initialize()
+            .timeout(AppConstants.networkTimeout);
+      }
+      await NotificationService.instance
+          .syncDeviceTokenAfterLogin()
+          .timeout(AppConstants.networkTimeout);
       await NotificationService.instance.handleInitialMessage();
-      if (!mounted) return;
-      final permissions = ref.read(permissionSetProvider);
-      context.go(ShellNavCatalog.homeLocation(permissions.can));
-    } else {
-      context.go(RoutePaths.login);
+    } catch (error) {
+      AppLogger.warning(
+        'Push sync after splash skipped: $error',
+        tag: 'FCM',
+      );
     }
   }
 

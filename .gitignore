@@ -71,12 +71,14 @@ temp/
 # =========================
 # Package Managers
 # =========================
-package-lock.json
+# Ignore lock files in frontend apps; keep backend lock file for reproducible deploys.
+adsResearchGlobal/package-lock.json
+bangarProperties/package-lock.json
+mahaProperties/package-lock.json
+salesTechReality/package-lock.json
+admin/package-lock.json
 yarn.lock
 pnpm-lock.yaml
-
-# Uncomment ONLY if you don't want to commit lock files
-# (Recommended: Keep ONE lock file in Git)
 
 # =========================
 # Testing
@@ -93,7 +95,6 @@ coverage/
 # =========================
 # Docker
 # =========================
-.dockerignore
 docker-compose.override.yml
 
 # =========================
@@ -109,7 +110,12 @@ docker-compose.override.yml
 *.crt
 *.p12
 *.pfx
+
+# Firebase Admin SDK (never commit private keys)
 backend/config/serviceAccount.json
+backend/config/serviceAccount*.json
+!backend/config/serviceAccount.json.example
+**/firebase-adminsdk*.json
 
 # =========================
 # AWS
