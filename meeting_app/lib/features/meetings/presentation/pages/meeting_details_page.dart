@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -34,18 +36,39 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  ProviderSubscription<void>? _realtimeSub;
+  StreamSubscription<Map<String, dynamic>>? _changesSub;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      // Keep details in sync when Boss updates Confirm for your team.
+      _realtimeSub = ref.listenManual(meetingRealtimeSyncProvider, (_, __) {});
+      _changesSub = MeetingRealtimeService.instance.changes.listen((event) {
+        final id = event['meetingId']?.toString();
+        if (id == null || id == widget.meetingId) {
+          _load(silent: true);
+        }
+      });
+    });
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _realtimeSub?.close();
+    _changesSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     final result = await ref
         .read(meetingRepositoryProvider)
         .getById(widget.meetingId);
@@ -55,12 +78,15 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
         setState(() {
           _meeting = data;
           _loading = false;
+          _error = null;
         });
       case Error(:final failure):
-        setState(() {
-          _error = failure.message;
-          _loading = false;
-        });
+        if (!silent) {
+          setState(() {
+            _error = failure.message;
+            _loading = false;
+          });
+        }
     }
   }
 

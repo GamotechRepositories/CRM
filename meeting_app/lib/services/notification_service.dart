@@ -213,8 +213,8 @@ class NotificationService {
 
   /// Stop listening and clear push registration on logout.
   Future<void> onLogout() async {
-    if (!_initialized) return;
     _suppressBossTeamAlerts = false;
+    if (!_initialized) return;
 
     try {
       await _messagingOrThrow.deleteToken();

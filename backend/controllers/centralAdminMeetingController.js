@@ -391,33 +391,50 @@ export const updateMeeting = async (req, res) => {
       notifyMeetingAssigned(meeting, req.auth?.sub);
     }
 
+    const wasApproved =
+      previous.coordinatorApproval == null || previous.coordinatorApproval === 'approved';
+    const isNowApproved =
+      meeting.coordinatorApproval == null || meeting.coordinatorApproval === 'approved';
+    if (!wasApproved && isNowApproved) {
+      notifyMeetingAssigned(meeting, req.auth?.sub);
+    }
+
+    const bossTeamKeys = [
+      'bossResponse',
+      'bossResponseNote',
+      'bossResponseAt',
+      'rescheduleRequested',
+      'reschedulePreferredStartAt',
+      'reschedulePreferredEndAt',
+      'rescheduleReason',
+      'rescheduleRequestedAt',
+      'bossMarkedImportant',
+      'bossPersonalNote',
+    ];
+    const scheduleKeys = ['title', 'startAt', 'endAt', 'location', 'meetLink', 'agenda', 'description'];
+    const updateKeys = Object.keys(updates);
+
+    const bossTeamTouched = updateKeys.some((k) => bossTeamKeys.includes(k));
+    const scheduleTouched = updateKeys.some((k) => scheduleKeys.includes(k));
+
+    // Detect real schedule content changes (Flutter often re-sends full meeting).
+    const scheduleActuallyChanged =
+      scheduleTouched &&
+      (String(previous.title || '') !== String(meeting.title || '') ||
+        String(previous.location || '') !== String(meeting.location || '') ||
+        String(previous.meetLink || '') !== String(meeting.meetLink || '') ||
+        String(previous.agenda || '') !== String(meeting.agenda || '') ||
+        String(previous.description || '') !== String(meeting.description || '') ||
+        Math.abs(new Date(previous.startAt).getTime() - new Date(meeting.startAt).getTime()) > 2000 ||
+        Math.abs(new Date(previous.endAt).getTime() - new Date(meeting.endAt).getTime()) > 2000);
+
     if (updates.status === 'cancelled' && previous.status !== 'cancelled') {
       notifyMeetingCancelled(meeting, req.auth?.sub);
-    } else if (
-      meeting.coordinatorApproval === 'approved' &&
-      Object.keys(updates).some((k) =>
-        ['title', 'startAt', 'endAt', 'location', 'meetLink', 'agenda', 'description'].includes(k),
-      )
-    ) {
-      notifyMeetingUpdated(meeting, req.auth?.sub, previous);
-    } else if (
-      Object.keys(updates).some((k) =>
-        [
-          'bossResponse',
-          'bossResponseNote',
-          'bossResponseAt',
-          'rescheduleRequested',
-          'reschedulePreferredStartAt',
-          'reschedulePreferredEndAt',
-          'rescheduleReason',
-          'rescheduleRequestedAt',
-          'bossMarkedImportant',
-          'bossPersonalNote',
-        ].includes(k),
-      )
-    ) {
-      // Boss "Confirm for your team" → notify scheduler + coordinators
+    } else if (bossTeamTouched) {
+      // Boss "Confirm for your team" → notify scheduler + coordinators (not Boss)
       notifyMeetingBossResponse(meeting, req.auth?.sub, previous);
+    } else if (meeting.coordinatorApproval === 'approved' && scheduleActuallyChanged) {
+      notifyMeetingUpdated(meeting, req.auth?.sub, previous);
     }
     emitRealtimeMeetingChange('updated', meeting);
 

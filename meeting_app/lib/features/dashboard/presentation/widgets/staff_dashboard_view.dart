@@ -241,7 +241,10 @@ class _BossHomeView extends ConsumerWidget {
                           'Your schedule is clear. Your team will add meetings here.',
                     ).animate().fadeIn(delay: 90.ms)
                   else
-                    _NextMeetingHero(meeting: next)
+                    _NextMeetingHero(
+                      meeting: next,
+                      showApproval: ref.watch(permissionSetProvider).isMeetingCoordinator,
+                    )
                         .animate()
                         .fadeIn(delay: 90.ms)
                         .slideY(begin: 0.05, end: 0),
@@ -697,9 +700,13 @@ class _BossStatCard extends StatelessWidget {
 }
 
 class _NextMeetingHero extends StatelessWidget {
-  const _NextMeetingHero({required this.meeting});
+  const _NextMeetingHero({
+    required this.meeting,
+    this.showApproval = false,
+  });
 
   final Meeting meeting;
+  final bool showApproval;
 
   @override
   Widget build(BuildContext context) {
@@ -823,6 +830,10 @@ class _NextMeetingHero extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
+                            if (showApproval) ...[
+                              _UpNextApprovalTag(meeting: meeting),
+                              const SizedBox(width: 8),
+                            ],
                             if (meeting.priority == MeetingPriority.high ||
                                 meeting.priority == MeetingPriority.critical)
                               MeetingTag(
@@ -970,6 +981,30 @@ class _HeroMeta extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _UpNextApprovalTag extends StatelessWidget {
+  const _UpNextApprovalTag({required this.meeting});
+
+  final Meeting meeting;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (meeting.coordinatorApproval) {
+      CoordinatorApproval.pending => const MeetingTag(
+        label: 'Waiting for approval',
+        color: AppColors.warning,
+      ),
+      CoordinatorApproval.approved => const MeetingTag(
+        label: 'Approved',
+        color: AppColors.success,
+      ),
+      CoordinatorApproval.rejected => const MeetingTag(
+        label: 'Rejected',
+        color: AppColors.error,
+      ),
+    };
   }
 }
 
