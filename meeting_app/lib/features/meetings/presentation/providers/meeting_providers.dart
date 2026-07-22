@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
@@ -33,7 +36,7 @@ final meetingsControllerProvider =
       return controller;
     });
 
-/// Keeps Socket.IO connected while authenticated and silently reloads meetings.
+/// Live sync for Home + Your meetings. Event-driven; never drops a refresh.
 final meetingRealtimeSyncProvider = Provider<void>((ref) {
   final auth = ref.watch(authSessionProvider);
   final userId = ref.watch(currentUserIdProvider);
@@ -41,7 +44,7 @@ final meetingRealtimeSyncProvider = Provider<void>((ref) {
   if (auth.status != AuthSessionStatus.authenticated ||
       userId == null ||
       userId.trim().isEmpty) {
-    MeetingRealtimeService.instance.disconnect();
+    MeetingRealtimeService.instance.disconnect(resetSession: true);
     return;
   }
 
@@ -53,15 +56,103 @@ final meetingRealtimeSyncProvider = Provider<void>((ref) {
     ref.watch(permissionSetProvider).isBoss,
   );
 
-  final sub = MeetingRealtimeService.instance.changes.listen((_) {
-    ref.read(meetingsControllerProvider.notifier).load(
+  Timer? debounce;
+  Timer? pendingRetry;
+  DateTime? lastReloadAt;
+  var reloadQueued = false;
+
+  Future<void> runReload() async {
+    lastReloadAt = DateTime.now();
+    await ref.read(meetingsControllerProvider.notifier).load(
           null,
           showLoader: false,
         );
+    if (reloadQueued) {
+      reloadQueued = false;
+      debounce?.cancel();
+      debounce = Timer(const Duration(milliseconds: 400), () {
+        unawaited(runReload());
+      });
+    }
+  }
+
+  void requestReload() {
+    final now = DateTime.now();
+    final since = lastReloadAt == null
+        ? const Duration(days: 1)
+        : now.difference(lastReloadAt!);
+
+    // Coalesce bursts, but never drop the last event.
+    if (since < const Duration(seconds: 2)) {
+      reloadQueued = true;
+      pendingRetry?.cancel();
+      final wait = const Duration(seconds: 2) - since + const Duration(milliseconds: 50);
+      pendingRetry = Timer(wait, () {
+        if (!reloadQueued) return;
+        reloadQueued = false;
+        unawaited(runReload());
+      });
+      return;
+    }
+
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 300), () {
+      unawaited(runReload());
+    });
+  }
+
+  final socketSub = MeetingRealtimeService.instance.changes.listen((event) {
+    final source = event['source']?.toString() ?? 'socket';
+    if (source == 'socket-connect') return;
+    requestReload();
   });
 
-  ref.onDispose(sub.cancel);
+  // FCM is reliable on mobile even when Socket.IO "looks" connected but
+  // misses broadcasts (common on Render). Always refresh — coalesced above.
+  final previousFcm = NotificationService.instance.onMeetingSignal;
+  NotificationService.instance.onMeetingSignal = (meetingId) {
+    previousFcm?.call(meetingId);
+    MeetingRealtimeService.instance.notifyChanged(
+      meetingId: meetingId,
+      source: 'fcm',
+    );
+  };
+
+  final lifecycle = _MeetingLifecycleReloader(
+    onResume: () {
+      final stale = lastReloadAt == null ||
+          DateTime.now().difference(lastReloadAt!) >
+              const Duration(seconds: 45);
+      if (!MeetingRealtimeService.instance.isConnected || stale) {
+        MeetingRealtimeService.instance.notifyChanged(source: 'app-resume');
+      }
+    },
+  );
+  WidgetsBinding.instance.addObserver(lifecycle);
+
+  ref.onDispose(() {
+    debounce?.cancel();
+    pendingRetry?.cancel();
+    socketSub.cancel();
+    WidgetsBinding.instance.removeObserver(lifecycle);
+    if (NotificationService.instance.onMeetingSignal != previousFcm) {
+      NotificationService.instance.onMeetingSignal = previousFcm;
+    }
+  });
 });
+
+class _MeetingLifecycleReloader with WidgetsBindingObserver {
+  _MeetingLifecycleReloader({required this.onResume});
+
+  final VoidCallback onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    }
+  }
+}
 
 final bossProfileProvider = FutureProvider<({String id, String name})>((
   ref,

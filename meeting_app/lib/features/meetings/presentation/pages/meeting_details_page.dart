@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -20,6 +18,7 @@ import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/meeting.dart';
 import '../providers/meeting_providers.dart';
+import '../states/meetings_state.dart';
 import '../widgets/meeting_ui.dart';
 
 class MeetingDetailsPage extends ConsumerStatefulWidget {
@@ -37,19 +36,35 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   bool _busy = false;
   String? _error;
   ProviderSubscription<void>? _realtimeSub;
-  StreamSubscription<Map<String, dynamic>>? _changesSub;
+  ProviderSubscription<MeetingsState>? _listSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
-      // Keep details in sync when Boss updates Confirm for your team.
-      _realtimeSub = ref.listenManual(meetingRealtimeSyncProvider, (_, __) {});
-      _changesSub = MeetingRealtimeService.instance.changes.listen((event) {
-        final id = event['meetingId']?.toString();
-        if (id == null || id == widget.meetingId) {
-          _load(silent: true);
+      // Keep socket sync alive while details is open (outside tab watchers).
+      _realtimeSub = ref.listenManual(meetingRealtimeSyncProvider, (_, _) {});
+      // List silent reload already hits API once — mirror into this page (no 2nd fetch).
+      _listSub = ref.listenManual(meetingsControllerProvider, (prev, next) {
+        Meeting? match;
+        for (final m in next.meetings) {
+          if (m.id == widget.meetingId) {
+            match = m;
+            break;
+          }
+        }
+        if (match == null || !mounted) return;
+        final current = _meeting;
+        if (current == null ||
+            current.bossResponse != match.bossResponse ||
+            current.bossResponseNote != match.bossResponseNote ||
+            current.bossMarkedImportant != match.bossMarkedImportant ||
+            current.rescheduleRequested != match.rescheduleRequested ||
+            current.updatedAt != match.updatedAt ||
+            current.coordinatorApproval != match.coordinatorApproval ||
+            current.status != match.status) {
+          setState(() => _meeting = match);
         }
       });
     });
@@ -58,7 +73,7 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
   @override
   void dispose() {
     _realtimeSub?.close();
-    _changesSub?.cancel();
+    _listSub?.close();
     super.dispose();
   }
 

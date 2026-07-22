@@ -20,6 +20,8 @@ class MeetingsController extends StateNotifier<MeetingsState> {
   final MeetingRepository _repository;
   final PermissionSet _permissions;
   final String? _currentUserId;
+  bool _loadingInFlight = false;
+  bool _reloadAfterCurrent = false;
 
   Future<void> load(String? companyId, {bool showLoader = true}) async {
     if (!_permissions.can(AppPermission.viewMeetings)) {
@@ -30,23 +32,40 @@ class MeetingsController extends StateNotifier<MeetingsState> {
       return;
     }
 
+    // Coalesce parallel silent reloads into one follow-up (never drop).
+    if (_loadingInFlight) {
+      if (!showLoader) _reloadAfterCurrent = true;
+      return;
+    }
+
+    _loadingInFlight = true;
+
     if (showLoader || state.meetings.isEmpty) {
       state = state.copyWith(status: MeetingsStatus.loading, clearError: true);
     } else {
       state = state.copyWith(clearError: true);
     }
-    // Central admin meetings — one list for Boss + team (no company switch).
-    final result = await _repository.getAll();
-    state = switch (result) {
-      Success(:final data) => state.copyWith(
-        status: MeetingsStatus.success,
-        meetings: _visibleMeetings(data),
-      ),
-      Error(:final failure) => state.copyWith(
-        status: MeetingsStatus.error,
-        errorMessage: failure.message,
-      ),
-    };
+
+    try {
+      final result = await _repository.getAll();
+      state = switch (result) {
+        Success(:final data) => state.copyWith(
+          status: MeetingsStatus.success,
+          meetings: _visibleMeetings(data),
+        ),
+        Error(:final failure) => state.copyWith(
+          status: MeetingsStatus.error,
+          errorMessage: failure.message,
+        ),
+      };
+    } finally {
+      _loadingInFlight = false;
+      if (_reloadAfterCurrent) {
+        _reloadAfterCurrent = false;
+        // ignore: unawaited_futures
+        load(companyId, showLoader: false);
+      }
+    }
   }
 
   List<Meeting> _visibleMeetings(List<Meeting> meetings) {

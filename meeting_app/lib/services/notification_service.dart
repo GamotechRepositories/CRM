@@ -32,6 +32,10 @@ class NotificationService {
   StreamSubscription<String>? _tokenRefreshSubscription;
   bool _suppressBossTeamAlerts = false;
 
+  /// Fired when a meeting-related push arrives (foreground). Used to refresh UI
+  /// even if Socket.IO is disconnected.
+  void Function(String? meetingId)? onMeetingSignal;
+
   FirebaseMessaging get _messagingOrThrow {
     final messaging = _messaging;
     if (messaging == null) {
@@ -285,9 +289,18 @@ class NotificationService {
         ? 'You have a new notification'
         : notification.body;
 
+    final payload = notification.rawPayload.isEmpty
+        ? Map<String, dynamic>.from(message.data)
+        : notification.rawPayload;
+    final meetingId = _extractMeetingId(payload);
+    if (_looksLikeMeetingSignal(title: title, data: payload)) {
+      // Always refresh lists — even when local toast is suppressed for Boss.
+      onMeetingSignal?.call(meetingId);
+    }
+
     if (_shouldSuppressBossTeamAlert(
       title: title,
-      data: notification.rawPayload,
+      data: payload,
     )) {
       AppLogger.info(
         'Skipped boss-team FCM on Boss device · $title',
@@ -301,11 +314,34 @@ class NotificationService {
         id: message.hashCode,
         title: title,
         body: body,
-        payload: notification.rawPayload.isEmpty
-            ? message.data
-            : notification.rawPayload,
+        payload: payload,
       ),
     );
+  }
+
+  String? _extractMeetingId(Map<String, dynamic> data) {
+    final direct = data['meetingId']?.toString().trim();
+    if (direct != null && direct.isNotEmpty) return direct;
+    return null;
+  }
+
+  bool _looksLikeMeetingSignal({
+    required String title,
+    required Map<String, dynamic> data,
+  }) {
+    final type = (data['type'] ??
+            data['notificationKind'] ??
+            data['notificationType'] ??
+            '')
+        .toString()
+        .toLowerCase();
+    if (type.contains('meeting')) return true;
+    if (data['meetingId'] != null &&
+        data['meetingId'].toString().trim().isNotEmpty) {
+      return true;
+    }
+    final lower = title.toLowerCase();
+    return lower.contains('meeting') || lower.contains('boss');
   }
 
   void _onMessageOpenedApp(RemoteMessage message) {

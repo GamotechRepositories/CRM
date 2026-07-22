@@ -391,14 +391,6 @@ export const updateMeeting = async (req, res) => {
       notifyMeetingAssigned(meeting, req.auth?.sub);
     }
 
-    const wasApproved =
-      previous.coordinatorApproval == null || previous.coordinatorApproval === 'approved';
-    const isNowApproved =
-      meeting.coordinatorApproval == null || meeting.coordinatorApproval === 'approved';
-    if (!wasApproved && isNowApproved) {
-      notifyMeetingAssigned(meeting, req.auth?.sub);
-    }
-
     const bossTeamKeys = [
       'bossResponse',
       'bossResponseNote',

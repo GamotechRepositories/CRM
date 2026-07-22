@@ -44,6 +44,9 @@ class _BossHomeView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Keep live sync active on Home (Your schedule).
+    ref.watch(meetingRealtimeSyncProvider);
+
     final user = ref.watch(authSessionProvider).session?.user;
     final meetingsState = ref.watch(meetingsControllerProvider);
     final name = user?.displayName?.split(' ').first ?? 'Boss';
@@ -1431,6 +1434,8 @@ class _TeamHomeView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(meetingRealtimeSyncProvider);
+
     final user = ref.watch(authSessionProvider).session?.user;
     final meetingsState = ref.watch(meetingsControllerProvider);
     final name = user?.displayName?.split(' ').first ?? 'there';

@@ -7,6 +7,9 @@ import '../core/utils/logger.dart';
 import 'local_notification_service.dart';
 
 /// Live meeting-list sync via Socket.IO (`meetings:changed`).
+///
+/// [notifyChanged] is for rare fallbacks (FCM while socket down, app resume).
+/// Do not call it on every connect — that floods the meetings API.
 class MeetingRealtimeService {
   MeetingRealtimeService._();
   static final MeetingRealtimeService instance = MeetingRealtimeService._();
@@ -14,11 +17,33 @@ class MeetingRealtimeService {
   io.Socket? _socket;
   String? _connectedUserId;
   bool _suppressBossTeamAlerts = false;
+  bool _wasEverConnected = false;
+  DateTime? _lastNotifyAt;
   final _changes = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get changes => _changes.stream;
 
   bool get isConnected => _socket?.connected == true;
+
+  /// Push a synthetic change so UI reloads meetings (client-side debounce).
+  void notifyChanged({
+    String action = 'updated',
+    String? meetingId,
+    String source = 'local',
+  }) {
+    final now = DateTime.now();
+    if (_lastNotifyAt != null &&
+        now.difference(_lastNotifyAt!) < const Duration(milliseconds: 800)) {
+      return;
+    }
+    _lastNotifyAt = now;
+    _changes.add({
+      'action': action,
+      if (meetingId != null && meetingId.isNotEmpty) 'meetingId': meetingId,
+      'source': source,
+      'ts': now.toIso8601String(),
+    });
+  }
 
   void connect({
     required String userId,
@@ -56,6 +81,15 @@ class MeetingRealtimeService {
 
     socket.onConnect((_) {
       AppLogger.info('Meetings socket connected', tag: 'Socket');
+      // First connect: list already loaded by meetingsController — no API hit.
+      // Reconnect after drop: one catch-up reload (missed events while offline).
+      if (_wasEverConnected) {
+        notifyChanged(action: 'sync', source: 'socket-reconnect');
+      } else {
+        _wasEverConnected = true;
+        // Mark source so sync provider can ignore if needed.
+        notifyChanged(action: 'sync', source: 'socket-connect');
+      }
     });
     socket.onDisconnect((_) {
       AppLogger.warning('Meetings socket disconnected', tag: 'Socket');
@@ -66,21 +100,38 @@ class MeetingRealtimeService {
     socket.onError((error) {
       AppLogger.warning('Meetings socket error: $error', tag: 'Socket');
     });
-    socket.onReconnect((_) {
-      AppLogger.info('Meetings socket reconnected', tag: 'Socket');
-    });
     socket.on('meetings:changed', (payload) {
       AppLogger.info('meetings:changed received · $payload', tag: 'Socket');
       if (payload is Map) {
-        _changes.add(Map<String, dynamic>.from(payload));
+        final map = Map<String, dynamic>.from(
+          payload.map((k, v) => MapEntry(k.toString(), v)),
+        );
+        map['source'] = 'socket';
+        _lastNotifyAt = DateTime.now();
+        _changes.add(map);
       } else {
-        _changes.add({'action': 'updated'});
+        notifyChanged(source: 'socket');
       }
     });
 
-    // Push-style alert while app is connected (complements FCM).
+    // Local toast + backup list refresh (in case `meetings:changed` is missed).
     socket.on('notification', (payload) {
       AppLogger.info('notification received · $payload', tag: 'Socket');
+      String? meetingId;
+      if (payload is Map) {
+        final data = Map<String, dynamic>.from(
+          payload.map((k, v) => MapEntry(k.toString(), v)),
+        );
+        final nested = data['data'];
+        if (nested is Map) {
+          meetingId = nested['meetingId']?.toString();
+        }
+        meetingId ??= data['meetingId']?.toString();
+      }
+      notifyChanged(
+        meetingId: meetingId,
+        source: 'socket-notification',
+      );
       unawaited(_showLocalFromSocket(payload));
     });
 
@@ -91,14 +142,18 @@ class MeetingRealtimeService {
   Future<void> _showLocalFromSocket(dynamic payload) async {
     try {
       if (payload is! Map) return;
-      final data = Map<String, dynamic>.from(payload);
+      final data = Map<String, dynamic>.from(
+        payload.map((k, v) => MapEntry(k.toString(), v)),
+      );
       final title = data['title']?.toString().trim();
       final body = data['body']?.toString().trim();
       if (title == null || title.isEmpty) return;
 
       final nested = data['data'];
       final Map<String, dynamic> extra = nested is Map
-          ? Map<String, dynamic>.from(nested)
+          ? Map<String, dynamic>.from(
+              nested.map((k, v) => MapEntry(k.toString(), v)),
+            )
           : <String, dynamic>{};
       final kind = (data['type'] ?? extra['notificationKind'] ?? extra['type'])
           ?.toString();
@@ -138,9 +193,12 @@ class MeetingRealtimeService {
     }
   }
 
-  void disconnect() {
+  void disconnect({bool resetSession = false}) {
     _connectedUserId = null;
     _suppressBossTeamAlerts = false;
+    if (resetSession) {
+      _wasEverConnected = false;
+    }
     try {
       _socket?.disconnect();
       _socket?.dispose();
