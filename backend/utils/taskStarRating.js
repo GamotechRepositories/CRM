@@ -18,24 +18,76 @@ export const TASK_STAR_BANDS = [
   { maxRatio: Infinity, score: 1, label: 'More than 50% late' },
 ];
 
+const toValidDate = (value) => {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+export const resolveEstimatedDurationMinutes = ({
+  estimatedDurationMinutes,
+  scheduledStartAt,
+  scheduledEndAt,
+} = {}) => {
+  const estimated = Number(estimatedDurationMinutes);
+  if (Number.isFinite(estimated) && estimated > 0) return Math.round(estimated);
+
+  const start = toValidDate(scheduledStartAt);
+  const end = toValidDate(scheduledEndAt);
+  if (start && end && end > start) {
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+  }
+  return null;
+};
+
+export const resolveTaskStartAt = ({
+  startedAt,
+  scheduledStartAt,
+  createdAt,
+  completedAt,
+} = {}) => {
+  const completed = toValidDate(completedAt);
+  const candidates = [startedAt, scheduledStartAt, createdAt]
+    .map(toValidDate)
+    .filter(Boolean);
+
+  // Prefer the latest start that is still <= completedAt (avoid future schedule clocks).
+  if (completed) {
+    const notAfterComplete = candidates.filter((d) => d.getTime() <= completed.getTime());
+    if (notAfterComplete.length) {
+      return notAfterComplete.reduce((latest, d) =>
+        d.getTime() > latest.getTime() ? d : latest
+      );
+    }
+  }
+
+  if (candidates.length) return candidates[0];
+  // Last resort: treat as completed instantly so a score can still be assigned.
+  return completed;
+};
+
 export const getActualTaskDurationMinutes = ({
   startedAt,
   scheduledStartAt,
+  createdAt,
   completedAt,
   status,
 } = {}) => {
   if (String(status || '').trim() !== 'Completed' || !completedAt) return null;
 
-  const endMs = new Date(completedAt).getTime();
-  if (Number.isNaN(endMs)) return null;
+  const end = toValidDate(completedAt);
+  if (!end) return null;
 
-  const startCandidate = startedAt || scheduledStartAt;
-  if (!startCandidate) return null;
+  const start = resolveTaskStartAt({
+    startedAt,
+    scheduledStartAt,
+    createdAt,
+    completedAt: end,
+  });
+  if (!start) return null;
 
-  const startMs = new Date(startCandidate).getTime();
-  if (Number.isNaN(startMs) || endMs < startMs) return null;
-
-  return Math.max(0, Math.round((endMs - startMs) / 60000));
+  if (end.getTime() < start.getTime()) return null;
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
 };
 
 export const computeTaskStarScore = (estimatedDurationMinutes, actualDurationMinutes) => {
@@ -59,6 +111,8 @@ export const buildAutoTaskRating = ({
   estimatedDurationMinutes,
   startedAt,
   scheduledStartAt,
+  scheduledEndAt,
+  createdAt,
   completedAt,
   now = new Date(),
 } = {}) => {
@@ -72,21 +126,38 @@ export const buildAutoTaskRating = ({
     };
   }
 
+  const estimate = resolveEstimatedDurationMinutes({
+    estimatedDurationMinutes,
+    scheduledStartAt,
+    scheduledEndAt,
+  });
+  const completed = toValidDate(completedAt) || now;
   const actualMinutes = getActualTaskDurationMinutes({
     startedAt,
     scheduledStartAt,
-    completedAt: completedAt || now,
+    createdAt,
+    completedAt: completed,
     status: 'Completed',
   });
-  const score = computeTaskStarScore(estimatedDurationMinutes, actualMinutes);
+
+  // If we still cannot compute actual time but have an estimate, treat as on-time (4★).
+  const effectiveActual = actualMinutes == null && estimate != null ? estimate : actualMinutes;
+  const score = computeTaskStarScore(estimate, effectiveActual);
   if (score == null) return null;
 
   const label = getTaskStarBandLabel(score);
+  const actualLabel = actualMinutes == null ? 'n/a' : `${actualMinutes}`;
   return {
     score,
-    comments: `Auto-rated from completion time (${actualMinutes} min vs ${estimatedDurationMinutes} min estimate). ${label}.`,
+    comments: `Auto-rated from completion time (${actualLabel} min vs ${estimate} min estimate). ${label}.`,
     ratedBy: null,
     ratedAt: now,
     auto: true,
+    startedAtUsed: resolveTaskStartAt({
+      startedAt,
+      scheduledStartAt,
+      createdAt,
+      completedAt: completed,
+    }),
   };
 };

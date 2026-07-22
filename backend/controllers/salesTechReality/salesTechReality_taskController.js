@@ -303,7 +303,7 @@ export const getTaskById = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id).select(
-      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt completedAt'
+      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt completedAt createdAt'
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
@@ -329,7 +329,14 @@ export const updateTask = async (req, res) => {
         ? payload.estimatedDurationMinutes
         : existing.estimatedDurationMinutes;
 
-    if (mergedScheduledStart) {
+    // Only re-validate schedule when the client is actually changing schedule fields.
+    // Status-only updates (e.g. mark Completed) must not fail "Cannot schedule in the past".
+    const isRescheduling =
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'scheduledStartAt') ||
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'scheduledEndAt') ||
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'estimatedDurationMinutes') ||
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'estimatedDurationHours');
+    if (mergedScheduledStart && isRescheduling) {
       await assertValidTaskSchedule({
         Task,
         Employee,
@@ -339,6 +346,8 @@ export const updateTask = async (req, res) => {
         scheduledEndAt: mergedScheduledEnd,
         estimatedDurationMinutes: mergedDuration,
         excludeTaskId: req.params.id,
+        existingScheduledStartAt: existing.scheduledStartAt,
+        skipPastCheck: false,
       });
     }
 

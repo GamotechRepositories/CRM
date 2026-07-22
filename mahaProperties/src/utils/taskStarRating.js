@@ -12,15 +12,27 @@ export const TASK_STAR_BANDS = [
   { maxRatio: Infinity, score: 1, label: 'More than 50% late' },
 ]
 
+const toValidDate = (value) => {
+  if (!value) return null
+  const d = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 export const getActualTaskDurationMinutes = (task) => {
   if (String(task?.status || '').trim() !== 'Completed' || !task?.completedAt) return null
-  const endMs = new Date(task.completedAt).getTime()
-  if (Number.isNaN(endMs)) return null
-  const startCandidate = task.startedAt || task.scheduledStartAt
-  if (!startCandidate) return null
-  const startMs = new Date(startCandidate).getTime()
-  if (Number.isNaN(startMs) || endMs < startMs) return null
-  return Math.max(0, Math.round((endMs - startMs) / 60000))
+  const end = toValidDate(task.completedAt)
+  if (!end) return null
+
+  const candidates = [task.startedAt, task.scheduledStartAt, task.createdAt]
+    .map(toValidDate)
+    .filter(Boolean)
+  const start =
+    candidates.filter((d) => d.getTime() <= end.getTime()).sort((a, b) => b - a)[0] ||
+    candidates[0] ||
+    end
+
+  if (end.getTime() < start.getTime()) return null
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000))
 }
 
 export const computeTaskStarScore = (estimatedDurationMinutes, actualDurationMinutes) => {
