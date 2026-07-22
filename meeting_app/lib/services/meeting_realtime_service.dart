@@ -13,19 +13,28 @@ class MeetingRealtimeService {
 
   io.Socket? _socket;
   String? _connectedUserId;
+  bool _suppressBossTeamAlerts = false;
   final _changes = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get changes => _changes.stream;
 
   bool get isConnected => _socket?.connected == true;
 
-  void connect({required String userId}) {
+  void connect({
+    required String userId,
+    bool suppressBossTeamAlerts = false,
+  }) {
     final trimmed = userId.trim();
     if (trimmed.isEmpty) return;
-    if (_connectedUserId == trimmed && isConnected) return;
+    if (_connectedUserId == trimmed &&
+        isConnected &&
+        _suppressBossTeamAlerts == suppressBossTeamAlerts) {
+      return;
+    }
 
     disconnect();
     _connectedUserId = trimmed;
+    _suppressBossTeamAlerts = suppressBossTeamAlerts;
 
     final host = EnvConfig.apiHost.trim();
     AppLogger.info('Connecting meetings socket → $host', tag: 'Socket');
@@ -91,6 +100,22 @@ class MeetingRealtimeService {
       final Map<String, dynamic> extra = nested is Map
           ? Map<String, dynamic>.from(nested)
           : <String, dynamic>{};
+      final kind = (data['type'] ?? extra['notificationKind'] ?? extra['type'])
+          ?.toString();
+
+      // Boss should not see their own "Confirm for your team" alerts.
+      if (_suppressBossTeamAlerts &&
+          (kind == 'meeting_boss_response' ||
+              title.toLowerCase().contains('boss will attend') ||
+              title.toLowerCase().contains('boss cannot attend') ||
+              title.toLowerCase().contains('boss response') ||
+              title.toLowerCase().contains('boss requested reschedule'))) {
+        AppLogger.info(
+          'Skipped boss-team alert on Boss device · $title',
+          tag: 'Socket',
+        );
+        return;
+      }
 
       await LocalNotificationService.instance.showNotification(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
@@ -115,6 +140,7 @@ class MeetingRealtimeService {
 
   void disconnect() {
     _connectedUserId = null;
+    _suppressBossTeamAlerts = false;
     try {
       _socket?.disconnect();
       _socket?.dispose();

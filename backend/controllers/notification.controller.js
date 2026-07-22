@@ -344,8 +344,9 @@ export async function notifyMeetingCancelled(meeting, senderId = null) {
 }
 
 /**
- * Notify organizer + Meeting Coordinators when Boss uses
+ * Notify organizer (+ Meeting Coordinators) when Boss uses
  * "Confirm for your team" (attend / decline / reschedule / note / important).
+ * Never notifies the Boss / sender device.
  */
 export async function notifyMeetingBossResponse(
   meeting,
@@ -357,6 +358,10 @@ export async function notifyMeetingBossResponse(
   const highlights = summarizeBossTeamChanges(previous, meeting);
   if (!highlights.length) return;
 
+  const bossId = String(meeting.bossId || '');
+  const sender = String(senderId || bossId || '');
+  const organizerId = String(meeting.organizerId || '');
+
   const coordinators = await CentralAdminUser.find({
     role: 'Meeting Coordinator',
     status: 'Active',
@@ -364,23 +369,26 @@ export async function notifyMeetingBossResponse(
     .select('_id')
     .lean();
 
+  // Meeting creator first, then coordinators — never Boss/sender.
   const recipientUserIds = [
-    meeting.organizerId,
-    meeting.approvedById,
-    ...coordinators.map((c) => c._id),
-  ]
-    .map(String)
-    .filter(Boolean)
-    .filter((id) => id !== String(senderId || ''))
-    .filter((id) => id !== String(meeting.bossId || ''));
+    organizerId,
+    String(meeting.approvedById || ''),
+    ...coordinators.map((c) => String(c._id)),
+  ].filter((id) => id && id !== bossId && id !== sender);
 
   const uniqueRecipients = [...new Set(recipientUserIds)];
-  if (!uniqueRecipients.length) return;
+  if (!uniqueRecipients.length) {
+    logger.warn('BossResponseNotify', 'No recipients for boss response', {
+      meetingId: String(meeting._id),
+      organizerId,
+    });
+    return;
+  }
 
   await dispatchMeetingJob(
     JOB_TYPES.MEETING_BOSS_RESPONSE,
     meeting,
-    senderId,
+    sender || null,
     { highlights, recipientUserIds: uniqueRecipients },
   );
 }

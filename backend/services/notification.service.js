@@ -1,5 +1,6 @@
 import { getMessaging } from '../config/firebase.js';
 import PushNotification from '../models/Notification.js';
+import CentralAdminUser from '../models/centralAdmin/centralAdmin_user.js';
 import { meetingAssignedTemplate } from '../templates/meetingAssigned.js';
 import { meetingReminderTemplate } from '../templates/meetingReminder.js';
 import { meetingCancelledTemplate } from '../templates/meetingCancelled.js';
@@ -235,11 +236,21 @@ class NotificationService {
     meeting = null,
     clickAction = DEFAULT_CLICK_ACTION,
     expiresAt = null,
+    excludeSenderTokens = false,
   }) {
     const companyId = String(meeting?.companyId || '');
     const entityId = String(meeting?._id || meeting?.id || type);
 
     let eligibleUserIds = [...new Set(userIds.map(String).filter(Boolean))];
+    // Never deliver boss-response style alerts back to the actor/Boss.
+    if (type === 'meeting_boss_response') {
+      const bossId = String(meeting?.bossId || '');
+      const sender = String(senderId || '');
+      eligibleUserIds = eligibleUserIds.filter(
+        (id) => id && id !== bossId && id !== sender,
+      );
+    }
+
     eligibleUserIds = await pipeline.resolveEligibleRecipients(eligibleUserIds, companyId);
 
     const guard = await pipeline.runPreSendGuards({
@@ -252,6 +263,10 @@ class NotificationService {
 
     if (guard.skip) {
       return { sent: false, reason: guard.reason };
+    }
+
+    if (!eligibleUserIds.length) {
+      return { sent: false, reason: 'no_recipients' };
     }
 
     const tpl = template({ meeting });
@@ -270,10 +285,26 @@ class NotificationService {
     // Always attempt FCM for every eligible user that has a device token.
     // Socket "online" only means the app process is connected — the user may
     // still need a system tray push (background / screen off / other tab).
-    const { tokens, tokenOwnerMap } = await collectTokensForUserIds(
+    let { tokens, tokenOwnerMap } = await collectTokensForUserIds(
       eligibleUserIds,
       type,
     );
+
+    // Same phone used by Boss + staff: drop tokens still attached to sender.
+    if (excludeSenderTokens && senderId && tokens.length) {
+      const senderUser = await CentralAdminUser.findById(senderId)
+        .select('notifications')
+        .lean();
+      const senderTokenSet = new Set(
+        (senderUser?.notifications || [])
+          .map((n) => String(n?.token || '').trim())
+          .filter(Boolean),
+      );
+      if (senderTokenSet.size) {
+        tokens = tokens.filter((t) => !senderTokenSet.has(t));
+        for (const t of senderTokenSet) tokenOwnerMap.delete(t);
+      }
+    }
 
     const reminderExpiry =
       type === 'meeting_reminder' && meeting?.endAt
@@ -418,11 +449,8 @@ class NotificationService {
   }
 
   /**
-   * Boss "Confirm for your team" updates → organizer + coordinators.
-   * @param {object} meeting
-   * @param {string|null} senderId
-   * @param {string[]} highlights
-   * @param {string[]} recipientUserIds
+   * Boss "Confirm for your team" updates → organizer + coordinators only.
+   * Strips any FCM tokens that still belong to the Boss/sender device.
    */
   async sendMeetingBossResponse(
     meeting,
@@ -430,16 +458,32 @@ class NotificationService {
     highlights = [],
     recipientUserIds = [],
   ) {
-    const userIds = [...new Set(recipientUserIds.map(String).filter(Boolean))];
+    const bossId = String(meeting?.bossId || '');
+    const sender = String(senderId || bossId || '');
+    const userIds = [
+      ...new Set(
+        recipientUserIds
+          .map(String)
+          .filter(Boolean)
+          .filter((id) => id !== bossId && id !== sender),
+      ),
+    ];
     if (!userIds.length) return { sent: false, reason: 'no_recipients' };
+
+    // Ensure meeting creator is always included when present.
+    const organizerId = String(meeting?.organizerId || '');
+    if (organizerId && organizerId !== bossId && organizerId !== sender) {
+      if (!userIds.includes(organizerId)) userIds.unshift(organizerId);
+    }
 
     return this._sendToUsers({
       userIds,
       type: 'meeting_boss_response',
       template: (ctx) =>
         meetingBossResponseTemplate({ ...ctx, highlights }),
-      senderId,
+      senderId: sender || null,
       meeting,
+      excludeSenderTokens: true,
     });
   }
 

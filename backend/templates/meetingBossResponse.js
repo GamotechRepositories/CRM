@@ -1,6 +1,6 @@
 /**
  * Boss "Confirm for your team" response push template.
- * Sent to meeting organizer + Meeting Coordinators.
+ * Sent to meeting organizer + Meeting Coordinators (never Boss).
  */
 import {
   buildContextLine,
@@ -20,9 +20,21 @@ export function meetingBossResponseTemplate({ meeting, highlights = [] }) {
     ? highlights.map((h) => String(h || '').trim()).filter(Boolean)
     : [];
 
+  const response = String(meeting?.bossResponse || 'pending').toLowerCase();
+  let notifTitle = 'Boss response';
+  if (response === 'accepted') notifTitle = 'Boss will attend';
+  if (response === 'declined') notifTitle = 'Boss cannot attend';
+  if (Boolean(meeting?.rescheduleRequested) && lines.some((l) => l.includes('reschedule'))) {
+    notifTitle = 'Boss requested reschedule';
+  }
+
   let headline;
   if (lines.length) {
     headline = `${bossName}: ${lines.join('; ')}.`;
+  } else if (response === 'declined') {
+    headline = `${bossName} cannot attend "${title}".`;
+  } else if (response === 'accepted') {
+    headline = `${bossName} will attend "${title}".`;
   } else {
     headline = `${bossName} updated the response for "${title}".`;
   }
@@ -30,15 +42,16 @@ export function meetingBossResponseTemplate({ meeting, highlights = [] }) {
   const bodyParts = [headline];
   if (context) bodyParts.push(`Meeting: "${title}" · ${context}.`);
   else bodyParts.push(`Meeting: "${title}".`);
-  bodyParts.push('Tap to open.');
+  bodyParts.push('Open the meeting to take action.');
 
   return {
-    title: 'Boss response',
+    title: notifTitle,
     body: bodyParts.join(' '),
     data: commonMeetingData(meeting, {
       notificationKind: 'meeting_boss_response',
       bossResponse: String(meeting?.bossResponse || 'pending'),
       highlights: lines.join(' | '),
+      forOrganizer: 'true',
     }),
     image: '',
     priority: resolvePriority(meeting, 'high'),

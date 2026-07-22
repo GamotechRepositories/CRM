@@ -213,11 +213,11 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
                 ),
               if (meeting.coordinatorApproval == CoordinatorApproval.rejected)
                 MeetingTag(label: 'Rejected', color: AppColors.error),
-              // Attendance tags only for team — Boss card already shows status.
-              if (!usesScheduleUi &&
+              // Attendance tags for team + coordinator (not Boss — they have their own card).
+              if (!isBossView &&
                   meeting.bossResponse == InvitationResponse.accepted)
                 MeetingTag(label: 'Boss attending', color: AppColors.success),
-              if (!usesScheduleUi &&
+              if (!isBossView &&
                   meeting.bossResponse == InvitationResponse.declined)
                 MeetingTag(label: 'Boss not attending', color: AppColors.error),
               if (meeting.rescheduleRequested)
@@ -354,7 +354,9 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
             const SizedBox(height: AppSpacing.md),
           ],
 
-          if (!usesScheduleUi) ...[
+          // Meeting creator + coordinator must see Boss reply clearly.
+          // (Coordinator uses schedule UI layout, so do not gate on usesScheduleUi.)
+          if (!isBossView) ...[
             _TeamBossFeedbackCard(
               meeting: meeting,
               canEdit: canEdit,

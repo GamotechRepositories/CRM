@@ -30,6 +30,7 @@ class NotificationService {
   bool _listenersAttached = false;
   AuthTokenProvider? _authTokenProvider;
   StreamSubscription<String>? _tokenRefreshSubscription;
+  bool _suppressBossTeamAlerts = false;
 
   FirebaseMessaging get _messagingOrThrow {
     final messaging = _messaging;
@@ -74,6 +75,25 @@ class NotificationService {
 
   void bindAuthTokenProvider(AuthTokenProvider provider) {
     _authTokenProvider = provider;
+  }
+
+  /// Boss must not see their own Confirm-for-your-team push toasts.
+  void setSuppressBossTeamAlerts(bool value) {
+    _suppressBossTeamAlerts = value;
+  }
+
+  bool _shouldSuppressBossTeamAlert({
+    required String title,
+    Map<String, dynamic>? data,
+  }) {
+    if (!_suppressBossTeamAlerts) return false;
+    final kind = (data?['notificationKind'] ?? data?['type'])?.toString() ?? '';
+    final lower = title.toLowerCase();
+    return kind == 'meeting_boss_response' ||
+        lower.contains('boss will attend') ||
+        lower.contains('boss cannot attend') ||
+        lower.contains('boss response') ||
+        lower.contains('boss requested reschedule');
   }
 
   Future<bool> requestPermission() async {
@@ -194,6 +214,7 @@ class NotificationService {
   /// Stop listening and clear push registration on logout.
   Future<void> onLogout() async {
     if (!_initialized) return;
+    _suppressBossTeamAlerts = false;
 
     try {
       await _messagingOrThrow.deleteToken();
@@ -263,6 +284,17 @@ class NotificationService {
     final body = notification.body.trim().isEmpty
         ? 'You have a new notification'
         : notification.body;
+
+    if (_shouldSuppressBossTeamAlert(
+      title: title,
+      data: notification.rawPayload,
+    )) {
+      AppLogger.info(
+        'Skipped boss-team FCM on Boss device · $title',
+        tag: NotificationConstants.logTag,
+      );
+      return;
+    }
 
     unawaited(
       _local.showNotification(

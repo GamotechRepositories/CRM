@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../services/meeting_realtime_service.dart';
+import '../../../../services/notification_service.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/states/auth_session_state.dart';
 import '../../data/datasources/meeting_remote_datasource.dart';
@@ -44,7 +45,13 @@ final meetingRealtimeSyncProvider = Provider<void>((ref) {
     return;
   }
 
-  MeetingRealtimeService.instance.connect(userId: userId);
+  MeetingRealtimeService.instance.connect(
+    userId: userId,
+    suppressBossTeamAlerts: ref.watch(permissionSetProvider).isBoss,
+  );
+  NotificationService.instance.setSuppressBossTeamAlerts(
+    ref.watch(permissionSetProvider).isBoss,
+  );
 
   final sub = MeetingRealtimeService.instance.changes.listen((_) {
     ref.read(meetingsControllerProvider.notifier).load(
