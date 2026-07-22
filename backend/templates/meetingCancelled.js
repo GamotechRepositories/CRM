@@ -1,25 +1,30 @@
 /**
  * Meeting cancelled push template.
- * @param {object} params
- * @param {object} params.meeting
- * @returns {{ title: string, body: string, data: object, image: string, priority: string }}
  */
+import {
+  commonMeetingData,
+  formatWhen,
+  formatWhere,
+  formatCompany,
+} from './meetingTemplateHelpers.js';
+
 export function meetingCancelledTemplate({ meeting }) {
-  const meetingId = String(meeting?._id || meeting?.id || '');
+  const title = String(meeting?.title || '').trim() || 'Meeting';
+  const when = formatWhen(meeting);
+  const where = formatWhere(meeting);
+  const company = formatCompany(meeting);
+
+  const lines = [`"${title}" is cancelled.`];
+  if (when) lines.push(`It was planned for ${when}.`);
+  if (where) lines.push(`Place was ${where}.`);
+  if (company) lines.push(company + '.');
+  lines.push('You do not need to attend.');
+
   return {
-    title: 'Meeting Cancelled',
-    body: meeting?.title
-      ? `"${meeting.title}" has been cancelled.`
-      : 'A meeting has been cancelled.',
-    data: {
-      type: 'meeting',
-      screen: 'meeting_details',
-      meetingId,
-      companyId: String(meeting?.companyId || ''),
-      priority: 'normal',
-      action: 'open_meeting',
-    },
+    title: 'Meeting cancelled',
+    body: lines.join(' '),
+    data: commonMeetingData(meeting, { notificationKind: 'meeting_cancelled' }),
     image: '',
-    priority: 'normal',
+    priority: 'high',
   };
 }

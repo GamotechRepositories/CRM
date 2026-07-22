@@ -10,6 +10,7 @@ import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/utils/meeting_pickers.dart';
 import '../../../../shared/widgets/buttons/app_button.dart';
 import '../../../../shared/widgets/inputs/app_text_field.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
@@ -368,36 +369,20 @@ class _MeetingFormPageState extends ConsumerState<MeetingFormPage> {
     // when the app already clamps text scaling.
     final rootContext = Navigator.of(context, rootNavigator: true).context;
 
-    final date = await showDatePicker(
-      context: rootContext,
+    final date = await MeetingPickers.pickDate(
+      rootContext,
       initialDate: initial.isBefore(today) ? today : initial,
       firstDate: today,
       lastDate: now.add(const Duration(days: 365)),
       helpText: isStart ? 'Select start date' : 'Select end date',
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.noScaling,
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: rootContext,
+    final time = await MeetingPickers.pickTime(
+      rootContext,
       initialTime: TimeOfDay.fromDateTime(
         initial.isBefore(now) ? now.add(const Duration(hours: 1)) : initial,
       ),
       helpText: isStart ? 'Select start time' : 'Select end time',
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.noScaling,
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
     );
     if (time == null || !mounted) return;
     var next = DateTime(

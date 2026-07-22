@@ -8,6 +8,8 @@ import '../../../../core/extensions/context_extensions.dart';
 import '../../../../core/rbac/app_permission.dart';
 import '../../../../core/rbac/widgets/permission_gate.dart';
 import '../../../../core/router/route_names.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/feedback/error_view.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
@@ -60,12 +62,19 @@ class _EmployeesPageState extends ConsumerState<EmployeesPage> {
     final companyAsync = ref.watch(
       companyDetailControllerProvider(widget.companyId),
     );
-    final companyName = companyAsync.company?.name ?? 'Employees';
+    final companyName = companyAsync.company?.name ?? 'Team';
+    final industry = companyAsync.company?.industry.trim() ?? '';
 
     return AppScaffold(
       maxContentWidth: 960,
       appBar: AppBar(
-        title: Text(companyName),
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          'Employees',
+          style: context.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -94,6 +103,21 @@ class _EmployeesPageState extends ConsumerState<EmployeesPage> {
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.md,
                 AppSpacing.sm,
+                AppSpacing.md,
+                0,
+              ),
+              child: _EmployeesHeroHeader(
+                companyName: companyName,
+                industry: industry,
+                total: state.employees.length,
+                active: state.activeCount,
+                departments: state.countByDepartment.length,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
                 AppSpacing.md,
                 AppSpacing.sm,
               ),
@@ -241,6 +265,195 @@ class _EmployeesPageState extends ConsumerState<EmployeesPage> {
             onDelete: () => _delete(employee),
           );
         },
+      ),
+    );
+  }
+}
+
+class _EmployeesHeroHeader extends StatelessWidget {
+  const _EmployeesHeroHeader({
+    required this.companyName,
+    required this.industry,
+    required this.total,
+    required this.active,
+    required this.departments,
+  });
+
+  final String companyName;
+  final String industry;
+  final int total;
+  final int active;
+  final int departments;
+
+  @override
+  Widget build(BuildContext context) {
+    final inactive = (total - active).clamp(0, total);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.xlAll,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1D4ED8),
+            Color(0xFF1E40AF),
+            Color(0xFF0F766E),
+          ],
+          stops: [0.0, 0.55, 1.0],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.28),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: AppRadius.lgAll,
+                ),
+                child: const Icon(
+                  Icons.groups_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TEAM DIRECTORY',
+                      style: context.textTheme.labelMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      companyName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    if (industry.isNotEmpty)
+                      Text(
+                        industry,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            total == 0
+                ? 'Add people to build this company roster.'
+                : 'Manage roles, departments, and access for your team.',
+            style: context.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: _HeaderStat(
+                  label: 'Total',
+                  value: '$total',
+                  icon: Icons.people_alt_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HeaderStat(
+                  label: 'Active',
+                  value: '$active',
+                  icon: Icons.verified_user_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HeaderStat(
+                  label: departments > 0 ? 'Depts' : 'Inactive',
+                  value: departments > 0 ? '$departments' : '$inactive',
+                  icon: departments > 0
+                      ? Icons.apartment_rounded
+                      : Icons.person_off_outlined,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 320.ms).slideY(begin: 0.06, end: 0);
+  }
+}
+
+class _HeaderStat extends StatelessWidget {
+  const _HeaderStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.18),
+        borderRadius: AppRadius.lgAll,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.9)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: context.textTheme.titleLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            style: context.textTheme.labelSmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

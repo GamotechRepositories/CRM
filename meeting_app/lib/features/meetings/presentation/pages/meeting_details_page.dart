@@ -13,6 +13,7 @@ import '../../../../core/router/route_names.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../core/utils/meeting_link_launcher.dart';
+import '../../../../core/utils/meeting_pickers.dart';
 import '../../../../shared/widgets/layout/app_scaffold.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../domain/entities/meeting.dart';
@@ -840,15 +841,15 @@ class _MeetingDetailsPageState extends ConsumerState<MeetingDetailsPage> {
             builder: (ctx, setSheet) {
               Future<void> pickDateTime({required bool isStart}) async {
                 final initial = isStart ? preferredStart : preferredEnd;
-                final date = await showDatePicker(
-                  context: ctx,
+                final date = await MeetingPickers.pickDate(
+                  ctx,
                   initialDate: initial,
                   firstDate: DateTime.now().subtract(const Duration(days: 1)),
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
                 if (date == null || !ctx.mounted) return;
-                final time = await showTimePicker(
-                  context: ctx,
+                final time = await MeetingPickers.pickTime(
+                  ctx,
                   initialTime: TimeOfDay.fromDateTime(initial),
                 );
                 if (time == null || !ctx.mounted) return;

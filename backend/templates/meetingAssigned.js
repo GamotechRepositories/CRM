@@ -1,25 +1,26 @@
 /**
- * Meeting assigned push template.
- * @param {object} params
- * @param {object} params.meeting
- * @returns {{ title: string, body: string, data: object, image: string, priority: string }}
+ * Meeting assigned / approved push template.
+ * Sent to Boss + organizer when a meeting is ready on the schedule.
  */
+import {
+  buildContextLine,
+  commonMeetingData,
+  resolvePriority,
+} from './meetingTemplateHelpers.js';
+
 export function meetingAssignedTemplate({ meeting }) {
-  const meetingId = String(meeting?._id || meeting?.id || '');
+  const title = String(meeting?.title || '').trim() || 'New meeting';
+  const context = buildContextLine(meeting, { includeOrganizer: true });
+
+  const lines = [`"${title}" is on your schedule.`];
+  if (context) lines.push(context + '.');
+  lines.push('Tap to open details.');
+
   return {
-    title: 'New Meeting Assigned',
-    body: meeting?.title
-      ? `You have a new meeting scheduled: ${meeting.title}.`
-      : 'You have a new meeting scheduled.',
-    data: {
-      type: 'meeting',
-      screen: 'meeting_details',
-      meetingId,
-      companyId: String(meeting?.companyId || ''),
-      priority: String(meeting?.priority || 'normal'),
-      action: 'open_meeting',
-    },
+    title: 'New meeting scheduled',
+    body: lines.join(' '),
+    data: commonMeetingData(meeting, { notificationKind: 'meeting_assigned' }),
     image: '',
-    priority: meeting?.priority === 'critical' || meeting?.priority === 'high' ? 'high' : 'normal',
+    priority: resolvePriority(meeting, 'normal'),
   };
 }

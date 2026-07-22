@@ -1,22 +1,23 @@
 /**
  * System notification push template.
- * @param {object} params
- * @param {string} params.title
- * @param {string} params.body
- * @param {object} [params.extraData]
- * @returns {{ title: string, body: string, data: object, image: string, priority: string }}
  */
 export function systemNotificationTemplate({ title, body, extraData = {} }) {
+  const safeTitle = String(title || '').trim() || 'Meeting App';
+  const safeBody =
+    String(body || '').trim() ||
+    'You have a new update. Open the app for details.';
+
   return {
-    title: title || 'System Notification',
-    body: body || '',
+    title: safeTitle,
+    body: safeBody,
     data: {
       type: 'system',
       screen: 'notifications',
-      meetingId: '',
+      meetingId: String(extraData.meetingId || ''),
       companyId: String(extraData.companyId || ''),
       priority: String(extraData.priority || 'normal'),
-      action: 'open_notifications',
+      action: String(extraData.action || 'open_notifications'),
+      notificationKind: 'system',
       ...extraData,
     },
     image: String(extraData.image || ''),

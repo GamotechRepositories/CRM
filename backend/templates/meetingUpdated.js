@@ -1,25 +1,42 @@
 /**
- * Meeting updated push template.
- * @param {object} params
- * @param {object} params.meeting
- * @returns {{ title: string, body: string, data: object, image: string, priority: string }}
+ * Meeting updated push template — shows what changed + current details.
  */
-export function meetingUpdatedTemplate({ meeting }) {
-  const meetingId = String(meeting?._id || meeting?.id || '');
+import {
+  buildContextLine,
+  commonMeetingData,
+  resolvePriority,
+} from './meetingTemplateHelpers.js';
+
+/**
+ * @param {{ meeting: object, changes?: string[] }} params
+ */
+export function meetingUpdatedTemplate({ meeting, changes = [] }) {
+  const title = String(meeting?.title || '').trim() || 'Meeting';
+  const context = buildContextLine(meeting, { includeOrganizer: true });
+  const changeList = Array.isArray(changes)
+    ? changes.map((c) => String(c || '').trim()).filter(Boolean)
+    : [];
+
+  const lines = [];
+
+  if (changeList.length) {
+    lines.push(`"${title}" — ${changeList.join('; ')}.`);
+  } else if (context) {
+    lines.push(`"${title}" — ${context}.`);
+  } else {
+    lines.push(`"${title}" details are now available.`);
+  }
+
+  lines.push('Tap to open.');
+
   return {
-    title: 'Meeting Updated',
-    body: meeting?.title
-      ? `"${meeting.title}" has been updated.`
-      : 'A meeting has been updated.',
-    data: {
-      type: 'meeting',
-      screen: 'meeting_details',
-      meetingId,
-      companyId: String(meeting?.companyId || ''),
-      priority: String(meeting?.priority || 'normal'),
-      action: 'open_meeting',
-    },
+    title: 'Meeting updated',
+    body: lines.join(' '),
+    data: commonMeetingData(meeting, {
+      notificationKind: 'meeting_updated',
+      changes: changeList.join(' | '),
+    }),
     image: '',
-    priority: 'normal',
+    priority: resolvePriority(meeting, 'high'),
   };
 }

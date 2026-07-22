@@ -1,24 +1,29 @@
 /**
- * Meeting reminder push template (15 minutes before start).
- * @param {object} params
- * @param {object} params.meeting
- * @returns {{ title: string, body: string, data: object, image: string, priority: string }}
+ * Meeting reminder push template (~15 minutes before start).
  */
+import {
+  commonMeetingData,
+  formatWhen,
+  formatWhere,
+  formatCompany,
+} from './meetingTemplateHelpers.js';
+
 export function meetingReminderTemplate({ meeting }) {
-  const meetingId = String(meeting?._id || meeting?.id || '');
+  const title = String(meeting?.title || '').trim() || 'Your meeting';
+  const when = formatWhen(meeting);
+  const where = formatWhere(meeting);
+  const company = formatCompany(meeting);
+
+  const lines = [`"${title}" starts in 15 minutes.`];
+  if (when) lines.push(when + '.');
+  if (where) lines.push(`Place: ${where}.`);
+  if (company) lines.push(company + '.');
+  lines.push('Tap to open.');
+
   return {
-    title: 'Meeting Reminder',
-    body: meeting?.title
-      ? `"${meeting.title}" starts in 15 minutes.`
-      : 'Your meeting starts in 15 minutes.',
-    data: {
-      type: 'meeting',
-      screen: 'meeting_details',
-      meetingId,
-      companyId: String(meeting?.companyId || ''),
-      priority: 'high',
-      action: 'open_meeting',
-    },
+    title: 'Meeting starting soon',
+    body: lines.join(' '),
+    data: commonMeetingData(meeting, { notificationKind: 'meeting_reminder' }),
     image: '',
     priority: 'high',
   };

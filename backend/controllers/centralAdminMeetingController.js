@@ -398,7 +398,7 @@ export const updateMeeting = async (req, res) => {
         ['title', 'startAt', 'endAt', 'location', 'meetLink', 'agenda', 'description'].includes(k),
       )
     ) {
-      notifyMeetingUpdated(meeting, req.auth?.sub);
+      notifyMeetingUpdated(meeting, req.auth?.sub, previous);
     }
     emitRealtimeMeetingChange('updated', meeting);
 

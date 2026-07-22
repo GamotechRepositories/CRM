@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 /// Premium color palette for light and dark themes.
 abstract final class AppColors {
   // Brand
+  static const Color brandPurple = Color(0xFF3A1568);
+  static const Color brandPurpleDeep = Color(0xFF2A0E4C);
+  static const Color brandGold = Color(0xFFD4AF37);
+
   static const Color primary = Color(0xFF1D4ED8);
   static const Color primaryLight = Color(0xFF3B82F6);
   static const Color primaryDark = Color(0xFF1E3A8A);

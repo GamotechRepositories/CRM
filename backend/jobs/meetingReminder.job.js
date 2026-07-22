@@ -24,6 +24,12 @@ async function processMeetingReminders() {
   const meetings = await CentralMeeting.find({
     status: { $in: ['scheduled', 'rescheduled'] },
     startAt: { $gte: windowStart, $lte: windowEnd },
+    // Only remind for meetings already on the Boss schedule
+    $or: [
+      { coordinatorApproval: 'approved' },
+      { coordinatorApproval: null },
+      { coordinatorApproval: { $exists: false } },
+    ],
   }).lean();
 
   if (!meetings.length) return;

@@ -24,6 +24,7 @@ import { ValidationError } from '../utils/errors.js';
 import { checkUserDeviceRegisterRate } from '../utils/notificationRateLimit.js';
 import { sanitizeNotificationText } from '../utils/companyIsolation.js';
 import { buildDedupeKey } from '../utils/notificationDedupe.js';
+import { summarizeMeetingChanges } from '../templates/meetingTemplateHelpers.js';
 import logger from '../utils/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,12 +264,12 @@ export const sendUserNotification = async (req, res) => {
 // Meeting hooks (preserved — now queue-aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function dispatchMeetingJob(type, meeting, senderId = null) {
+async function dispatchMeetingJob(type, meeting, senderId = null, extras = {}) {
   const meetingId = String(meeting._id);
   const companyId = String(meeting.companyId || '');
   const dedupeKey = buildDedupeKey(type, meetingId);
 
-  const jobData = { meetingId, senderId, companyId, dedupeKey };
+  const jobData = { meetingId, senderId, companyId, dedupeKey, ...extras };
 
   const inlineHandlers = {
     [JOB_TYPES.MEETING_ASSIGNED]: () => notificationService.sendMeetingAssigned(meeting, senderId),
@@ -284,7 +285,8 @@ async function dispatchMeetingJob(type, meeting, senderId = null) {
         coordinators.map((c) => String(c._id)),
       );
     },
-    [JOB_TYPES.MEETING_UPDATED]: () => notificationService.sendMeetingUpdated(meeting, senderId),
+    [JOB_TYPES.MEETING_UPDATED]: () =>
+      notificationService.sendMeetingUpdated(meeting, senderId, extras.changes || []),
     [JOB_TYPES.MEETING_CANCELLED]: () => notificationService.sendMeetingCancelled(meeting, senderId),
   };
 
@@ -311,9 +313,10 @@ export async function notifyMeetingPendingApproval(meeting) {
 }
 
 /** Notify when meeting is updated. */
-export async function notifyMeetingUpdated(meeting, senderId = null) {
+export async function notifyMeetingUpdated(meeting, senderId = null, previous = null) {
   if (!meeting) return;
-  await dispatchMeetingJob(JOB_TYPES.MEETING_UPDATED, meeting, senderId);
+  const changes = summarizeMeetingChanges(previous, meeting);
+  await dispatchMeetingJob(JOB_TYPES.MEETING_UPDATED, meeting, senderId, { changes });
 }
 
 /** Notify when meeting is cancelled. */

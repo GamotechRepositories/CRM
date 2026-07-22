@@ -4,6 +4,7 @@ import { meetingAssignedTemplate } from '../templates/meetingAssigned.js';
 import { meetingReminderTemplate } from '../templates/meetingReminder.js';
 import { meetingCancelledTemplate } from '../templates/meetingCancelled.js';
 import { meetingUpdatedTemplate } from '../templates/meetingUpdated.js';
+import { meetingPendingApprovalTemplate } from '../templates/meetingPendingApproval.js';
 import { systemNotificationTemplate } from '../templates/systemNotification.js';
 import {
   collectTokensForUserIds,
@@ -404,12 +405,12 @@ class NotificationService {
   }
 
   /** @param {object} meeting */
-  async sendMeetingUpdated(meeting, senderId = null) {
+  async sendMeetingUpdated(meeting, senderId = null, changes = []) {
     const userIds = [meeting.bossId, meeting.organizerId].filter(Boolean);
     return this._sendToUsers({
       userIds,
       type: 'meeting_updated',
-      template: (ctx) => meetingUpdatedTemplate(ctx),
+      template: (ctx) => meetingUpdatedTemplate({ ...ctx, changes }),
       senderId,
       meeting,
     });
@@ -426,35 +427,18 @@ class NotificationService {
   }
 
   /**
-   * Notify coordinators about pending approval (preserves existing behavior).
+   * Notify coordinators about pending approval.
+   * Uses the same delivery path as other meeting pushes (FCM + socket + history).
    * @param {object} meeting
    * @param {string[]} coordinatorUserIds
    */
   async sendMeetingPendingApproval(meeting, coordinatorUserIds) {
-    const tpl = meetingAssignedTemplate({ meeting });
-    tpl.title = 'Meeting Pending Approval';
-    tpl.body = `"${meeting.title}" is waiting for your approval.`;
-    tpl.data.action = 'open_meeting';
-
-    const { tokens, tokenOwnerMap } = await collectTokensForUserIds(
-      coordinatorUserIds,
-      'meeting_pending',
-    );
-
-    if (!tokens.length) return { sent: false };
-
-    const result = await this.sendToMultipleDevices(tokens, {
-      title: tpl.title,
-      body: tpl.body,
-      data: tpl.data,
-      clickAction: DEFAULT_CLICK_ACTION,
+    return this._sendToUsers({
+      userIds: coordinatorUserIds,
+      type: 'meeting_pending',
+      template: (ctx) => meetingPendingApprovalTemplate(ctx),
+      meeting,
     });
-
-    if (result.invalidTokens?.length) {
-      await this.removeInvalidToken(result.invalidTokens, tokenOwnerMap);
-    }
-
-    return { sent: result.successCount > 0, ...result };
   }
 }
 

@@ -57,7 +57,11 @@ async function processJob(job) {
 
     case JOB_TYPES.MEETING_UPDATED: {
       const meeting = await CentralMeeting.findById(data.meetingId).lean();
-      return notificationService.sendMeetingUpdated(meeting, data.senderId);
+      return notificationService.sendMeetingUpdated(
+        meeting,
+        data.senderId,
+        data.changes || [],
+      );
     }
 
     case JOB_TYPES.MEETING_CANCELLED: {

@@ -10,10 +10,8 @@ import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/router/route_names.dart';
 import '../../../../core/router/shell_nav_catalog.dart';
 import '../../../../core/utils/logger.dart';
-import '../../../../shared/widgets/loading/lottie_loading.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/states/auth_session_state.dart';
-import '../../../auth/presentation/widgets/auth_hero_logo.dart';
 import '../../../../services/notification_service.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -98,29 +96,25 @@ class _SplashPageState extends ConsumerState<SplashPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const AuthHeroLogo(size: 96, showTitle: false),
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: colorScheme.primary,
+                  ),
+                )
+                    .animate()
+                    .fadeIn(duration: 300.ms),
                 const SizedBox(height: 20),
-                const LottieLoading(size: 100),
-                const SizedBox(height: 16),
                 Text(
                       AppConstants.appName,
-                      style: textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+                      style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     )
                     .animate()
-                    .fadeIn(delay: 200.ms, duration: 500.ms)
-                    .slideY(begin: 0.2, end: 0),
-                const SizedBox(height: 8),
-                Text(
-                      AppConstants.appTagline,
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    )
-                    .animate()
-                    .fadeIn(delay: 400.ms, duration: 500.ms)
-                    .slideY(begin: 0.2, end: 0),
+                    .fadeIn(delay: 150.ms, duration: 400.ms),
               ],
             ),
           ),
