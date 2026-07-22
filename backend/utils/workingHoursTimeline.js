@@ -131,7 +131,8 @@ export const buildWorkingTimeline = ({
       rangesOverlap(minute, slotEnd, range.startMinutes, range.endMinutes)
     ).length;
 
-    if (isToday && slotEnd <= nowMinutes) {
+    // Disable past and currently-running slots; only future starts are selectable.
+    if (isToday && minute <= nowMinutes) {
       status = 'past';
     } else if (taskCount > 0) {
       // Occupied slots stay selectable: employees can run multiple tasks at once.

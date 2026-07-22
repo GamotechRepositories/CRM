@@ -10,6 +10,8 @@ export const assertValidTaskSchedule = async ({
   scheduledEndAt,
   estimatedDurationMinutes,
   excludeTaskId,
+  existingScheduledStartAt = null,
+  skipPastCheck = false,
   now = new Date(),
 }) => {
   if (!scheduledStartAt) {
@@ -25,7 +27,15 @@ export const assertValidTaskSchedule = async ({
     throw error;
   }
 
-  if (start.getTime() < now.getTime()) {
+  const existingStart = existingScheduledStartAt ? new Date(existingScheduledStartAt) : null;
+  const startUnchanged =
+    existingStart &&
+    !Number.isNaN(existingStart.getTime()) &&
+    Math.abs(existingStart.getTime() - start.getTime()) < 1000;
+
+  // Only block NEW schedules in the past. Re-saving an existing start (e.g. status
+  // change on an in-progress task) must always be allowed.
+  if (!skipPastCheck && !startUnchanged && start.getTime() < now.getTime()) {
     const error = new Error('Cannot schedule a task in the past');
     error.statusCode = 400;
     throw error;

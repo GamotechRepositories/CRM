@@ -39,7 +39,8 @@ const buildClientTimeline = (baseTimeline, selectedStartMinutes, durationMinutes
 
   const slots = baseTimeline.slots.map((slot) => {
     let status = slot.status
-    if (isToday && slot.endMinutes <= nowMinutes) {
+    // Disable past + currently running slot; only future starts are selectable.
+    if (isToday && slot.startMinutes <= nowMinutes) {
       status = 'past'
     }
     if (

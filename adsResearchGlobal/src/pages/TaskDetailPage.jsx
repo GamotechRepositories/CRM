@@ -221,6 +221,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
     if (!tid || !newStatus) return
     const resolvedStatus = normalizeTaskStatus(newStatus)
     setUpdatingStatus(true)
+    setError(null)
     try {
       if (t.source === 'social_media' && t.clientId && t.postId) {
         const socialStatus = taskStatusToSocialStatus(resolvedStatus)
@@ -240,6 +241,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
       }
     } catch (err) {
       console.error('Failed to update task status:', err)
+      setError(err?.response?.data?.message || err.message || 'Failed to update task status')
     } finally {
       setUpdatingStatus(false)
     }

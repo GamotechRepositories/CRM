@@ -4,6 +4,7 @@ import { buildAutoTaskRating } from './taskStarRating.js';
  * When a task is marked Completed, auto-set star rating from completion time
  * unless the client explicitly sent a rating payload (manual override).
  * When reopened / cancelled, clear auto ratings.
+ * Also backfills Completed tasks that somehow have no score yet.
  */
 export const applyAutoTaskStarRating = ({
   existing,
@@ -23,25 +24,37 @@ export const applyAutoTaskStarRating = ({
 
   const becomingCompleted = nextStatus === 'Completed' && existing?.status !== 'Completed';
   const leavingCompleted = nextStatus !== 'Completed' && existing?.status === 'Completed';
+  const completedMissingScore =
+    nextStatus === 'Completed' &&
+    !(Number(existing?.rating?.score) >= 1) &&
+    !(Number(result?.rating?.score) >= 1);
 
-  if (becomingCompleted) {
-    const completedAt = result.completedAt || new Date();
+  if (becomingCompleted || completedMissingScore) {
+    const completedAt = result.completedAt || existing?.completedAt || new Date();
     result.completedAt = completedAt;
 
+    const estimatedDurationMinutes =
+      result.estimatedDurationMinutes !== undefined
+        ? result.estimatedDurationMinutes
+        : existing?.estimatedDurationMinutes;
+    const scheduledStartAt =
+      result.scheduledStartAt !== undefined
+        ? result.scheduledStartAt
+        : existing?.scheduledStartAt;
+    const scheduledEndAt =
+      result.scheduledEndAt !== undefined
+        ? result.scheduledEndAt
+        : existing?.scheduledEndAt;
     const startedAt = result.startedAt || existing?.startedAt || null;
-    // If never started, treat completion moment as start only when no schedule either —
-    // prefer scheduledStartAt for duration vs estimate window.
+    const createdAt = existing?.createdAt || null;
+
     const autoRating = buildAutoTaskRating({
       status: 'Completed',
-      estimatedDurationMinutes:
-        result.estimatedDurationMinutes !== undefined
-          ? result.estimatedDurationMinutes
-          : existing?.estimatedDurationMinutes,
+      estimatedDurationMinutes,
       startedAt,
-      scheduledStartAt:
-        result.scheduledStartAt !== undefined
-          ? result.scheduledStartAt
-          : existing?.scheduledStartAt,
+      scheduledStartAt,
+      scheduledEndAt,
+      createdAt,
       completedAt,
     });
 
@@ -53,12 +66,11 @@ export const applyAutoTaskStarRating = ({
         ratedAt: autoRating.ratedAt,
         auto: true,
       };
-      // Persist startedAt if it was missing so duration remains auditable
-      if (!startedAt && !existing?.startedAt) {
-        result.startedAt =
-          result.scheduledStartAt ||
-          existing?.scheduledStartAt ||
-          completedAt;
+      // Persist a start timestamp so duration remains auditable
+      if (!startedAt && autoRating.startedAtUsed) {
+        result.startedAt = autoRating.startedAtUsed;
+      } else if (!startedAt) {
+        result.startedAt = scheduledStartAt || createdAt || completedAt;
       }
     }
   } else if (leavingCompleted) {
