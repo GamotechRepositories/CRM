@@ -5,6 +5,7 @@ import { meetingReminderTemplate } from '../templates/meetingReminder.js';
 import { meetingCancelledTemplate } from '../templates/meetingCancelled.js';
 import { meetingUpdatedTemplate } from '../templates/meetingUpdated.js';
 import { meetingPendingApprovalTemplate } from '../templates/meetingPendingApproval.js';
+import { meetingBossResponseTemplate } from '../templates/meetingBossResponse.js';
 import { systemNotificationTemplate } from '../templates/systemNotification.js';
 import {
   collectTokensForUserIds,
@@ -411,6 +412,32 @@ class NotificationService {
       userIds,
       type: 'meeting_updated',
       template: (ctx) => meetingUpdatedTemplate({ ...ctx, changes }),
+      senderId,
+      meeting,
+    });
+  }
+
+  /**
+   * Boss "Confirm for your team" updates → organizer + coordinators.
+   * @param {object} meeting
+   * @param {string|null} senderId
+   * @param {string[]} highlights
+   * @param {string[]} recipientUserIds
+   */
+  async sendMeetingBossResponse(
+    meeting,
+    senderId = null,
+    highlights = [],
+    recipientUserIds = [],
+  ) {
+    const userIds = [...new Set(recipientUserIds.map(String).filter(Boolean))];
+    if (!userIds.length) return { sent: false, reason: 'no_recipients' };
+
+    return this._sendToUsers({
+      userIds,
+      type: 'meeting_boss_response',
+      template: (ctx) =>
+        meetingBossResponseTemplate({ ...ctx, highlights }),
       senderId,
       meeting,
     });

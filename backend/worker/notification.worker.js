@@ -69,6 +69,16 @@ async function processJob(job) {
       return notificationService.sendMeetingCancelled(meeting, data.senderId);
     }
 
+    case JOB_TYPES.MEETING_BOSS_RESPONSE: {
+      const meeting = await CentralMeeting.findById(data.meetingId).lean();
+      return notificationService.sendMeetingBossResponse(
+        meeting,
+        data.senderId,
+        data.highlights || [],
+        data.recipientUserIds || [],
+      );
+    }
+
     case JOB_TYPES.MEETING_PENDING: {
       const meeting = await CentralMeeting.findById(data.meetingId).lean();
       const coordinators = await CentralAdminUser.find({

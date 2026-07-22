@@ -25,6 +25,9 @@ import { checkUserDeviceRegisterRate } from '../utils/notificationRateLimit.js';
 import { sanitizeNotificationText } from '../utils/companyIsolation.js';
 import { buildDedupeKey } from '../utils/notificationDedupe.js';
 import { summarizeMeetingChanges } from '../templates/meetingTemplateHelpers.js';
+import {
+  summarizeBossTeamChanges,
+} from '../templates/meetingBossResponse.js';
 import logger from '../utils/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +270,15 @@ export const sendUserNotification = async (req, res) => {
 async function dispatchMeetingJob(type, meeting, senderId = null, extras = {}) {
   const meetingId = String(meeting._id);
   const companyId = String(meeting.companyId || '');
-  const dedupeKey = buildDedupeKey(type, meetingId);
+  // Boss response actions can fire back-to-back (attend, then note) — keep keys distinct.
+  const dedupeSuffix =
+    type === JOB_TYPES.MEETING_BOSS_RESPONSE
+      ? String((extras.highlights || []).join('|')).slice(0, 80)
+      : '';
+  const dedupeKey = buildDedupeKey(
+    type,
+    dedupeSuffix ? `${meetingId}:${dedupeSuffix}` : meetingId,
+  );
 
   const jobData = { meetingId, senderId, companyId, dedupeKey, ...extras };
 
@@ -288,6 +299,13 @@ async function dispatchMeetingJob(type, meeting, senderId = null, extras = {}) {
     [JOB_TYPES.MEETING_UPDATED]: () =>
       notificationService.sendMeetingUpdated(meeting, senderId, extras.changes || []),
     [JOB_TYPES.MEETING_CANCELLED]: () => notificationService.sendMeetingCancelled(meeting, senderId),
+    [JOB_TYPES.MEETING_BOSS_RESPONSE]: () =>
+      notificationService.sendMeetingBossResponse(
+        meeting,
+        senderId,
+        extras.highlights || [],
+        extras.recipientUserIds || [],
+      ),
   };
 
   try {
@@ -323,6 +341,48 @@ export async function notifyMeetingUpdated(meeting, senderId = null, previous = 
 export async function notifyMeetingCancelled(meeting, senderId = null) {
   if (!meeting) return;
   await dispatchMeetingJob(JOB_TYPES.MEETING_CANCELLED, meeting, senderId);
+}
+
+/**
+ * Notify organizer + Meeting Coordinators when Boss uses
+ * "Confirm for your team" (attend / decline / reschedule / note / important).
+ */
+export async function notifyMeetingBossResponse(
+  meeting,
+  senderId = null,
+  previous = null,
+) {
+  if (!meeting) return;
+
+  const highlights = summarizeBossTeamChanges(previous, meeting);
+  if (!highlights.length) return;
+
+  const coordinators = await CentralAdminUser.find({
+    role: 'Meeting Coordinator',
+    status: 'Active',
+  })
+    .select('_id')
+    .lean();
+
+  const recipientUserIds = [
+    meeting.organizerId,
+    meeting.approvedById,
+    ...coordinators.map((c) => c._id),
+  ]
+    .map(String)
+    .filter(Boolean)
+    .filter((id) => id !== String(senderId || ''))
+    .filter((id) => id !== String(meeting.bossId || ''));
+
+  const uniqueRecipients = [...new Set(recipientUserIds)];
+  if (!uniqueRecipients.length) return;
+
+  await dispatchMeetingJob(
+    JOB_TYPES.MEETING_BOSS_RESPONSE,
+    meeting,
+    senderId,
+    { highlights, recipientUserIds: uniqueRecipients },
+  );
 }
 
 /** POST /api/notifications/schedule — admin scheduled notification */

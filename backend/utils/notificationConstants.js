@@ -9,6 +9,7 @@ export const NOTIFICATION_TYPES = [
   'meeting_updated',
   'meeting_cancelled',
   'meeting_pending',
+  'meeting_boss_response',
   'system',
   'marketing',
   'broadcast',
@@ -40,6 +41,7 @@ export const DEDUPE_WINDOWS_MS = {
   meeting_reminder: 300_000,
   meeting_cancelled: 30_000,
   meeting_pending: 60_000,
+  meeting_boss_response: 8_000,
   system: 5_000,
   broadcast: 60_000,
 };
@@ -59,6 +61,7 @@ export const PREFERENCE_KEYS = {
   meeting_updated: 'meetingUpdates',
   meeting_cancelled: 'meetingCancelled',
   meeting_pending: 'meetingAssignments',
+  meeting_boss_response: 'meetingUpdates',
   system: 'systemNotifications',
   marketing: 'marketingNotifications',
   broadcast: 'systemNotifications',

@@ -20,6 +20,7 @@ export const JOB_TYPES = {
   MEETING_UPDATED: 'meeting_updated',
   MEETING_CANCELLED: 'meeting_cancelled',
   MEETING_PENDING: 'meeting_pending',
+  MEETING_BOSS_RESPONSE: 'meeting_boss_response',
   SYSTEM: 'system_notification',
 };
 

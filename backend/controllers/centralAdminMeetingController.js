@@ -5,6 +5,7 @@ import {
   notifyMeetingPendingApproval,
   notifyMeetingUpdated,
   notifyMeetingCancelled,
+  notifyMeetingBossResponse,
 } from './notification.controller.js';
 import { emitMeetingChange } from '../services/realtimeNotification.service.js';
 
@@ -399,6 +400,24 @@ export const updateMeeting = async (req, res) => {
       )
     ) {
       notifyMeetingUpdated(meeting, req.auth?.sub, previous);
+    } else if (
+      Object.keys(updates).some((k) =>
+        [
+          'bossResponse',
+          'bossResponseNote',
+          'bossResponseAt',
+          'rescheduleRequested',
+          'reschedulePreferredStartAt',
+          'reschedulePreferredEndAt',
+          'rescheduleReason',
+          'rescheduleRequestedAt',
+          'bossMarkedImportant',
+          'bossPersonalNote',
+        ].includes(k),
+      )
+    ) {
+      // Boss "Confirm for your team" → notify scheduler + coordinators
+      notifyMeetingBossResponse(meeting, req.auth?.sub, previous);
     }
     emitRealtimeMeetingChange('updated', meeting);
 
