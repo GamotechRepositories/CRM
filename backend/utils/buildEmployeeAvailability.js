@@ -1,15 +1,15 @@
 import { getTaskRemainingMinutes } from './taskTiming.js';
 import {
+  endOfBusinessDay,
+  getBusinessDateKey,
+  getBusinessMinutesFromMidnight,
+  startOfBusinessDay,
+} from './businessTime.js';
+import {
   buildWorkingTimeline,
   getTaskScheduledRange,
   parseWorkingHours,
 } from './workingHoursTimeline.js';
-
-const startOfDay = (value) => {
-  const d = value ? new Date(value) : new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-};
 
 const formatDurationLabel = (minutes) => {
   const mins = Number(minutes);
@@ -22,24 +22,18 @@ const formatDurationLabel = (minutes) => {
 };
 
 const isOnApprovedLeave = (leave, dayStart, dayEnd) => {
-  const start = new Date(leave.startDate);
-  const end = new Date(leave.endDate);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return leave.status === 'Approved' && start < dayEnd && end >= dayStart;
+  const start = startOfBusinessDay(leave.startDate);
+  const end = endOfBusinessDay(leave.endDate);
+  return leave.status === 'Approved' && start < dayEnd && end > dayStart;
 };
 
-const isTaskScheduledOnDay = (task, dayStart) => {
+const isTaskScheduledOnDay = (task, dayKey) => {
   const range = getTaskScheduledRange(task);
   if (range) {
-    const taskDay = new Date(range.start);
-    taskDay.setHours(0, 0, 0, 0);
-    return taskDay.getTime() === dayStart.getTime();
+    return getBusinessDateKey(range.start) === dayKey;
   }
   if (!task?.dueDate) return false;
-  const dueDay = new Date(task.dueDate);
-  dueDay.setHours(0, 0, 0, 0);
-  return dueDay.getTime() === dayStart.getTime();
+  return getBusinessDateKey(task.dueDate) === dayKey;
 };
 
 export const buildEmployeeAvailability = async ({
@@ -50,8 +44,9 @@ export const buildEmployeeAvailability = async ({
   now = new Date(),
 }) => {
   const { Employee, Task, Attendance, Leave, Company } = models;
-  const dayStart = startOfDay(date);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  const dayStart = startOfBusinessDay(date);
+  const dayEnd = endOfBusinessDay(date);
+  const dayKey = getBusinessDateKey(dayStart);
 
   const company = Company ? await Company.findOne().sort({ createdAt: 1 }).select('workingHours').lean() : null;
   const companyWorkingHours = String(company?.workingHours || '').trim() || null;
@@ -97,7 +92,7 @@ export const buildEmployeeAvailability = async ({
     const tasks = openTasks
       .filter((t) => String(t.assignedTo) === id)
       .filter((t) => !excludeTaskId || String(t._id) !== String(excludeTaskId));
-    const dayTasks = tasks.filter((t) => isTaskScheduledOnDay(t, dayStart));
+    const dayTasks = tasks.filter((t) => isTaskScheduledOnDay(t, dayKey));
     const openTaskCount = dayTasks.length;
     const scheduledMinutes = dayTasks.reduce((sum, t) => sum + (t.estimatedDurationMinutes || 0), 0);
     const inProgressTask = dayTasks.find((t) => t.status === 'In Progress') || null;
@@ -110,12 +105,10 @@ export const buildEmployeeAvailability = async ({
       .map((task) => {
         const range = getTaskScheduledRange(task);
         if (!range) return null;
-        const taskDay = new Date(range.start);
-        taskDay.setHours(0, 0, 0, 0);
-        if (taskDay.getTime() !== dayStart.getTime()) return null;
+        if (getBusinessDateKey(range.start) !== dayKey) return null;
         return {
-          startMinutes: range.start.getHours() * 60 + range.start.getMinutes(),
-          endMinutes: range.end.getHours() * 60 + range.end.getMinutes(),
+          startMinutes: getBusinessMinutesFromMidnight(range.start),
+          endMinutes: getBusinessMinutesFromMidnight(range.end),
           title: task.title,
         };
       })
@@ -174,6 +167,7 @@ export const buildEmployeeAvailability = async ({
       workingHoursSource: companyWorkingHours ? 'company' : 'employee',
       timeline,
       serverNow: now.toISOString(),
+      businessDate: dayKey,
       availabilityStatus,
       availabilityLabel,
       isAssignable,

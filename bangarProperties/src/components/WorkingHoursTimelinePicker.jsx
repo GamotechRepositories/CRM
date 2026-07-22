@@ -7,15 +7,41 @@ const SLOT_STYLES = {
   past: 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed',
 }
 
-const buildClientTimeline = (baseTimeline, selectedStartMinutes, durationMinutes) => {
+const localDateKey = (value = new Date()) => {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const localNowMinutes = () => {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+/**
+ * Re-apply past-slot blocking with the browser clock.
+ * Production API hosts are often UTC; users schedule in local (India) time.
+ */
+const buildClientTimeline = (baseTimeline, selectedStartMinutes, durationMinutes, date) => {
   if (!baseTimeline?.slots?.length) return baseTimeline
+
   const selectedEndMinutes =
     selectedStartMinutes != null && durationMinutes
       ? selectedStartMinutes + Number(durationMinutes)
       : null
 
+  const dayKey = date ? String(date).slice(0, 10) : (baseTimeline.businessDate || '')
+  const isToday = Boolean(dayKey) && dayKey === localDateKey()
+  const nowMinutes = localNowMinutes()
+
   const slots = baseTimeline.slots.map((slot) => {
     let status = slot.status
+    if (isToday && slot.endMinutes <= nowMinutes) {
+      status = 'past'
+    }
     if (
       selectedStartMinutes != null &&
       selectedEndMinutes != null &&
@@ -36,10 +62,11 @@ const WorkingHoursTimelinePicker = ({
   durationMinutes,
   onSelectSlot,
   disabled = false,
+  date,
 }) => {
   const view = useMemo(
-    () => buildClientTimeline(timeline, selectedStartMinutes, durationMinutes),
-    [timeline, selectedStartMinutes, durationMinutes]
+    () => buildClientTimeline(timeline, selectedStartMinutes, durationMinutes, date),
+    [timeline, selectedStartMinutes, durationMinutes, date]
   )
 
   if (!view?.slots?.length) {

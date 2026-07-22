@@ -22,6 +22,16 @@ const AVAILABILITY_STYLES = {
   inactive: 'bg-gray-100 text-gray-500 border-gray-200',
 }
 
+
+const localDateKey = (value = new Date()) => {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 const formatDuration = (minutes) => {
   const mins = Number(minutes)
   if (!Number.isFinite(mins) || mins <= 0) return '—'
@@ -76,7 +86,7 @@ const AssignTask = () => {
     isRecurring: false,
     recurrenceType: 'daily',
     recurrenceInterval: 1,
-    recurrenceStartDate: new Date().toISOString().slice(0, 10),
+    recurrenceStartDate: localDateKey(),
     recurrenceEndDate: '',
   })
   const [loading, setLoading] = useState(false)
@@ -85,7 +95,7 @@ const AssignTask = () => {
   const [success, setSuccess] = useState('')
 
   const isEditMode = Boolean(taskIdFromUrl)
-  const availabilityDate = form.dueDate || form.recurrenceStartDate || new Date().toISOString().slice(0, 10)
+  const availabilityDate = form.dueDate || form.recurrenceStartDate || localDateKey()
   const isSelfTaskMode = !canAssignTask()
   const restrictProjectsToMyMembership =
     isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
@@ -172,7 +182,7 @@ const AssignTask = () => {
             recurrenceInterval: task.recurrenceInterval || 1,
             recurrenceStartDate: task.recurrenceStartDate
               ? String(task.recurrenceStartDate).slice(0, 10)
-              : new Date().toISOString().slice(0, 10),
+              : localDateKey(),
             recurrenceEndDate: task.recurrenceEndDate ? String(task.recurrenceEndDate).slice(0, 10) : '',
           })
         }
@@ -385,7 +395,7 @@ const AssignTask = () => {
           isRecurring: false,
           recurrenceType: 'daily',
           recurrenceInterval: 1,
-          recurrenceStartDate: new Date().toISOString().slice(0, 10),
+          recurrenceStartDate: localDateKey(),
           recurrenceEndDate: '',
         }))
       }
@@ -644,6 +654,7 @@ const AssignTask = () => {
               timeline={primaryAvailability.timeline}
               selectedStartMinutes={form.scheduledStartMinutes}
               durationMinutes={totalDurationMinutes}
+              date={availabilityDate}
               disabled={availabilityLoading || primaryAvailability.isAssignable === false}
               onSelectSlot={handleTimelineSlotSelect}
             />

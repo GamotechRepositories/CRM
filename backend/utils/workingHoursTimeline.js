@@ -1,3 +1,11 @@
+import {
+  getBusinessDateKey,
+  getBusinessMinutesFromMidnight,
+  isSameBusinessDay,
+  minutesOnBusinessDay,
+  startOfBusinessDay,
+} from './businessTime.js';
+
 /** Parse strings like "9 AM - 6 PM", "9-6", "09:00 - 18:00" into minutes from midnight. */
 const parseClockToken = (token) => {
   const raw = String(token || '').trim().toLowerCase();
@@ -104,14 +112,11 @@ export const buildWorkingTimeline = ({
   now = new Date(),
 }) => {
   const { startMinutes, endMinutes, label } = parseWorkingHours(workingHours);
-  const day = date ? new Date(date) : new Date();
-  if (Number.isNaN(day.getTime())) day.setTime(Date.now());
-  day.setHours(0, 0, 0, 0);
-
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const isToday = day.getTime() === today.getTime();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const dayStart = startOfBusinessDay(date);
+  const dayKey = getBusinessDateKey(dayStart);
+  const todayKey = getBusinessDateKey(now);
+  const isToday = dayKey === todayKey;
+  const nowMinutes = getBusinessMinutesFromMidnight(now);
 
   const selectedEndMinutes =
     selectedStartMinutes != null && selectedDurationMinutes
@@ -158,10 +163,7 @@ export const buildWorkingTimeline = ({
   const pastMinutes = slots
     .filter((s) => s.status === 'past')
     .reduce((sum, s) => sum + (s.endMinutes - s.startMinutes), 0);
-  const remainingMinutes = Math.max(
-    0,
-    totalMinutes - pastMinutes
-  );
+  const remainingMinutes = Math.max(0, totalMinutes - pastMinutes);
 
   return {
     workingHoursLabel: label,
@@ -176,15 +178,13 @@ export const buildWorkingTimeline = ({
     remainingTimeLabel: remainingMinutes
       ? `${Math.floor(remainingMinutes / 60)}h ${remainingMinutes % 60 ? `${remainingMinutes % 60}m` : ''}`.trim()
       : '0m',
+    businessDate: dayKey,
+    isToday,
   };
 };
 
-export const minutesOnDay = (dateValue, minutesFromMidnight) => {
-  const d = new Date(dateValue);
-  d.setHours(0, 0, 0, 0);
-  d.setMinutes(minutesFromMidnight);
-  return d;
-};
+export const minutesOnDay = (dateValue, minutesFromMidnight) =>
+  minutesOnBusinessDay(dateValue, minutesFromMidnight);
 
 export const applyScheduledTimes = ({ date, startMinutes, durationMinutes }) => {
   if (startMinutes == null || durationMinutes == null) {
@@ -194,3 +194,5 @@ export const applyScheduledTimes = ({ date, startMinutes, durationMinutes }) => 
   const end = new Date(start.getTime() + Number(durationMinutes) * 60000);
   return { scheduledStartAt: start, scheduledEndAt: end };
 };
+
+export { isSameBusinessDay, getBusinessMinutesFromMidnight, getBusinessDateKey };

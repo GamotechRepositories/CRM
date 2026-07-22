@@ -1,3 +1,4 @@
+import { getBusinessMinutesFromMidnight } from './businessTime.js';
 import { parseWorkingHours } from './workingHoursTimeline.js';
 
 export const assertValidTaskSchedule = async ({
@@ -57,8 +58,8 @@ export const assertValidTaskSchedule = async ({
     workingHours = employee?.workingHours;
   }
   const { startMinutes: workStart, endMinutes: workEnd } = parseWorkingHours(workingHours);
-  const startMinutesOnDay = start.getHours() * 60 + start.getMinutes();
-  const endMinutesOnDay = end.getHours() * 60 + end.getMinutes();
+  const startMinutesOnDay = getBusinessMinutesFromMidnight(start);
+  const endMinutesOnDay = getBusinessMinutesFromMidnight(end);
 
   if (startMinutesOnDay < workStart || endMinutesOnDay > workEnd) {
     const error = new Error('Task must fit within the employee working hours');
