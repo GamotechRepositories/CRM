@@ -287,8 +287,13 @@ export const mapSheetStatusToCrmStatus = (sheetStatus = '') => {
   const s = String(sheetStatus).trim().toLowerCase();
   if (!s || s === 'created' || s === 'new') return 'Call not Received';
   if (s.includes('not interest')) return 'Not Interested';
+  if (s.includes('incentive')) return 'Incentive Earned';
+  if (s.includes('token') || s.includes('booking')) return 'Booking Token';
+  if (s.includes('revisit')) return 'Meeting Revisit';
+  if (s.includes('site visit')) return 'Site Visit';
+  if (s.includes('pending')) return 'Pending';
   if (s.includes('interest')) return 'Interested';
-  if (s.includes('meeting') || s.includes('site visit')) return 'Meeting Schedule';
+  if (s.includes('meeting')) return 'Meeting Schedule';
   if (s.includes('call back') || s.includes('sometime')) return 'Call You After Sometime';
   return 'Call not Received';
 };

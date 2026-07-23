@@ -10,6 +10,11 @@ const STATUS_OPTIONS = [
   'Interested',
   'Not Interested',
   'Meeting Schedule',
+  'Site Visit',
+  'Meeting Revisit',
+  'Booking Token',
+  'Incentive Earned',
+  'Pending',
 ]
 
 const LeadsView = () => {
