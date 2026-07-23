@@ -115,6 +115,31 @@ export const canManageEmployeesForUser = (user) => {
   return ['admin', 'hr manager'].includes(title)
 }
 
+/** Admin, Sales Manager, or Sales Team Lead — upload/distribute leads & view all. */
+export const canManageLeadsForUser = (user) => {
+  if (!user) return false
+  if (isAdminUser(user)) return true
+
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase().trim()
+  const title = getDesignationTitle(user)
+  const department = String(user?.department || user?.designation?.department || '')
+  const inSales = /sales/i.test(department)
+
+  // Title can identify sales roles even if department field is empty
+  if (title.includes('sales manager')) return true
+  if (
+    title.includes('sales team lead') ||
+    (inSales && (title.includes('team leader') || title.includes('team lead')))
+  ) {
+    return true
+  }
+
+  const isSalesManager = inSales && (accessRole === 'manager' || title.includes('manager'))
+  const isSalesTeamLead = inSales && accessRole === 'team_leader'
+
+  return Boolean(isSalesManager || isSalesTeamLead)
+}
+
 export const getSidebarSectionsForUser = (user) => {
   if (isAdminUser(user)) return ALL_SECTION_IDS
   const sections = user?.access?.sidebarSections

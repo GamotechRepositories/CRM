@@ -1,4 +1,5 @@
 import { mapSheetStatusToCrmStatus, parseMetaLeadCsv } from './parseMetaLeadCsv.js';
+import { assertCanManageLeads, resolveLeadAccess } from './leadAccess.js';
 
 const buildCrmDescription = (row) =>
   [
@@ -94,7 +95,10 @@ export function createSheetLeadImportHandlers({
     try {
       const csvText = req.body?.csvText || req.body?.csv || '';
       const fileName = String(req.body?.fileName || 'upload.csv').trim();
-      const importedBy = req.body?.importedBy || req.body?.employeeId || null;
+      const importedBy = req.body?.importedBy || req.body?.employeeId || req.body?.actorId || null;
+
+      const access = await resolveLeadAccess(Employee, importedBy);
+      assertCanManageLeads(access);
 
       if (!String(csvText).trim()) {
         return res.status(400).json({ message: 'csvText is required' });
@@ -175,7 +179,8 @@ export function createSheetLeadImportHandlers({
       });
     } catch (error) {
       console.error(`[${tenantKey}] sheet lead import error:`, error);
-      return res.status(500).json({
+      const status = error.statusCode || 500;
+      return res.status(status).json({
         message: error.message || 'Failed to import CSV leads',
       });
     }

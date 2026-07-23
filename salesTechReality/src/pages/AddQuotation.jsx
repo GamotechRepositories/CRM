@@ -63,7 +63,7 @@ const AddQuotation = () => {
         const [clientsRes, employeesRes, leadsRes, projectsRes] = await Promise.all([
           api.get('/clients'),
           api.get('/employees'),
-          api.get('/leads'),
+          api.get('/leads', { params: { viewerId: user?._id } }),
           api.get('/projects'),
         ])
         setClients(Array.isArray(clientsRes.data) ? clientsRes.data : clientsRes.data?.data || [])

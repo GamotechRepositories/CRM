@@ -153,7 +153,7 @@ const ManagerDashboardView = () => {
         const [cliRes, projRes, leadRes, taskRes, empRes, billRes] = await Promise.all([
           api.get('/clients'),
           api.get('/projects'),
-          api.get('/leads').catch(() => ({ data: [] })),
+          api.get('/leads', { params: { viewerId: user?._id } }).catch(() => ({ data: [] })),
           api.get('/tasks').catch(() => ({ data: [] })),
           api.get('/employees'),
           api.get('/billing').catch(() => ({ data: [] })),
@@ -170,7 +170,7 @@ const ManagerDashboardView = () => {
       }
     }
     load()
-  }, [])
+  }, [user?._id])
 
   const stats = useMemo(() => {
     const leadsThisMonth = leads.filter((l) => isThisMonth(l.createdAt)).length

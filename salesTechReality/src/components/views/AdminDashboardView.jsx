@@ -248,7 +248,7 @@ const AdminDashboardView = () => {
           api.get('/employees'),
           api.get('/clients'),
           api.get('/projects'),
-          api.get('/leads').catch(() => ({ data: [] })),
+          api.get('/leads', { params: { viewerId: user?._id } }).catch(() => ({ data: [] })),
           api.get('/tasks').catch(() => ({ data: [] })),
           api.get('/billing').catch(() => ({ data: [] })),
           api.get('/leave').catch(() => ({ data: [] })),
@@ -266,7 +266,7 @@ const AdminDashboardView = () => {
       }
     }
     load()
-  }, [])
+  }, [user?._id])
 
   const stats = useMemo(() => {
     const revenue = billings.reduce((s, b) => s + (Number(b.paymentDetails?.amount) || 0), 0)

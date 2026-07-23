@@ -13,7 +13,8 @@ const STATUS_OPTIONS = [
 ]
 
 const LeadsView = () => {
-  const { user } = useAuth()
+  const { user, canManageLeads } = useAuth()
+  const canManage = canManageLeads()
   const [leads, setLeads] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -76,6 +77,10 @@ const LeadsView = () => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (!canManage) {
+      setError('Only Admin, Sales Manager, or Sales Team Lead can upload leads')
+      return
+    }
 
     if (!/\.csv$/i.test(file.name) && file.type !== 'text/csv') {
       setError('Please upload a CSV file exported from Google Sheets')
@@ -109,21 +114,25 @@ const LeadsView = () => {
           <p className='text-gray-600 mt-1 text-sm'>Manage and qualify sales leads.</p>
         </div>
         <div className='flex flex-wrap items-center gap-2'>
-          <input
-            ref={fileInputRef}
-            type='file'
-            accept='.csv,text/csv'
-            className='hidden'
-            onChange={handleCsvUpload}
-          />
-          <button
-            type='button'
-            disabled={importing}
-            onClick={() => fileInputRef.current?.click()}
-            className='bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50'
-          >
-            {importing ? 'Uploading…' : 'Upload Google Sheet (CSV)'}
-          </button>
+          {canManage ? (
+            <>
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='.csv,text/csv'
+                className='hidden'
+                onChange={handleCsvUpload}
+              />
+              <button
+                type='button'
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+                className='bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50'
+              >
+                {importing ? 'Uploading…' : 'Upload Google Sheet (CSV)'}
+              </button>
+            </>
+          ) : null}
           <button
             onClick={() => navigate('/add-lead')}
             className='bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium'

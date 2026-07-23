@@ -261,18 +261,11 @@ const EmployeeDashboardView = () => {
         setLoading(true)
         const [tasksRes, leadsRes, announcementsRes] = await Promise.all([
           api.get('/tasks', { params: { employeeId: user._id } }),
-          api.get('/leads').catch(() => ({ data: [] })),
+          api.get('/leads', { params: { viewerId: user?._id } }).catch(() => ({ data: [] })),
           api.get('/announcements', { params: { active: 'true' } }).catch(() => ({ data: [] })),
         ])
         setTasks(Array.isArray(tasksRes.data) ? tasksRes.data : [])
-        const allLeads = Array.isArray(leadsRes.data) ? leadsRes.data : []
-        const related = allLeads.filter((l) => {
-          const generatedById = l.generatedBy?._id || l.generatedBy
-          const meetingPerson = (l.meetingPersonName || '').toLowerCase()
-          const userName = (user?.name || '').toLowerCase()
-          return String(generatedById) === String(user._id) || (meetingPerson && meetingPerson === userName)
-        })
-        setMyLeads(related)
+        setMyLeads(Array.isArray(leadsRes.data) ? leadsRes.data : [])
         const list = Array.isArray(announcementsRes.data) ? announcementsRes.data : []
         setAnnouncements(list.slice(0, 5))
       } finally {

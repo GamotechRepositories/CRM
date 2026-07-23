@@ -136,7 +136,7 @@ const TeamLeaderDashboardView = () => {
           api.get('/projects').catch(() => ({ data: [] })),
           api.get('/attendance/today').catch(() => ({ data: [] })),
           api.get('/leave').catch(() => ({ data: [] })),
-          api.get('/leads').catch(() => ({ data: [] })),
+          api.get('/leads', { params: { viewerId: user?._id } }).catch(() => ({ data: [] })),
         ])
         const list = (res) => (Array.isArray(res.data) ? res.data : res.data?.data || [])
 

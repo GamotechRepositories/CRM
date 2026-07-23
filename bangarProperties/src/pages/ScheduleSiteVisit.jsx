@@ -43,7 +43,7 @@ const ScheduleSiteVisit = () => {
     Promise.all([
       api.get('/properties').catch(() => ({ data: [] })),
       api.get('/employees').catch(() => ({ data: [] })),
-      api.get('/leads').catch(() => ({ data: [] })),
+      api.get('/leads', { params: { viewerId: user?._id } }).catch(() => ({ data: [] })),
     ]).then(([propRes, empRes, leadRes]) => {
       const propList = Array.isArray(propRes.data) ? propRes.data : []
       const empList = Array.isArray(empRes.data) ? empRes.data : []

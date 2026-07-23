@@ -105,7 +105,7 @@ const AddLead = ({ readOnly = false }) => {
     if (!id) return
     const fetchLead = async () => {
       try {
-        const res = await api.get(`/leads/${id}`)
+        const res = await api.get(`/leads/${id}`, { params: { viewerId: user?._id } })
         const l = res.data
         const genId = l.generatedBy?._id ?? l.generatedBy
         const genName = l.generatedBy?.name ?? ''
@@ -261,7 +261,7 @@ const AddLead = ({ readOnly = false }) => {
         }),
       }
       if (isEdit) {
-        await api.put(`/leads/${id}`, payload)
+        await api.put(`/leads/${id}`, { ...payload, viewerId: user?._id })
       } else {
         await api.post('/leads', payload)
       }

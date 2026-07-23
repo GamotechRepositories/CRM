@@ -10,6 +10,7 @@ import {
   canViewProjectsForUser,
   canApproveLeaveForUser,
   canManageEmployeesForUser,
+  canManageLeadsForUser,
   getSidebarSectionsForUser,
   isAdminUser,
   getDesignationTitle as getUserDesignationTitle,
@@ -113,6 +114,8 @@ export const AuthProvider = ({ children }) => {
 
   const canManageEmployees = () => canManageEmployeesForUser(user)
 
+  const canManageLeads = () => canManageLeadsForUser(user)
+
   const getSidebarSections = () => getSidebarSectionsForUser(user)
 
   const getDashboardPath = () => getDashboardPathForUser(user)
@@ -134,6 +137,7 @@ export const AuthProvider = ({ children }) => {
         canRateTask,
         canApproveLeave,
         canManageEmployees,
+        canManageLeads,
         getSidebarSections,
         getDashboardPath,
         isAdmin,

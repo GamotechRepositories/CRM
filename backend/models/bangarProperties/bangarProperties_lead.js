@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { adsLeadSchemaFields } from '../../utils/adsLeadFields.js';
+import { getSalesLeadAssignmentFields } from '../../utils/salesLeadAssignmentFields.js';
 
 const followUpSchema = new mongoose.Schema({
   date: { type: Date, default: Date.now },
@@ -48,6 +49,7 @@ const leadSchema = new mongoose.Schema({
     required: true,
   },
   ...adsLeadSchemaFields,
+  ...getSalesLeadAssignmentFields('bangarProperties_Employee'),
 }, { timestamps: true });
 
 leadSchema.index(
