@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import { EditIcon, ViewIcon } from '../Icons'
 
 const STATUS_OPTIONS = [
@@ -12,6 +13,7 @@ const STATUS_OPTIONS = [
 ]
 
 const LeadsView = () => {
+  const { user } = useAuth()
   const [leads, setLeads] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
@@ -28,6 +30,9 @@ const LeadsView = () => {
     state: '',
     search: '',
   })
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const fileInputRef = useRef(null)
   const navigate = useNavigate()
 
   const fetchLeads = async () => {
@@ -67,20 +72,79 @@ const LeadsView = () => {
     setFilters((f) => ({ ...f, [key]: value }))
   }
 
+  const handleCsvUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    if (!/\.csv$/i.test(file.name) && file.type !== 'text/csv') {
+      setError('Please upload a CSV file exported from Google Sheets')
+      return
+    }
+
+    setImporting(true)
+    setImportResult(null)
+    setError(null)
+    try {
+      const csvText = await file.text()
+      const res = await api.post('/leads/import-csv', {
+        csvText,
+        fileName: file.name,
+        importedBy: user?._id,
+      })
+      setImportResult(res.data)
+      await fetchLeads()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'CSV import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className='p-8'>
-      <div className='flex items-center justify-between mb-6'>
+      <div className='flex flex-wrap items-center justify-between gap-3 mb-6'>
         <div>
           <h1 className='text-2xl font-bold text-gray-900'>Lead Management</h1>
           <p className='text-gray-600 mt-1 text-sm'>Manage and qualify sales leads.</p>
         </div>
-        <button
-          onClick={() => navigate('/add-lead')}
-          className='bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium'
-        >
-          + Add Lead
-        </button>
+        <div className='flex flex-wrap items-center gap-2'>
+          <input
+            ref={fileInputRef}
+            type='file'
+            accept='.csv,text/csv'
+            className='hidden'
+            onChange={handleCsvUpload}
+          />
+          <button
+            type='button'
+            disabled={importing}
+            onClick={() => fileInputRef.current?.click()}
+            className='bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50'
+          >
+            {importing ? 'Uploading…' : 'Upload Google Sheet (CSV)'}
+          </button>
+          <button
+            onClick={() => navigate('/add-lead')}
+            className='bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium'
+          >
+            + Add Lead
+          </button>
+        </div>
       </div>
+
+      {importResult?.summary && (
+        <div className='mb-4 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900'>
+          Imported <strong>{importResult.summary.totalParsed}</strong> row(s):{' '}
+          {importResult.summary.sheetCreated} new sheet leads,{' '}
+          {importResult.summary.sheetUpdated} updated, CRM synced. Refresh filters if needed.
+          {importResult.errors?.length ? (
+            <p className='mt-1 text-xs text-amber-800'>
+              {importResult.errors.length} warning(s): {importResult.errors[0]}
+            </p>
+          ) : null}
+        </div>
+      )}
 
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6'>
         <div className='bg-white rounded-lg shadow p-5 border-l-4 border-blue-500'>

@@ -103,8 +103,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 // Body parser
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // OpenAPI 3.1 documentation (Swagger UI)
 mountSwaggerDocs(app);
@@ -148,7 +148,7 @@ for (const company of companies) {
   }
 }
 
-// Property listings, site visits & ads lead webhooks — real-estate tenants only
+// Property listings, site visits, ads webhooks & sheet lead import — real-estate tenants
 const PROPERTY_TENANTS = ['bangarProperties', 'mahaProperties', 'salesTechReality'];
 for (const company of PROPERTY_TENANTS) {
   const propertyRoute = await import(`./routes/${company}/${company}_propertyRoute.js`);
@@ -157,6 +157,14 @@ for (const company of PROPERTY_TENANTS) {
   app.use(`/api/v1/${company}`, siteVisitRoute.default);
   const adsWebhookRoute = await import(`./routes/${company}/${company}_adsWebhookRoute.js`);
   app.use(`/api/v1/${company}`, adsWebhookRoute.default);
+  const sheetLeadRoute = await import(`./routes/${company}/${company}_sheetLeadRoute.js`);
+  app.use(`/api/v1/${company}`, sheetLeadRoute.default);
+}
+
+// Sheet lead CSV import for Ads Research Global as well
+{
+  const sheetLeadRoute = await import('./routes/adsResearchGlobal/adsResearchGlobal_sheetLeadRoute.js');
+  app.use('/api/v1/adsResearchGlobal', sheetLeadRoute.default);
 }
 
 // Centralized admin panel: /api/v1/admin/*
