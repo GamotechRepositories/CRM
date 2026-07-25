@@ -1,5 +1,6 @@
 import {
   assertCanAccessLead,
+  isSiteCoordinatorEmployee,
   resolveLeadAccess,
 } from './leadAccess.js';
 
@@ -87,8 +88,32 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
   const populateLead = (q) =>
     q
       .populate('generatedBy')
-      .populate('assignedTo', 'name email department')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email department designation',
+        populate: { path: 'designation', select: 'title accessRole' },
+      })
       .populate('assignedTeamLeader', 'name email');
+
+  const resolveSiteCoordinatorAssignee = async (assigneeId) => {
+    if (!assigneeId) return null;
+    const emp = await Employee.findById(assigneeId)
+      .populate('designation', 'title name accessRole')
+      .select('name designation status');
+    if (!emp || emp.status === 'Inactive') {
+      const err = new Error('Selected employee was not found or is inactive');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!isSiteCoordinatorEmployee(emp)) {
+      const err = new Error(
+        'Selected employee must be a Site Co-ordinator / Site Coordinator or Site Reliability Engineer'
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+    return emp;
+  };
 
   const getLeads = async (req, res) => {
     try {
@@ -136,8 +161,16 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
       delete payload.viewerId;
       delete payload.actorId;
 
-      // Regular employees cannot reassign leads
-      if (!access.canManageLeads) {
+      const nextStatus = payload.status !== undefined ? payload.status : lead.status;
+      const requestedAssignee =
+        Object.prototype.hasOwnProperty.call(payload, 'assignedTo') ? payload.assignedTo : undefined;
+
+      if (nextStatus === 'Site Visit' && requestedAssignee) {
+        const coordinator = await resolveSiteCoordinatorAssignee(requestedAssignee);
+        payload.assignedTo = coordinator._id;
+        payload.assignedAt = new Date();
+      } else if (!access.canManageLeads) {
+        // Regular employees cannot reassign leads except Site Coordinator on Site Visit
         delete payload.assignedTo;
         delete payload.assignedTeamLeader;
         delete payload.assignedAt;
@@ -159,6 +192,14 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
           return row;
         });
         lead.markModified('followUps');
+      }
+
+      if (lead.status === 'Site Visit' && !lead.assignedTo) {
+        const err = new Error(
+          'Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit'
+        );
+        err.statusCode = 400;
+        throw err;
       }
 
       await lead.save();

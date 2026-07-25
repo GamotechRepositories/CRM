@@ -25,4 +25,16 @@ export const getSalesLeadAssignmentFields = (employeeRef) => ({
     ref: employeeRef,
     default: null,
   },
+  /** Photo/file proof that the visitor attended the site visit. */
+  siteVisitEvidence: {
+    fileName: { type: String, default: '' },
+    mimeType: { type: String, default: '' },
+    dataUrl: { type: String, default: '' },
+    uploadedAt: { type: Date, default: null },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: employeeRef,
+      default: null,
+    },
+  },
 });

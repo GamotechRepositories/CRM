@@ -236,6 +236,27 @@ export const getDefaultDesignationMeta = (title) => {
     };
   }
 
+  if (
+    t === 'site coordinator' ||
+    t === 'site co-ordinator' ||
+    t.includes('site coordinator') ||
+    t.includes('site co-ordinator')
+  ) {
+    return {
+      ...base,
+      code: 'SITE_COORDINATOR',
+      description: 'Coordinates site visits for property leads',
+      department: 'Sales',
+      level: 'Mid',
+      accessRole: 'employee',
+      sortOrder: 40,
+      permissions: {
+        ...base.permissions,
+        canViewProjects: true,
+      },
+    };
+  }
+
   if (t === 'operations head') {
     return {
       ...base,

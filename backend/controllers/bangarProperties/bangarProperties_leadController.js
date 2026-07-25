@@ -2,18 +2,25 @@ import Lead from '../../models/bangarProperties/bangarProperties_lead.js';
 import Employee from '../../models/bangarProperties/bangarProperties_employee.js';
 import { createLeadDistributionHandlers } from '../../utils/createLeadDistributionHandlers.js';
 import { createScopedLeadHandlers } from '../../utils/createScopedLeadHandlers.js';
+import { applySiteVisitAssignment } from '../../utils/leadAccess.js';
 
 export const createLead = async (req, res) => {
   try {
-    const lead = new Lead(req.body);
+    const body = await applySiteVisitAssignment(Employee, req.body);
+    const lead = new Lead(body);
     await lead.save();
     const populated = await Lead.findById(lead._id)
       .populate('generatedBy')
-      .populate('assignedTo', 'name email department')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email department designation',
+        populate: { path: 'designation', select: 'title accessRole' },
+      })
       .populate('assignedTeamLeader', 'name email');
     res.status(201).json({ message: 'Lead created successfully', lead: populated });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating lead', error });
+    const status = error.statusCode || 500;
+    res.status(status).json({ message: error.message || 'Error creating lead', error: status === 500 ? error : undefined });
   }
 };
 

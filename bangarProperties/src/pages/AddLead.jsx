@@ -54,6 +54,8 @@ const AddLead = ({ readOnly = false }) => {
     meetingInfoSent: false,
     followUps: [],
     generatedBy: '',
+    assignedTo: '',
+    siteVisitEvidence: { fileName: '', mimeType: '', dataUrl: '', uploadedAt: null },
   })
   const [employees, setEmployees] = useState([])
   const [employeeSearch, setEmployeeSearch] = useState('')
@@ -68,6 +70,7 @@ const AddLead = ({ readOnly = false }) => {
   const [cities, setCities] = useState([])
   const employeeRef = useRef(null)
   const meetingPersonRef = useRef(null)
+  const evidenceInputRef = useRef(null)
 
   const navigate = useNavigate()
 
@@ -109,6 +112,7 @@ const AddLead = ({ readOnly = false }) => {
         const l = res.data
         const genId = l.generatedBy?._id ?? l.generatedBy
         const genName = l.generatedBy?.name ?? ''
+        const assigneeId = l.assignedTo?._id ?? l.assignedTo ?? ''
         setForm({
           name: l.name ?? '',
           businessName: l.businessName ?? '',
@@ -126,6 +130,13 @@ const AddLead = ({ readOnly = false }) => {
           meetingInfoSent: l.meetingInfoSent ?? false,
           followUps: normalizeFollowUpsFromApi(l.followUps),
           generatedBy: genId ?? '',
+          assignedTo: assigneeId || '',
+          siteVisitEvidence: {
+            fileName: l.siteVisitEvidence?.fileName || '',
+            mimeType: l.siteVisitEvidence?.mimeType || '',
+            dataUrl: l.siteVisitEvidence?.dataUrl || '',
+            uploadedAt: l.siteVisitEvidence?.uploadedAt || null,
+          },
         })
         setEmployeeSearch(genName)
         setMeetingPersonSearch(l.meetingPersonName ?? '')
@@ -188,12 +199,15 @@ const AddLead = ({ readOnly = false }) => {
 
   const MEETING_PERSON_DESIGNATIONS = ['Sales Manager', 'Social Media Manager', 'Product Manager', 'Senior Software Engineer', 'Software Engineer']
 
+  const getDesignationTitle = (emp) =>
+    emp?.designation?.title || emp?.designation?.name || (typeof emp?.designation === 'string' ? emp.designation : '')
+
   const filteredEmployees = employees.filter((e) =>
     (e.name || '').toLowerCase().includes(employeeSearch.toLowerCase())
   )
 
   const meetingPersonEmployees = employees.filter((e) => {
-    const designationTitle = e.designation?.title || (typeof e.designation === 'string' ? e.designation : '')
+    const designationTitle = getDesignationTitle(e)
     return MEETING_PERSON_DESIGNATIONS.some((d) =>
       (designationTitle || '').toLowerCase() === d.toLowerCase()
     )
@@ -202,6 +216,41 @@ const AddLead = ({ readOnly = false }) => {
   const filteredMeetingPersonEmployees = meetingPersonEmployees.filter((e) =>
     (e.name || '').toLowerCase().includes(meetingPersonSearch.toLowerCase())
   )
+
+  const siteCoordinatorEmployees = useMemo(() => {
+    const normalizeKey = (value = '') =>
+      String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+    const isSiteVisitAssignee = (title) => {
+      const key = normalizeKey(title)
+      return (
+        key.includes('sitecoordinator') ||
+        key.includes('sitereliabilityengineer') ||
+        (key.includes('sitereliability') && key.includes('engineer'))
+      )
+    }
+    return employees
+      .filter((e) => {
+        if (e.status === 'Inactive') return false
+        const title =
+          e?.designation?.title ||
+          e?.designation?.name ||
+          (typeof e?.designation === 'string' ? e.designation : '')
+        return isSiteVisitAssignee(title)
+      })
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+  }, [employees])
+
+  // When status becomes Site Visit, keep a valid assignee selected (prefer current, else first in list).
+  useEffect(() => {
+    if (form.status !== 'Site Visit') return
+    if (!siteCoordinatorEmployees.length) return
+    const currentIsCoordinator = siteCoordinatorEmployees.some((e) => String(e._id) === String(form.assignedTo))
+    if (currentIsCoordinator) return
+    setForm((f) => ({ ...f, assignedTo: siteCoordinatorEmployees[0]._id }))
+  }, [form.status, form.assignedTo, siteCoordinatorEmployees])
 
   const stateOptions = useMemo(
     () => states.map((s) => ({ value: s.name, label: s.name })),
@@ -227,11 +276,55 @@ const AddLead = ({ readOnly = false }) => {
     setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }))
   }
 
+  const handleSiteVisitEvidence = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const maxBytes = 8 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setError('Evidence file is too large. Max 8 MB.')
+      e.target.value = ''
+      return
+    }
+    const allowed = /^(image\/|application\/pdf)/i.test(file.type) || /\.(jpe?g|png|gif|webp|pdf)$/i.test(file.name)
+    if (!allowed) {
+      setError('Please upload an image or PDF as site visit evidence.')
+      e.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setForm((f) => ({
+        ...f,
+        siteVisitEvidence: {
+          fileName: file.name,
+          mimeType: file.type || '',
+          dataUrl: typeof reader.result === 'string' ? reader.result : '',
+          uploadedAt: new Date().toISOString(),
+        },
+      }))
+      setError(null)
+    }
+    reader.onerror = () => setError('Failed to read evidence file')
+    reader.readAsDataURL(file)
+  }
+
+  const clearSiteVisitEvidence = () => {
+    setForm((f) => ({
+      ...f,
+      siteVisitEvidence: { fileName: '', mimeType: '', dataUrl: '', uploadedAt: null },
+    }))
+    if (evidenceInputRef.current) evidenceInputRef.current.value = ''
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (readOnly) return
     if (!form.generatedBy) {
       setError('Please select Lead Generated By')
+      return
+    }
+    if (form.status === 'Site Visit' && !form.assignedTo) {
+      setError('Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit')
       return
     }
     setLoading(true)
@@ -246,6 +339,19 @@ const AddLead = ({ readOnly = false }) => {
         ...form,
         meetingType: form.meetingType || undefined,
         meetingTime: form.meetingTime ? new Date(form.meetingTime) : undefined,
+        assignedTo: form.status === 'Site Visit' ? form.assignedTo || null : form.assignedTo || undefined,
+        siteVisitEvidence:
+          form.status === 'Site Visit'
+            ? {
+                fileName: form.siteVisitEvidence?.fileName || '',
+                mimeType: form.siteVisitEvidence?.mimeType || '',
+                dataUrl: form.siteVisitEvidence?.dataUrl || '',
+                uploadedAt: form.siteVisitEvidence?.dataUrl
+                  ? form.siteVisitEvidence?.uploadedAt || new Date()
+                  : null,
+                uploadedBy: form.siteVisitEvidence?.dataUrl ? user?._id || null : null,
+              }
+            : undefined,
         followUps: [...form.followUps, ...pendingFollowUp].map((fu) => {
           const piece = {
             comments: (fu.comments ?? fu.text ?? '').trim(),
@@ -259,6 +365,11 @@ const AddLead = ({ readOnly = false }) => {
           if (fu._id) piece._id = fu._id
           return piece
         }),
+      }
+      if (form.status !== 'Site Visit') {
+        // Don't overwrite sales distribution assignee / evidence when status isn't Site Visit
+        delete payload.assignedTo
+        delete payload.siteVisitEvidence
       }
       if (isEdit) {
         await api.put(`/leads/${id}`, { ...payload, viewerId: user?._id })
@@ -454,6 +565,87 @@ const AddLead = ({ readOnly = false }) => {
                       <input type='checkbox' name='meetingInfoSent' checked={form.meetingInfoSent} onChange={handleChange} className='rounded' />
                       <span className='text-sm text-gray-700'>Info sent to meeting person</span>
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {form.status === 'Site Visit' && (
+                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
+                  <div className='lg:col-span-2'>
+                    <label className='block text-sm font-medium text-gray-700'>
+                      Assign to <span className='text-red-500'>*</span>
+                    </label>
+                    <select
+                      name='assignedTo'
+                      value={form.assignedTo || ''}
+                      onChange={handleChange}
+                      className={inputClass}
+                      required={form.status === 'Site Visit'}
+                      disabled={readOnly}
+                    >
+                      <option value=''>
+                        {siteCoordinatorEmployees.length
+                          ? 'Select employee…'
+                          : 'No Site Co-ordinator / Site Reliability Engineer found'}
+                      </option>
+                      {siteCoordinatorEmployees.map((emp) => (
+                        <option key={emp._id} value={emp._id}>
+                          {emp.name}
+                          {getDesignationTitle(emp) ? ` (${getDesignationTitle(emp)})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className='mt-1 text-xs text-gray-500'>
+                      Only Site Co-ordinator / Site Coordinator and Site Reliability Engineer employees are listed. The lead will be assigned to the selected person.
+                    </p>
+                  </div>
+                  <div className='lg:col-span-2'>
+                    <label className='block text-sm font-medium text-gray-700'>
+                      Site visit evidence
+                    </label>
+                    <input
+                      ref={evidenceInputRef}
+                      type='file'
+                      accept='image/*,.pdf,application/pdf'
+                      onChange={handleSiteVisitEvidence}
+                      disabled={readOnly}
+                      className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700`}
+                    />
+                    <p className='mt-1 text-xs text-gray-500'>
+                      Upload a photo or PDF proving the visitor attended the site (max 8 MB).
+                    </p>
+                    {form.siteVisitEvidence?.dataUrl ? (
+                      <div className='mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3'>
+                        <div className='flex flex-wrap items-center justify-between gap-2'>
+                          <a
+                            href={form.siteVisitEvidence.dataUrl}
+                            target='_blank'
+                            rel='noopener noreferrer'
+                            className='text-sm font-medium text-indigo-600 hover:underline break-all'
+                          >
+                            {form.siteVisitEvidence.fileName || 'View uploaded evidence'}
+                          </a>
+                          {!readOnly && (
+                            <button
+                              type='button'
+                              onClick={clearSiteVisitEvidence}
+                              className='text-xs text-red-600 hover:underline'
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {/image\//i.test(form.siteVisitEvidence.mimeType || '') && (
+                          <a href={form.siteVisitEvidence.dataUrl} target='_blank' rel='noopener noreferrer'>
+                            <img
+                              src={form.siteVisitEvidence.dataUrl}
+                              alt={form.siteVisitEvidence.fileName || 'Site visit evidence'}
+                              className='mt-3 max-h-48 rounded-lg border border-gray-200 object-contain'
+                            />
+                          </a>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
