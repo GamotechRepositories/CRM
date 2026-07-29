@@ -93,7 +93,11 @@ export const assertCanManageLeads = (access) => {
 export const assertCanAccessLead = (access, lead) => {
   if (!access || access.canViewAllLeads) return;
   const assignedId = lead?.assignedTo?._id || lead?.assignedTo;
-  if (String(assignedId || '') !== String(access.employeeId)) {
+  const siteCoordinatorId = lead?.siteCoordinator?._id || lead?.siteCoordinator;
+  const viewer = String(access.employeeId);
+  const ok =
+    String(assignedId || '') === viewer || String(siteCoordinatorId || '') === viewer;
+  if (!ok) {
     const err = new Error('You can only access leads assigned to you');
     err.statusCode = 403;
     throw err;
@@ -104,7 +108,8 @@ export const assertCanAccessLead = (access, lead) => {
 export const applySiteVisitAssignment = async (Employee, body = {}) => {
   if (body.status !== 'Site Visit') return body;
 
-  if (!body.assignedTo) {
+  const coordinatorId = body.siteCoordinator || body.assignedTo;
+  if (!coordinatorId) {
     const err = new Error(
       'Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit'
     );
@@ -112,7 +117,7 @@ export const applySiteVisitAssignment = async (Employee, body = {}) => {
     throw err;
   }
 
-  const emp = await Employee.findById(body.assignedTo)
+  const emp = await Employee.findById(coordinatorId)
     .populate('designation', 'title name accessRole')
     .select('name designation status');
 
@@ -129,9 +134,13 @@ export const applySiteVisitAssignment = async (Employee, body = {}) => {
     throw err;
   }
 
-  return {
-    ...body,
-    assignedTo: emp._id,
-    assignedAt: new Date(),
-  };
+  // Keep sales `assignedTo` intact; attach site coordinator separately.
+  const next = { ...body, siteCoordinator: emp._id, siteCoordinatorAssignedAt: new Date() };
+  // If client mistakenly sent coordinator as assignedTo, don't overwrite sales assignee.
+  if (body.siteCoordinator) {
+    // leave assignedTo as provided (sales)
+  } else if (body.assignedTo && String(body.assignedTo) === String(emp._id)) {
+    delete next.assignedTo;
+  }
+  return next;
 };

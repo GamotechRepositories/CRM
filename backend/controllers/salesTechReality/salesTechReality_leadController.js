@@ -16,6 +16,11 @@ export const createLead = async (req, res) => {
         select: 'name email department designation',
         populate: { path: 'designation', select: 'title accessRole' },
       })
+      .populate({
+        path: 'siteCoordinator',
+        select: 'name email department designation',
+        populate: { path: 'designation', select: 'title accessRole' },
+      })
       .populate('assignedTeamLeader', 'name email');
     res.status(201).json({ message: 'Lead created successfully', lead: populated });
   } catch (error) {

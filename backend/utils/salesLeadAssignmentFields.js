@@ -25,6 +25,20 @@ export const getSalesLeadAssignmentFields = (employeeRef) => ({
     ref: employeeRef,
     default: null,
   },
+  /**
+   * Site Co-ordinator / Site Reliability Engineer for Site Visit status.
+   * Does not replace sales `assignedTo` — both keep access to the lead.
+   */
+  siteCoordinator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: employeeRef,
+    default: null,
+    index: true,
+  },
+  siteCoordinatorAssignedAt: {
+    type: Date,
+    default: null,
+  },
   /** Photo/file proof that the visitor attended the site visit. */
   siteVisitEvidence: {
     fileName: { type: String, default: '' },

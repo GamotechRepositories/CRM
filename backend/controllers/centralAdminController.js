@@ -753,11 +753,42 @@ export const getTenantModuleList = async (req, res) => {
     if (module === 'leads') {
       const Lead = await importTenantModel(tenantId, 'lead');
       if (!Lead) return res.status(404).json({ message: 'Leads not available' });
-      const items = await Lead.find({})
-        .populate('generatedBy', 'name email')
-        .sort({ createdAt: -1 })
-        .lean();
-      return res.status(200).json({ tenantId, tenantLabel: tenant.label, module, items });
+
+      const sourceFilter = String(req.query.leadSource || req.query.source || '').trim();
+      const sortBy = String(req.query.sortBy || '').trim().toLowerCase();
+      const sortDir = String(req.query.sortDir || 'asc').trim().toLowerCase() === 'desc' ? -1 : 1;
+
+      const filter = {};
+      if (statusFilter) filter.status = statusFilter;
+      if (sourceFilter) filter.leadSource = new RegExp(sourceFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      let sort = { createdAt: -1 };
+      if (sortBy === 'status') sort = { status: sortDir, createdAt: -1 };
+      else if (sortBy === 'source' || sortBy === 'leadsource') sort = { leadSource: sortDir, createdAt: -1 };
+      else if (sortBy === 'createdat' || sortBy === 'date') sort = { createdAt: sortDir };
+
+      const hasSalesAssignment = ['bangarProperties', 'mahaProperties', 'salesTechReality'].includes(tenantId);
+      let leadQuery = Lead.find(filter).populate('generatedBy', 'name email');
+      if (hasSalesAssignment) {
+        leadQuery = leadQuery
+          .populate('assignedTo', 'name email')
+          .populate('siteCoordinator', 'name email');
+      }
+      const items = await leadQuery.sort(sort).lean();
+
+      const statuses = await Lead.distinct('status');
+      const sources = (await Lead.distinct('leadSource')).filter((s) => String(s || '').trim());
+
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        items,
+        filters: {
+          statuses: statuses.filter(Boolean).sort(),
+          sources: sources.sort((a, b) => String(a).localeCompare(String(b))),
+        },
+      });
     }
 
     if (module === 'tasks') {

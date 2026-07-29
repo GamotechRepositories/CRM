@@ -61,7 +61,13 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
         andClauses.push({ $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }] });
       }
     } else {
-      filter.assignedTo = access.employeeId;
+      // Sales exec keeps lead via assignedTo; Site Co-ordinator also sees via siteCoordinator
+      andClauses.push({
+        $or: [
+          { assignedTo: access.employeeId },
+          { siteCoordinator: access.employeeId },
+        ],
+      });
     }
 
     if (search) {
@@ -90,6 +96,11 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
       .populate('generatedBy')
       .populate({
         path: 'assignedTo',
+        select: 'name email department designation',
+        populate: { path: 'designation', select: 'title accessRole' },
+      })
+      .populate({
+        path: 'siteCoordinator',
         select: 'name email department designation',
         populate: { path: 'designation', select: 'title accessRole' },
       })
@@ -162,19 +173,28 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
       delete payload.actorId;
 
       const nextStatus = payload.status !== undefined ? payload.status : lead.status;
-      const requestedAssignee =
-        Object.prototype.hasOwnProperty.call(payload, 'assignedTo') ? payload.assignedTo : undefined;
+      const requestedSiteCoordinator = Object.prototype.hasOwnProperty.call(payload, 'siteCoordinator')
+        ? payload.siteCoordinator
+        : undefined;
 
-      if (nextStatus === 'Site Visit' && requestedAssignee) {
-        const coordinator = await resolveSiteCoordinatorAssignee(requestedAssignee);
-        payload.assignedTo = coordinator._id;
-        payload.assignedAt = new Date();
-      } else if (!access.canManageLeads) {
-        // Regular employees cannot reassign leads except Site Coordinator on Site Visit
+      if (nextStatus === 'Site Visit' && requestedSiteCoordinator) {
+        const coordinator = await resolveSiteCoordinatorAssignee(requestedSiteCoordinator);
+        payload.siteCoordinator = coordinator._id;
+        payload.siteCoordinatorAssignedAt = new Date();
+        // Never replace sales assignee with site coordinator
         delete payload.assignedTo;
         delete payload.assignedTeamLeader;
         delete payload.assignedAt;
         delete payload.distributedBy;
+      } else if (!access.canManageLeads) {
+        delete payload.assignedTo;
+        delete payload.assignedTeamLeader;
+        delete payload.assignedAt;
+        delete payload.distributedBy;
+        if (nextStatus !== 'Site Visit') {
+          delete payload.siteCoordinator;
+          delete payload.siteCoordinatorAssignedAt;
+        }
       }
 
       const { followUps, ...rest } = payload;
@@ -194,7 +214,7 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
         lead.markModified('followUps');
       }
 
-      if (lead.status === 'Site Visit' && !lead.assignedTo) {
+      if (lead.status === 'Site Visit' && !lead.siteCoordinator) {
         const err = new Error(
           'Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit'
         );

@@ -34,17 +34,49 @@ const val = (v) => (v === null || v === undefined || v === '' ? '—' : v)
 
 const statusClass = (status) => {
   const s = String(status || '').toLowerCase()
-  if (['active', 'completed', 'approved', 'paid', 'interested'].some((k) => s.includes(k))) {
+  if (
+    ['active', 'completed', 'approved', 'paid', 'interested', 'incentive earned', 'booking token'].some(
+      (k) => s.includes(k)
+    )
+  ) {
     return 'bg-emerald-50 text-emerald-700'
   }
-  if (['progress', 'pending', 'scheduled', 'meeting'].some((k) => s.includes(k))) {
+  if (
+    ['progress', 'pending', 'scheduled', 'meeting schedule', 'meeting revisit', 'site visit', 'call you after'].some(
+      (k) => s.includes(k)
+    )
+  ) {
     return 'bg-amber-50 text-amber-700'
   }
-  if (['inactive', 'reject', 'cancel', 'not interested', 'hold'].some((k) => s.includes(k))) {
+  if (['inactive', 'reject', 'cancel', 'not interested', 'hold', 'call not received'].some((k) => s.includes(k))) {
     return 'bg-rose-50 text-rose-700'
   }
   return 'bg-slate-50 text-slate-600'
 }
+
+const PROPERTY_LEAD_STATUSES = [
+  'Call not Received',
+  'Call You After Sometime',
+  'Interested',
+  'Not Interested',
+  'Meeting Schedule',
+  'Site Visit',
+  'Meeting Revisit',
+  'Booking Token',
+  'Incentive Earned',
+  'Pending',
+]
+
+const ADS_LEAD_STATUSES = [
+  'Call not Received',
+  'Call You After Sometime',
+  'Interested',
+  'Not Interested',
+  'Meeting Schedule',
+]
+
+const leadStatusesForTenant = (tenantId) =>
+  tenantId === 'adsResearchGlobal' ? ADS_LEAD_STATUSES : PROPERTY_LEAD_STATUSES
 
 const Badge = ({ children }) => (
   <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${statusClass(children)}`}>
@@ -111,6 +143,17 @@ const ModulePage = ({ moduleId }) => {
   const [search, setSearch] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue)
   const [processingLeaveId, setProcessingLeaveId] = useState('')
+  const [leadStatusFilter, setLeadStatusFilter] = useState('')
+  const [leadSourceFilter, setLeadSourceFilter] = useState('')
+  const [leadSortBy, setLeadSortBy] = useState('createdAt')
+  const [leadSortDir, setLeadSortDir] = useState('desc')
+
+  useEffect(() => {
+    setLeadStatusFilter('')
+    setLeadSourceFilter('')
+    setLeadSortBy('createdAt')
+    setLeadSortDir('desc')
+  }, [tenantId, moduleId])
 
   useEffect(() => {
     let cancelled = false
@@ -129,6 +172,12 @@ const ModulePage = ({ moduleId }) => {
         if ((moduleId === 'reports' || moduleId === 'tasks') && selectedMonth) {
           params.month = selectedMonth
         }
+        if (moduleId === 'leads') {
+          if (leadStatusFilter) params.status = leadStatusFilter
+          if (leadSourceFilter) params.leadSource = leadSourceFilter
+          if (leadSortBy) params.sortBy = leadSortBy
+          if (leadSortDir) params.sortDir = leadSortDir
+        }
         const res = await api.get(`/companies/${tenantId}/modules/${moduleId}`, {
           params: Object.keys(params).length ? params : undefined,
         })
@@ -146,7 +195,7 @@ const ModulePage = ({ moduleId }) => {
     return () => {
       cancelled = true
     }
-  }, [tenantId, moduleId, status, selectedMonth])
+  }, [tenantId, moduleId, status, selectedMonth, leadStatusFilter, leadSourceFilter, leadSortBy, leadSortDir])
 
   const items = data?.items || []
 
@@ -211,14 +260,21 @@ const ModulePage = ({ moduleId }) => {
       ]
     }
     if (moduleId === 'leads') {
-      return [
+      const cols = [
         { key: 'businessName', label: 'Business', render: (r) => <span className='font-medium text-gray-900'>{val(r.businessName || r.name)}</span> },
         { key: 'name', label: 'Contact', render: (r) => val(r.name) },
         { key: 'contactNumber', label: 'Phone', render: (r) => val(r.contactNumber) },
         { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
         { key: 'leadSource', label: 'Source', render: (r) => val(r.leadSource) },
-        { key: 'meetingTime', label: 'Meeting', render: (r) => formatDate(r.meetingTime) },
       ]
+      if (tenantId !== 'adsResearchGlobal') {
+        cols.push(
+          { key: 'assignedTo', label: 'Assigned To', render: (r) => val(r.assignedTo?.name) },
+          { key: 'siteCoordinator', label: 'Site Co-ordinator', render: (r) => val(r.siteCoordinator?.name) },
+        )
+      }
+      cols.push({ key: 'createdAt', label: 'Created', render: (r) => formatDate(r.createdAt) })
+      return cols
     }
     if (moduleId === 'tasks') {
       return [
@@ -312,11 +368,19 @@ const ModulePage = ({ moduleId }) => {
 
   const subtitle = moduleId === 'reports' || moduleId === 'tasks'
     ? (data?.monthLabel || selectedMonth || 'Selected month')
-    : status
-      ? `${filteredItems.length} shown · filter: ${status}`
-      : `${filteredItems.length} record${filteredItems.length === 1 ? '' : 's'}`
+    : moduleId === 'leads'
+      ? `${filteredItems.length} shown${leadStatusFilter ? ` · status: ${leadStatusFilter}` : ''}${leadSourceFilter ? ` · source: ${leadSourceFilter}` : ''}`
+      : status
+        ? `${filteredItems.length} shown · filter: ${status}`
+        : `${filteredItems.length} record${filteredItems.length === 1 ? '' : 's'}`
 
   const showMonthPicker = moduleId === 'reports' || moduleId === 'tasks'
+  const leadStatusOptions = useMemo(() => {
+    const fromApi = data?.filters?.statuses || []
+    const defaults = leadStatusesForTenant(tenantId)
+    return [...new Set([...defaults, ...fromApi])].filter(Boolean)
+  }, [data?.filters?.statuses, tenantId])
+  const leadSourceOptions = data?.filters?.sources || []
 
   return (
     <AdminCompanyShell activeNav={moduleId}>
@@ -342,6 +406,49 @@ const ModulePage = ({ moduleId }) => {
                 className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
               />
             </div>
+          )}
+          {moduleId === 'leads' && (
+            <>
+              <select
+                value={leadStatusFilter}
+                onChange={(e) => setLeadStatusFilter(e.target.value)}
+                className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                aria-label='Filter by status'
+              >
+                <option value=''>All statuses</option>
+                {leadStatusOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <select
+                value={leadSourceFilter}
+                onChange={(e) => setLeadSourceFilter(e.target.value)}
+                className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                aria-label='Filter by source'
+              >
+                <option value=''>All sources</option>
+                {leadSourceOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <select
+                value={`${leadSortBy}:${leadSortDir}`}
+                onChange={(e) => {
+                  const [by, dir] = String(e.target.value).split(':')
+                  setLeadSortBy(by || 'createdAt')
+                  setLeadSortDir(dir || 'desc')
+                }}
+                className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                aria-label='Sort leads'
+              >
+                <option value='createdAt:desc'>Newest first</option>
+                <option value='createdAt:asc'>Oldest first</option>
+                <option value='status:asc'>Sort by status (A–Z)</option>
+                <option value='status:desc'>Sort by status (Z–A)</option>
+                <option value='source:asc'>Sort by source (A–Z)</option>
+                <option value='source:desc'>Sort by source (Z–A)</option>
+              </select>
+            </>
           )}
           {moduleId !== 'reports' && moduleId !== 'settings' && (
             <input
