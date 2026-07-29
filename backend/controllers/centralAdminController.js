@@ -757,10 +757,31 @@ export const getTenantModuleList = async (req, res) => {
       const sourceFilter = String(req.query.leadSource || req.query.source || '').trim();
       const sortBy = String(req.query.sortBy || '').trim().toLowerCase();
       const sortDir = String(req.query.sortDir || 'asc').trim().toLowerCase() === 'desc' ? -1 : 1;
+      const dateFrom = String(req.query.dateFrom || req.query.createdFrom || '').trim();
+      const dateTo = String(req.query.dateTo || req.query.createdTo || '').trim();
+      const createdDate = String(req.query.createdAt || req.query.date || '').trim();
 
       const filter = {};
       if (statusFilter) filter.status = statusFilter;
       if (sourceFilter) filter.leadSource = new RegExp(sourceFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      if (createdDate || dateFrom || dateTo) {
+        filter.createdAt = {};
+        if (createdDate && /^\d{4}-\d{2}-\d{2}$/.test(createdDate)) {
+          const start = new Date(`${createdDate}T00:00:00.000`);
+          const end = new Date(`${createdDate}T23:59:59.999`);
+          filter.createdAt.$gte = start;
+          filter.createdAt.$lte = end;
+        } else {
+          if (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) {
+            filter.createdAt.$gte = new Date(`${dateFrom}T00:00:00.000`);
+          }
+          if (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+            filter.createdAt.$lte = new Date(`${dateTo}T23:59:59.999`);
+          }
+        }
+        if (!Object.keys(filter.createdAt).length) delete filter.createdAt;
+      }
 
       let sort = { createdAt: -1 };
       if (sortBy === 'status') sort = { status: sortDir, createdAt: -1 };

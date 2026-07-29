@@ -147,12 +147,16 @@ const ModulePage = ({ moduleId }) => {
   const [leadSourceFilter, setLeadSourceFilter] = useState('')
   const [leadSortBy, setLeadSortBy] = useState('createdAt')
   const [leadSortDir, setLeadSortDir] = useState('desc')
+  const [leadDateFrom, setLeadDateFrom] = useState('')
+  const [leadDateTo, setLeadDateTo] = useState('')
 
   useEffect(() => {
     setLeadStatusFilter('')
     setLeadSourceFilter('')
     setLeadSortBy('createdAt')
     setLeadSortDir('desc')
+    setLeadDateFrom('')
+    setLeadDateTo('')
   }, [tenantId, moduleId])
 
   useEffect(() => {
@@ -177,6 +181,8 @@ const ModulePage = ({ moduleId }) => {
           if (leadSourceFilter) params.leadSource = leadSourceFilter
           if (leadSortBy) params.sortBy = leadSortBy
           if (leadSortDir) params.sortDir = leadSortDir
+          if (leadDateFrom) params.dateFrom = leadDateFrom
+          if (leadDateTo) params.dateTo = leadDateTo
         }
         const res = await api.get(`/companies/${tenantId}/modules/${moduleId}`, {
           params: Object.keys(params).length ? params : undefined,
@@ -195,7 +201,18 @@ const ModulePage = ({ moduleId }) => {
     return () => {
       cancelled = true
     }
-  }, [tenantId, moduleId, status, selectedMonth, leadStatusFilter, leadSourceFilter, leadSortBy, leadSortDir])
+  }, [
+    tenantId,
+    moduleId,
+    status,
+    selectedMonth,
+    leadStatusFilter,
+    leadSourceFilter,
+    leadSortBy,
+    leadSortDir,
+    leadDateFrom,
+    leadDateTo,
+  ])
 
   const items = data?.items || []
 
@@ -369,7 +386,7 @@ const ModulePage = ({ moduleId }) => {
   const subtitle = moduleId === 'reports' || moduleId === 'tasks'
     ? (data?.monthLabel || selectedMonth || 'Selected month')
     : moduleId === 'leads'
-      ? `${filteredItems.length} shown${leadStatusFilter ? ` · status: ${leadStatusFilter}` : ''}${leadSourceFilter ? ` · source: ${leadSourceFilter}` : ''}`
+      ? `${filteredItems.length} shown${leadStatusFilter ? ` · status: ${leadStatusFilter}` : ''}${leadSourceFilter ? ` · source: ${leadSourceFilter}` : ''}${leadDateFrom || leadDateTo ? ` · created: ${leadDateFrom || '…'} → ${leadDateTo || '…'}` : ''}`
       : status
         ? `${filteredItems.length} shown · filter: ${status}`
         : `${filteredItems.length} record${filteredItems.length === 1 ? '' : 's'}`
@@ -431,6 +448,41 @@ const ModulePage = ({ moduleId }) => {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              <div className='flex flex-wrap items-center gap-2'>
+                <label htmlFor='lead-date-from' className='text-sm text-gray-600 whitespace-nowrap'>
+                  Created from
+                </label>
+                <input
+                  id='lead-date-from'
+                  type='date'
+                  value={leadDateFrom}
+                  onChange={(e) => setLeadDateFrom(e.target.value)}
+                  className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+                <label htmlFor='lead-date-to' className='text-sm text-gray-600 whitespace-nowrap'>
+                  to
+                </label>
+                <input
+                  id='lead-date-to'
+                  type='date'
+                  value={leadDateTo}
+                  min={leadDateFrom || undefined}
+                  onChange={(e) => setLeadDateTo(e.target.value)}
+                  className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+                {(leadDateFrom || leadDateTo) && (
+                  <button
+                    type='button'
+                    onClick={() => {
+                      setLeadDateFrom('')
+                      setLeadDateTo('')
+                    }}
+                    className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-slate-50'
+                  >
+                    Clear dates
+                  </button>
+                )}
+              </div>
               <select
                 value={`${leadSortBy}:${leadSortDir}`}
                 onChange={(e) => {
@@ -441,8 +493,8 @@ const ModulePage = ({ moduleId }) => {
                 className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
                 aria-label='Sort leads'
               >
-                <option value='createdAt:desc'>Newest first</option>
-                <option value='createdAt:asc'>Oldest first</option>
+                <option value='createdAt:desc'>Sort by date (newest)</option>
+                <option value='createdAt:asc'>Sort by date (oldest)</option>
                 <option value='status:asc'>Sort by status (A–Z)</option>
                 <option value='status:desc'>Sort by status (Z–A)</option>
                 <option value='source:asc'>Sort by source (A–Z)</option>
