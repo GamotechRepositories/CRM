@@ -6,6 +6,7 @@ import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
 import centralLogo from '../assets/logo.jpg'
 
 const NAV_ITEMS = [
+  { id: 'home', label: 'Home', icon: 'home', absolutePath: '/' },
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '' },
   { id: 'employees', label: 'Employees', icon: 'employees', path: 'employees' },
   { id: 'clients', label: 'Clients', icon: 'clients', path: 'clients' },
