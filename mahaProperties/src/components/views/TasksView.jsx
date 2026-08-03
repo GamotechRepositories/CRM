@@ -4,13 +4,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   formatTaskDuration,
+  getEditableStatusOptions,
   getTaskRemainingMinutes,
   getTaskStatusColor,
+  hasOpenUrgentTask,
   normalizeTaskStatus,
   taskStatusToSocialStatus,
 } from '../../utils/taskStatus'
 
-const VALID_STATUSES = ['All', 'Pending', 'In Progress', 'Completed', 'Cancelled', 'Delayed']
+const VALID_STATUSES = ['All', 'Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled', 'Delayed']
 
 const parseStatusParam = (raw) => {
   if (!raw) return null
@@ -317,8 +319,7 @@ const TasksView = ({ isMyTasks = false }) => {
     }
   }
 
-  const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
-  const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
+    const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
 
   const handleAddUploadedLink = async () => {
     if (!viewTask?.source || viewTask.source !== 'social_media') return
@@ -482,6 +483,7 @@ const TasksView = ({ isMyTasks = false }) => {
             <option value='All'>All status</option>
             <option value='Pending'>Pending</option>
             <option value='In Progress'>In Progress</option>
+            <option value='Paused'>Paused</option>
             <option value='Completed'>Completed</option>
             <option value='Cancelled'>Cancelled</option>
             <option value='Delayed'>Delayed</option>
@@ -576,7 +578,7 @@ const TasksView = ({ isMyTasks = false }) => {
                       <span className={`inline-flex w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
                         {normalizeTaskStatus(task.status) || task.status}
                       </span>
-                      {normalizeTaskStatus(task.status) === 'In Progress' && getTaskRemainingMinutes(task) != null && (
+                      {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
                         <span className='text-xs text-blue-700'>
                           {formatTaskDuration(getTaskRemainingMinutes(task))} left
                         </span>
@@ -765,25 +767,61 @@ const TasksView = ({ isMyTasks = false }) => {
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Status</span>
                 {isPendingAssigneeAcceptance(viewTask) ? (
-                  <button
-                    type='button'
-                    onClick={() => handleStatusChange(viewTask, 'In Progress')}
-                    disabled={updatingStatus}
-                    className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
-                  >
-                    {updatingStatus ? 'Accepting...' : 'Accept Task'}
-                  </button>
+                  <div className='flex flex-col items-end gap-1'>
+                    <button
+                      type='button'
+                      onClick={() => handleStatusChange(viewTask, 'In Progress')}
+                      disabled={
+                        updatingStatus
+                        || (
+                          String(viewTask.priority || '') !== 'Urgent'
+                          && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
+                        )
+                      }
+                      className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
+                      title={
+                        String(viewTask.priority || '') !== 'Urgent'
+                        && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
+                          ? 'Complete the urgent task before accepting other tasks'
+                          : undefined
+                      }
+                    >
+                      {updatingStatus ? 'Accepting...' : 'Accept Task'}
+                    </button>
+                    {String(viewTask.priority || '') !== 'Urgent'
+                      && hasOpenUrgentTask(tasks, user?._id, viewTask._id) ? (
+                      <span className='text-[11px] text-amber-700 max-w-[12rem] text-right'>
+                        Urgent task in progress — finish it first
+                      </span>
+                    ) : null}
+                  </div>
                 ) : canUpdateTaskStatus(viewTask) ? (
-                  <select
-                    value={normalizeTaskStatus(viewTask.status) || viewTask.status}
-                    onChange={(e) => handleStatusChange(viewTask, e.target.value)}
-                    disabled={updatingStatus}
-                    className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50'
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
+                  <div className='flex flex-wrap items-center justify-end gap-2'>
+                    {normalizeTaskStatus(viewTask.status) === 'In Progress'
+                      && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
+                      && String(viewTask.priority || '') !== 'Urgent' ? (
+                      <button
+                        type='button'
+                        onClick={() => handleStatusChange(viewTask, 'Paused')}
+                        disabled={updatingStatus}
+                        className='px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50'
+                      >
+                        {updatingStatus ? 'Pausing…' : 'Pause'}
+                      </button>
+                    ) : null}
+                    <select
+                      value={normalizeTaskStatus(viewTask.status) || viewTask.status}
+                      onChange={(e) => handleStatusChange(viewTask, e.target.value)}
+                      disabled={updatingStatus}
+                      className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50'
+                    >
+                      {getEditableStatusOptions(viewTask, {
+                        hasOpenUrgent: hasOpenUrgentTask(tasks, user?._id, viewTask._id),
+                      }).map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
                 ) : (
                   <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(viewTask.status)}`}>
                     {normalizeTaskStatus(viewTask.status) || viewTask.status}

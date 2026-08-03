@@ -69,6 +69,7 @@ const router = createBrowserRouter([
             { path: 'hr-dashboard', element: <DashboardView /> },
             { path: 'manager-dashboard', element: <DashboardView /> },
             { path: 'team-leader-dashboard', element: <DashboardView /> },
+            { path: 'site-coordinator-dashboard', element: <DashboardView /> },
             { path: 'clients', element: <ClientsView /> },
             { path: 'clients/:clientId/dashboard', element: <ClientDashboardView /> },
             { path: 'client-profiles', element: <ClientProfilesView /> },

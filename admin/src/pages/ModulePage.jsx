@@ -35,14 +35,22 @@ const val = (v) => (v === null || v === undefined || v === '' ? '—' : v)
 const statusClass = (status) => {
   const s = String(status || '').toLowerCase()
   if (
-    ['active', 'completed', 'approved', 'paid', 'interested', 'incentive earned', 'booking token'].some(
-      (k) => s.includes(k)
-    )
+    [
+      'active',
+      'completed',
+      'approved',
+      'paid',
+      'interested',
+      'incentive earned',
+      'booking token',
+      'booking done',
+      'token done',
+    ].some((k) => s.includes(k))
   ) {
     return 'bg-emerald-50 text-emerald-700'
   }
   if (
-    ['progress', 'pending', 'scheduled', 'meeting schedule', 'meeting revisit', 'site visit', 'call you after'].some(
+    ['progress', 'pending', 'scheduled', 'meeting schedule', 'meeting revisit', 'site visit', 'zoom meeting', 'call you after'].some(
       (k) => s.includes(k)
     )
   ) {
@@ -67,6 +75,19 @@ const PROPERTY_LEAD_STATUSES = [
   'Pending',
 ]
 
+const STR_LEAD_STATUSES = [
+  'Call not Received',
+  'Call You After Sometime',
+  'Interested',
+  'Not Interested',
+  'Meeting Schedule',
+  'Site Visit',
+  'Zoom Meeting',
+  'Booking Done',
+  'Token Done',
+  'Pending',
+]
+
 const ADS_LEAD_STATUSES = [
   'Call not Received',
   'Call You After Sometime',
@@ -75,8 +96,11 @@ const ADS_LEAD_STATUSES = [
   'Meeting Schedule',
 ]
 
-const leadStatusesForTenant = (tenantId) =>
-  tenantId === 'adsResearchGlobal' ? ADS_LEAD_STATUSES : PROPERTY_LEAD_STATUSES
+const leadStatusesForTenant = (tenantId) => {
+  if (tenantId === 'adsResearchGlobal') return ADS_LEAD_STATUSES
+  if (tenantId === 'salesTechReality') return STR_LEAD_STATUSES
+  return PROPERTY_LEAD_STATUSES
+}
 
 const Badge = ({ children }) => (
   <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${statusClass(children)}`}>

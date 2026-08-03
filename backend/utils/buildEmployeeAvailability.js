@@ -77,7 +77,7 @@ export const buildEmployeeAvailability = async ({
     }).select('employee status checkIn checkOut durationHours'),
     Task.find({
       assignedTo: { $in: ids },
-      status: { $in: ['Pending', 'In Progress'] },
+      status: { $in: ['Pending', 'In Progress', 'Paused'] },
       isRecurringTemplate: { $ne: true },
     }).select(
       'assignedTo estimatedDurationMinutes dueDate status title startedAt scheduledStartAt scheduledEndAt'

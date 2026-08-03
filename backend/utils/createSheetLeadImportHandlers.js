@@ -51,7 +51,7 @@ export function createSheetLeadImportHandlers({
       contactNumber: row.phone,
       leadSource: row.platform ? `Meta Ads (${row.platform})` : 'Google Sheet Import',
       description: buildCrmDescription(row),
-      status: mapSheetStatusToCrmStatus(row.sheetLeadStatus),
+      status: mapSheetStatusToCrmStatus(row.sheetLeadStatus, tenantKey),
       externalLeadId: row.metaLeadId || '',
       adPlatform: 'meta',
       campaignId: row.campaignId || '',

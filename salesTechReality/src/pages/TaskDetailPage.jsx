@@ -4,14 +4,14 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   formatTaskDuration,
+  getEditableStatusOptions,
   getTaskRemainingMinutes,
   getTaskStatusColor,
+  hasOpenUrgentTask,
   normalizeTaskStatus,
   taskStatusToSocialStatus,
 } from '../utils/taskStatus'
 import { formatTaskStarDisplay, getActualTaskDurationMinutes } from '../utils/taskStarRating'
-
-const STATUS_OPTIONS = ['Pending', 'In Progress', 'Completed', 'Cancelled']
 const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
 
 const formatDuration = (minutes) => {

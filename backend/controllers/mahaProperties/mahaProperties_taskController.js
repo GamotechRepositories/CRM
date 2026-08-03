@@ -13,6 +13,12 @@ import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../uti
 import { applyAutoTaskStarRating } from '../../utils/applyAutoTaskStarRating.js';
 import { assertValidTaskSchedule } from '../../utils/validateTaskSchedule.js';
 import { normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
+import {
+  assertCanStartOrResumeTask,
+  assertEmployeeCanPause,
+  handleUrgentTaskAssigned,
+  handleUrgentTaskCompleted,
+} from '../../utils/urgentTaskInterrupt.js';
 
 const notificationService = createNotificationService({ Notification });
 
@@ -181,6 +187,7 @@ export const createTask = async (req, res) => {
       });
       await task.save();
       createdTasks.push(task);
+      await handleUrgentTaskAssigned({ Task, task });
     }
     await syncClientProfileByProjectId(project);
     const populatedTasks = await Task.find({ _id: { $in: createdTasks.map((t) => t._id) } })
@@ -303,7 +310,7 @@ export const getTaskById = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id).select(
-      'project status assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt completedAt createdAt'
+      'project status priority assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt pausedAt pausedByUrgentTask completedAt createdAt'
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
@@ -314,9 +321,21 @@ export const updateTask = async (req, res) => {
     if (req.body.status !== undefined) {
       payload.status = nextStatus;
     }
+
+    await assertEmployeeCanPause({ Task, task: existing, nextStatus });
+    await assertCanStartOrResumeTask({ Task, task: { ...existing.toObject(), ...payload }, nextStatus });
+
     Object.assign(
       payload,
-      applyTaskStatusTiming({ existingStatus: existing.status, nextStatus, payload })
+      applyTaskStatusTiming({
+        existingStatus: existing.status,
+        nextStatus,
+        payload: {
+          ...payload,
+          startedAt: payload.startedAt !== undefined ? payload.startedAt : existing.startedAt,
+          pausedAt: payload.pausedAt !== undefined ? payload.pausedAt : existing.pausedAt,
+        },
+      })
     );
 
     const nextAssignee = payload.assignedTo ?? existing.assignedTo;
@@ -374,10 +393,29 @@ export const updateTask = async (req, res) => {
       .populate('assignedTo')
       .populate('assignedBy')
       .populate('rating.ratedBy', 'name designation');
+
+    const nextPriority = updated?.priority || existing.priority;
+    const becameUrgent =
+      String(nextPriority) === 'Urgent' &&
+      (String(existing.priority) !== 'Urgent' || assigneeChanged);
+    if (becameUrgent || (String(nextPriority) === 'Urgent' && assigneeChanged)) {
+      await handleUrgentTaskAssigned({ Task, task: updated });
+    }
+
+    const resumed = await handleUrgentTaskCompleted({
+      Task,
+      task: updated,
+      previousStatus: existing.status,
+    });
+
     await runTaskNotificationSideEffects({ notificationService, existing, updated });
     await syncClientProfileByProjectId(existing.project);
     await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
-    res.status(200).json({ message: 'Task updated', task: updated });
+    res.status(200).json({
+      message: 'Task updated',
+      task: updated,
+      resumedTasks: resumed.map((t) => t._id),
+    });
   } catch (error) {
     if (error?.statusCode === 400 || error?.statusCode === 409) {
       return res.status(error.statusCode).json({ message: error.message });

@@ -1,6 +1,10 @@
 import mongoose from 'mongoose';
 import { adsLeadSchemaFields } from '../../utils/adsLeadFields.js';
 import { getSalesLeadAssignmentFields } from '../../utils/salesLeadAssignmentFields.js';
+import {
+  PROPERTY_LEAD_STATUS_DEFAULT,
+  STR_LEAD_STATUS_ENUM,
+} from '../../utils/propertyLeadStatuses.js';
 
 const followUpSchema = new mongoose.Schema({
   date: { type: Date, default: Date.now },
@@ -21,19 +25,13 @@ const leadSchema = new mongoose.Schema({
   description: { type: String },
   status: {
     type: String,
-    enum: [
-      'Call not Received',
-      'Call You After Sometime',
-      'Interested',
-      'Not Interested',
-      'Meeting Schedule',
-      'Site Visit',
-      'Meeting Revisit',
-      'Booking Token',
-      'Incentive Earned',
-      'Pending',
-    ],
-    default: 'Call not Received',
+    enum: STR_LEAD_STATUS_ENUM,
+    default: PROPERTY_LEAD_STATUS_DEFAULT,
+  },
+  /** Optional incentive amount (INR) credited when booking/token is done. */
+  incentiveAmount: {
+    type: Number,
+    default: 0,
   },
   meetingType: {
     type: String,

@@ -108,4 +108,25 @@ export const getSiteVisitSchemaFields = ({ employeeRef, propertyRef, leadRef }) 
     ref: employeeRef,
     default: null,
   },
+  /** GPS check-in when Site Co-ordinator arrives at the visit. */
+  checkInAt: { type: Date, default: null },
+  checkInLatitude: { type: Number, default: null },
+  checkInLongitude: { type: Number, default: null },
+  checkInAddress: { type: String, default: '' },
+  /** GPS check-out when leaving the visit. */
+  checkOutAt: { type: Date, default: null },
+  checkOutLatitude: { type: Number, default: null },
+  checkOutLongitude: { type: Number, default: null },
+  checkOutAddress: { type: String, default: '' },
+  /**
+   * Road/travel distance (km) from the previous check-in of the same day
+   * to this visit's check-in (haversine approximation).
+   */
+  travelFromPreviousKm: { type: Number, default: null },
+  /** Allocated travel expense record id (tenant Expense collection). */
+  travelExpenseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+  },
+  travelExpenseAllocatedAt: { type: Date, default: null },
 });

@@ -1,9 +1,10 @@
-export const TASK_STATUSES = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
+export const TASK_STATUSES = ['Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled'];
 
 export const normalizeTaskStatus = (status) => {
   if (status == null || status === '') return '';
   const value = String(status).trim();
   if (value === 'InProgress' || value.toLowerCase() === 'in progress') return 'In Progress';
+  if (value.toLowerCase() === 'paused' || value.toLowerCase() === 'on hold') return 'Paused';
   if (TASK_STATUSES.includes(value)) return value;
   return value;
 };

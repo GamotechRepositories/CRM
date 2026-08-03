@@ -3,6 +3,7 @@ export const DASHBOARD_PATHS = {
   hr: '/hr-dashboard',
   manager: '/manager-dashboard',
   team_leader: '/team-leader-dashboard',
+  site_coordinator: '/site-coordinator-dashboard',
   employee: '/dashboard',
 }
 
@@ -12,6 +13,7 @@ const ACCESS_ROLE_DASHBOARD = {
   hr: 'hr',
   manager: 'manager',
   team_leader: 'team_leader',
+  site_coordinator: 'site_coordinator',
   employee: 'employee',
 }
 
@@ -30,6 +32,27 @@ const isManagerTitle = (title = '') => {
   if (t.includes('manager')) return true
   if (t.includes('operations')) return true
   return false
+}
+
+const normalizeKey = (value = '') =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+
+/** Site Co-ordinator / Site Coordinator / Site Reliability Engineer */
+export const isSiteCoordinatorUser = (user) => {
+  const raw = user?.designation
+  const title = String(
+    typeof raw === 'string' ? raw : raw?.title || raw?.name || ''
+  ).trim()
+  const key = normalizeKey(title)
+  const accessRole = String(raw?.accessRole || '').trim().toLowerCase()
+  if (accessRole === 'site_coordinator') return true
+  return (
+    key.includes('sitecoordinator') ||
+    key.includes('sitereliabilityengineer') ||
+    (key.includes('sitereliability') && key.includes('engineer'))
+  )
 }
 
 export const getDashboardKind = (user) => {
@@ -53,6 +76,9 @@ export const getDashboardKind = (user) => {
   if (accessRole === 'manager' || isManagerTitle(title)) {
     return 'manager'
   }
+  if (isSiteCoordinatorUser(user)) {
+    return 'site_coordinator'
+  }
 
   if (accessRole && ACCESS_ROLE_DASHBOARD[accessRole]) {
     return ACCESS_ROLE_DASHBOARD[accessRole]
@@ -69,3 +95,4 @@ export const isDashboardRoute = (pathname = '') =>
   || pathname === '/hr-dashboard'
   || pathname === '/manager-dashboard'
   || pathname === '/team-leader-dashboard'
+  || pathname === '/site-coordinator-dashboard'

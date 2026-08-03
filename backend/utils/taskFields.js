@@ -11,6 +11,16 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     type: Date,
     default: null,
   },
+  /** When status is Paused, freezes the active timer at this instant. */
+  pausedAt: {
+    type: Date,
+    default: null,
+  },
+  /** Urgent task that caused this pause (auto-resume when that task completes). */
+  pausedByUrgentTask: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+  },
   scheduledStartAt: {
     type: Date,
     default: null,

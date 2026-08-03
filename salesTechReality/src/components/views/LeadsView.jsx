@@ -11,9 +11,9 @@ const STATUS_OPTIONS = [
   'Not Interested',
   'Meeting Schedule',
   'Site Visit',
-  'Meeting Revisit',
-  'Booking Token',
-  'Incentive Earned',
+  'Zoom Meeting',
+  'Booking Done',
+  'Token Done',
   'Pending',
 ]
 

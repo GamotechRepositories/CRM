@@ -40,7 +40,10 @@ const leadStatusClass = (status) => {
   if (status === 'Interested') return 'bg-orange-100 text-orange-700'
   if (status === 'Meeting Schedule') return 'bg-blue-100 text-blue-700'
   if (status === 'Site Visit') return 'bg-cyan-100 text-cyan-700'
+  if (status === 'Zoom Meeting') return 'bg-violet-100 text-violet-700'
   if (status === 'Meeting Revisit') return 'bg-indigo-100 text-indigo-700'
+  if (status === 'Booking Done') return 'bg-teal-100 text-teal-800'
+  if (status === 'Token Done') return 'bg-emerald-100 text-emerald-800'
   if (status === 'Booking Token') return 'bg-teal-100 text-teal-700'
   if (status === 'Incentive Earned') return 'bg-emerald-100 text-emerald-700'
   if (status === 'Pending') return 'bg-yellow-100 text-yellow-800'
@@ -53,7 +56,29 @@ const leadStatusLabel = (status) => {
   if (status === 'Call not Received') return 'New'
   if (status === 'Call You After Sometime') return 'Follow-up'
   if (status === 'Meeting Schedule') return 'Meeting'
+  if (status === 'Zoom Meeting') return 'Zoom'
   return status || 'Lead'
+}
+
+const CLOSED_LEAD_STATUSES = [
+  'Not Interested',
+  'Booking Done',
+  'Token Done',
+  'Booking Token',
+  'Incentive Earned',
+]
+
+const getLatestFollowUpDate = (lead) => {
+  const fus = Array.isArray(lead?.followUps) ? lead.followUps : []
+  if (!fus.length) return null
+  let latest = null
+  for (const fu of fus) {
+    if (!fu?.date) continue
+    const d = new Date(fu.date)
+    if (Number.isNaN(d.getTime())) continue
+    if (!latest || d > latest) latest = d
+  }
+  return latest
 }
 
 const formatDate = (d) => {
@@ -283,9 +308,32 @@ const EmployeeDashboardView = () => {
       .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     const completedTasks = tasks.filter((t) => t.status === 'Completed')
     const completedThisMonth = completedTasks.filter((t) => isThisMonth(t.completedAt || t.updatedAt, now))
-    const openDeals = myLeads.filter((l) => ['Interested', 'Meeting Schedule', 'Call You After Sometime'].includes(l.status))
+    const openDeals = myLeads.filter((l) =>
+      ['Interested', 'Meeting Schedule', 'Call You After Sometime', 'Zoom Meeting', 'Site Visit'].includes(l.status)
+    )
     const meetingsToday = myLeads.filter(
-      (l) => l.status === 'Meeting Schedule' && l.meetingTime && isSameDay(l.meetingTime, now)
+      (l) =>
+        (l.status === 'Meeting Schedule' || l.status === 'Zoom Meeting') &&
+        l.meetingTime &&
+        isSameDay(l.meetingTime, now)
+    )
+
+    const followUpLeads = myLeads.filter((l) => {
+      if (CLOSED_LEAD_STATUSES.includes(l.status)) return false
+      const latest = getLatestFollowUpDate(l)
+      if (latest && !isPastDay(latest, now)) return true
+      return l.status === 'Call You After Sometime'
+    })
+
+    const missedFollowUpLeads = myLeads.filter((l) => {
+      if (CLOSED_LEAD_STATUSES.includes(l.status)) return false
+      const latest = getLatestFollowUpDate(l)
+      return Boolean(latest && isPastDay(latest, now))
+    })
+
+    const totalIncentiveEarned = myLeads.reduce(
+      (sum, l) => sum + (Number(l.incentiveAmount) || 0),
+      0
     )
 
     const pipelineData = buildPipelineStages(myLeads)
@@ -343,8 +391,13 @@ const EmployeeDashboardView = () => {
       performancePct,
       ratedTasks,
       avgRating,
-      followUps: myLeads.reduce((sum, l) => sum + (Array.isArray(l.followUps) ? l.followUps.length : 0), 0),
-      dealsClosed: myLeads.filter((l) => l.meetingInfoSent === true).length,
+      followUps: followUpLeads.length,
+      missedFollowUps: missedFollowUpLeads.length,
+      totalIncentiveEarned,
+      dealsClosed: myLeads.filter((l) =>
+        ['Booking Done', 'Token Done', 'Booking Token', 'Incentive Earned'].includes(l.status) ||
+        l.meetingInfoSent === true
+      ).length,
     }
   }, [tasks, myLeads, now])
 
@@ -367,13 +420,16 @@ const EmployeeDashboardView = () => {
         </div>
       </div>
 
-      <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6'>
+      <div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-9 gap-4 mb-6'>
         <KpiCard title='My Tasks' value={stats.todaysTasks.length} subtitle="Today's Tasks" icon='📋' color='bg-blue-50' onClick={() => navigate(`/my-tasks?date=${localYmd(now)}`)} />
         <KpiCard title='Past Tasks' value={stats.pastIncompleteTasks.length} subtitle='Not Completed' icon='⏳' color='bg-red-50' onClick={() => navigate('/my-tasks?status=Delayed')} />
         <KpiCard title='Tasks Completed' value={stats.completedThisMonth.length} subtitle='This Month' icon='✅' color='bg-green-50' onClick={() => navigate('/my-tasks?status=Completed')} />
         <KpiCard title='My Leads' value={myLeads.length} subtitle='Total Leads' icon='🎯' color='bg-purple-50' onClick={() => navigate('/lead-management')} />
         <KpiCard title='My Deals' value={stats.openDeals.length} subtitle='Open Deals' icon='💼' color='bg-orange-50' onClick={() => navigate('/lead-management')} />
         <KpiCard title='Meetings Today' value={stats.meetingsToday.length} subtitle='Scheduled' icon='📅' color='bg-cyan-50' onClick={() => navigate('/lead-management')} />
+        <KpiCard title='Follow-up' value={stats.followUps} subtitle='Due today or upcoming' icon='📞' color='bg-indigo-50' onClick={() => navigate('/lead-management')} />
+        <KpiCard title='Missed Follow-up' value={stats.missedFollowUps} subtitle='Past due' icon='⚠️' color='bg-rose-50' onClick={() => navigate('/lead-management')} />
+        <KpiCard title='Total Incentive Earned' value={formatINR(stats.totalIncentiveEarned)} subtitle='From your bookings' icon='💰' color='bg-emerald-50' onClick={() => navigate('/lead-management')} />
       </div>
 
       <div className='grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6'>
