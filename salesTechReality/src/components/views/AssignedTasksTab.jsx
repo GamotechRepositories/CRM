@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 
-const STATUS_OPTIONS = ['All', 'Pending', 'In Progress', 'Completed', 'Cancelled']
+const STATUS_OPTIONS = ['All', 'Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled']
 
 const formatDate = (d) => {
   if (!d) return '—'
@@ -35,6 +35,7 @@ const statusClass = (status) => {
   switch (status) {
     case 'Completed': return 'bg-green-100 text-green-800'
     case 'In Progress': return 'bg-blue-100 text-blue-800'
+    case 'Paused': return 'bg-violet-100 text-violet-800'
     case 'Cancelled': return 'bg-gray-100 text-gray-600'
     default: return 'bg-amber-100 text-amber-800'
   }
@@ -158,7 +159,7 @@ const AssignedTasksTab = () => {
   }
 
   const counts = useMemo(() => {
-    const base = { All: tasks.length, Pending: 0, 'In Progress': 0, Completed: 0, Cancelled: 0 }
+    const base = { All: tasks.length, Pending: 0, 'In Progress': 0, Paused: 0, Completed: 0, Cancelled: 0 }
     tasks.forEach((t) => {
       if (base[t.status] !== undefined) base[t.status] += 1
     })

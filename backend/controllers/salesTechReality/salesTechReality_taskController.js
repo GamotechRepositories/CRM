@@ -119,6 +119,7 @@ export const createTask = async (req, res) => {
         });
         await firstTask.save();
         createdTasks.push(firstTask);
+        await handleUrgentTaskAssigned({ Task, task: firstTask });
 
         const templateTask = new Task({
           project,

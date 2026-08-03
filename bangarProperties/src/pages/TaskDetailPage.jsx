@@ -90,6 +90,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
   const [savingRating, setSavingRating] = useState(false)
   const [ratingError, setRatingError] = useState(null)
   const [ratingSaved, setRatingSaved] = useState(false)
+  const [siblingTasks, setSiblingTasks] = useState([])
 
   const listPath = isMyTasks ? '/my-tasks' : '/tasks'
 
@@ -192,6 +193,15 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
       try {
         const res = await api.get(`/tasks/${idStr}`)
         if (!cancelled) setTask(res.data)
+        const assigneeId = res.data?.assignedTo?._id || res.data?.assignedTo || user?._id
+        if (assigneeId) {
+          try {
+            const sib = await api.get('/tasks', { params: { employeeId: assigneeId } })
+            if (!cancelled) setSiblingTasks(Array.isArray(sib.data) ? sib.data : [])
+          } catch {
+            if (!cancelled) setSiblingTasks([])
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(e?.response?.data?.message || e.message || 'Failed to load task')
       } finally {
@@ -522,25 +532,55 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
             <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
               <span className='text-sm text-gray-500'>Status</span>
               {isPendingAssigneeAcceptance(task) ? (
-                <button
-                  type='button'
-                  onClick={() => handleStatusChange(task, 'In Progress')}
-                  disabled={updatingStatus}
-                  className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
-                >
-                  {updatingStatus ? 'Accepting...' : 'Accept Task'}
-                </button>
+                <div className='flex flex-col items-end gap-1'>
+                  <button
+                    type='button'
+                    onClick={() => handleStatusChange(task, 'In Progress')}
+                    disabled={
+                      updatingStatus
+                      || (
+                        String(task.priority || '') !== 'Urgent'
+                        && hasOpenUrgentTask(siblingTasks, user?._id, task._id)
+                      )
+                    }
+                    className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
+                  >
+                    {updatingStatus ? 'Accepting...' : 'Accept Task'}
+                  </button>
+                  {String(task.priority || '') !== 'Urgent'
+                    && hasOpenUrgentTask(siblingTasks, user?._id, task._id) ? (
+                    <span className='text-[11px] text-amber-700 max-w-[12rem] text-right'>
+                      Urgent task in progress — finish it first
+                    </span>
+                  ) : null}
+                </div>
               ) : canUpdateTaskStatus(task) ? (
-                <select
-                  value={normalizeTaskStatus(task.status) || task.status}
-                  onChange={(e) => handleStatusChange(task, e.target.value)}
-                  disabled={updatingStatus}
-                  className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 max-w-[11rem]'
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <div className='flex flex-wrap items-center justify-end gap-2'>
+                  {normalizeTaskStatus(task.status) === 'In Progress'
+                    && hasOpenUrgentTask(siblingTasks, user?._id, task._id)
+                    && String(task.priority || '') !== 'Urgent' ? (
+                    <button
+                      type='button'
+                      onClick={() => handleStatusChange(task, 'Paused')}
+                      disabled={updatingStatus}
+                      className='px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-50'
+                    >
+                      {updatingStatus ? 'Pausing…' : 'Pause'}
+                    </button>
+                  ) : null}
+                  <select
+                    value={normalizeTaskStatus(task.status) || task.status}
+                    onChange={(e) => handleStatusChange(task, e.target.value)}
+                    disabled={updatingStatus}
+                    className='text-sm font-semibold rounded-lg px-2 py-1 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 max-w-[11rem]'
+                  >
+                    {getEditableStatusOptions(task, {
+                      hasOpenUrgent: hasOpenUrgentTask(siblingTasks, user?._id, task._id),
+                    }).map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
               ) : (
                 <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
                   {normalizeTaskStatus(task.status) || task.status}
@@ -567,7 +607,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                     {formatDuration(task.estimatedDurationMinutes)}
                   </span>
                 </div>
-                {normalizeTaskStatus(task.status) === 'In Progress' && getTaskRemainingMinutes(task) != null && (
+                {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
                   <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
                     <span className='text-sm text-gray-500'>Time Remaining</span>
                     <span className='text-sm font-medium text-blue-700'>

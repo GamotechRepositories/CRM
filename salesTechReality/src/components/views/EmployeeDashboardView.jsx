@@ -126,7 +126,7 @@ const isPastDay = (date, ref = new Date()) => {
   return startOfDay(date) < startOfDay(ref)
 }
 
-const isIncompleteTask = (task) => ['Pending', 'In Progress'].includes(task?.status)
+const isIncompleteTask = (task) => ['Pending', 'In Progress', 'Paused'].includes(task?.status)
 
 const isThisMonth = (d, ref = new Date()) => {
   if (!d) return false
