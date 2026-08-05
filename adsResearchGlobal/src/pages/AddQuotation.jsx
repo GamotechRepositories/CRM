@@ -209,12 +209,6 @@ const AddQuotation = () => {
   const handleQuotationFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 25 * 1024 * 1024
-    if (file.size > maxBytes) {
-      setError('File is too large. Max 25 MB, or paste a Drive/Dropbox URL instead.')
-      e.target.value = ''
-      return
-    }
     try {
       setError(null)
       const uploaded = await uploadFile(file, { folder: 'quotations' })
@@ -659,7 +653,7 @@ const AddQuotation = () => {
               </a>
             )}
             <p className='text-[11px] text-gray-400 mt-1'>
-              Upload a PDF/image (max 8 MB) or paste an external quotation URL.
+              Upload a PDF/image or paste an external quotation URL.
             </p>
           </div>
         </div>

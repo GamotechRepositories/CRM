@@ -1,6 +1,6 @@
 import {
   assertCanAccessLead,
-  isSiteCoordinatorEmployee,
+  isSiteVisitAssigneeEmployee,
   resolveLeadAccess,
 } from './leadAccess.js';
 
@@ -109,16 +109,16 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
   const resolveSiteCoordinatorAssignee = async (assigneeId) => {
     if (!assigneeId) return null;
     const emp = await Employee.findById(assigneeId)
-      .populate('designation', 'title name accessRole')
-      .select('name designation status');
+      .populate('designation', 'title name accessRole department')
+      .select('name department designation status');
     if (!emp || emp.status === 'Inactive') {
       const err = new Error('Selected employee was not found or is inactive');
       err.statusCode = 400;
       throw err;
     }
-    if (!isSiteCoordinatorEmployee(emp)) {
+    if (!isSiteVisitAssigneeEmployee(emp)) {
       const err = new Error(
-        'Selected employee must be a Site Co-ordinator / Site Coordinator or Site Reliability Engineer'
+        'Selected employee must be in Sales or a Site Co-ordinator / Site Reliability Engineer'
       );
       err.statusCode = 400;
       throw err;
@@ -216,7 +216,7 @@ export function createScopedLeadHandlers({ Lead, Employee }) {
 
       if (lead.status === 'Site Visit' && !lead.siteCoordinator) {
         const err = new Error(
-          'Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit'
+          'Please select a Sales or Site Co-ordinator employee when status is Site Visit'
         );
         err.statusCode = 400;
         throw err;

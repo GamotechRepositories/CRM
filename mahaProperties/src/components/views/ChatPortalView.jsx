@@ -627,14 +627,19 @@ const ChatPortalView = () => {
     if (!files.length) return
     setSelectedFiles((prev) => [
       ...prev,
-      ...files.map((file) => ({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        file,
-        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
-      })),
+      ...files.map((file) => {
+        const isImage = file.type.startsWith('image/')
+        const isVideo = file.type.startsWith('video/')
+        return {
+          id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          file,
+          previewUrl: isImage || isVideo ? URL.createObjectURL(file) : null,
+          kind: isImage ? 'image' : isVideo ? 'video' : 'file',
+        }
+      }),
     ])
     e.target.value = ''
   }
@@ -1179,11 +1184,17 @@ const ChatPortalView = () => {
                     key={file.id}
                     className='flex items-center gap-2 bg-white border border-[#d1d7db] rounded-lg px-2 py-1.5 max-w-full shadow-sm'
                   >
-                    {file.previewUrl ? (
+                    {file.kind === 'image' && file.previewUrl ? (
                       <img
                         src={file.previewUrl}
                         alt={file.name}
                         className='w-10 h-10 rounded object-cover shrink-0'
+                      />
+                    ) : file.kind === 'video' && file.previewUrl ? (
+                      <video
+                        src={file.previewUrl}
+                        className='w-10 h-10 rounded object-cover shrink-0 bg-black'
+                        muted
                       />
                     ) : (
                       <div className='w-10 h-10 rounded bg-[#e9edef] flex items-center justify-center shrink-0 text-[#54656f]'>
@@ -1289,7 +1300,7 @@ const ChatPortalView = () => {
               />
               <button
                 type='submit'
-                disabled={!draft.trim() || sending || !roomId}
+                disabled={(!draft.trim() && selectedFiles.length === 0) || sending || !roomId}
                 className='shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-[#128c7e] text-white hover:bg-[#075e54] disabled:opacity-50 disabled:hover:bg-[#128c7e]'
                 aria-label='Send message'
               >

@@ -33,7 +33,7 @@ const Kpi = ({ label, value, hint }) => (
   </div>
 )
 
-const SiteCoordinatorDashboardView = () => {
+const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [date, setDate] = useState(localYmd)
@@ -187,10 +187,18 @@ const SiteCoordinatorDashboardView = () => {
   }, [upcoming])
 
   return (
-    <div className='p-6 md:p-8 space-y-6 bg-[#f8f9fa] min-h-full'>
+    <div
+      className={`${
+        embedded
+          ? 'p-6 md:p-8 pt-2 space-y-6 bg-[#f8f9fa] border-t border-gray-200'
+          : 'p-6 md:p-8 space-y-6 bg-[#f8f9fa] min-h-full'
+      }`}
+    >
       <div className='flex flex-wrap items-start justify-between gap-4'>
         <div>
-          <h1 className='text-2xl font-bold text-gray-900'>Site Co-ordinator Dashboard</h1>
+          <h1 className='text-2xl font-bold text-gray-900'>
+            {embedded ? 'Travel allowance & route map' : 'Travel Dashboard'}
+          </h1>
           <p className='text-sm text-gray-500 mt-1'>
             Start your journey, then check in at each site. Route distance is calculated only after the
             journey starts.

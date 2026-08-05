@@ -220,12 +220,6 @@ const AddEmployee = () => {
   const handleDocumentUpload = async (fieldName, e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 25 * 1024 * 1024
-    if (file.size > maxBytes) {
-      setError('Document is too large. Max 25 MB.')
-      e.target.value = ''
-      return
-    }
     setUploadingDocField(fieldName)
     setError(null)
     try {

@@ -4,9 +4,6 @@ const getError = (error, fallback) => {
   if (!error) return { status: 500, message: fallback };
   if (error.statusCode) return { status: error.statusCode, message: error.message || fallback };
   if (error.name === 'MulterError') {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return { status: 400, message: 'File is too large. Max 25 MB.' };
-    }
     return { status: 400, message: error.message || fallback };
   }
   return { status: 500, message: error.message || fallback };

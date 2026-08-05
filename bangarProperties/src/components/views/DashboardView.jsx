@@ -9,7 +9,13 @@ import TeamLeaderDashboardView from './TeamLeaderDashboardView'
 import SiteCoordinatorDashboardView from './SiteCoordinatorDashboardView'
 import AssignedTasksTab from './AssignedTasksTab'
 import ChatFloatingButton from '../ChatFloatingButton'
-import { getDashboardKind, getDashboardPathForUser, isDashboardRoute } from '../../config/dashboardRoutes'
+import {
+  getDashboardKind,
+  getDashboardPathForUser,
+  hasTravelDashboard,
+  isDashboardRoute,
+  isSiteCoordinatorUser,
+} from '../../config/dashboardRoutes'
 
 const DashboardTabs = ({ children }) => {
   const { canAssignTask } = useAuth()
@@ -67,6 +73,22 @@ const DashboardView = () => {
   else if (kind === 'team_leader') content = <TeamLeaderDashboardView />
   else if (kind === 'site_coordinator') content = <SiteCoordinatorDashboardView />
   else content = <EmployeeDashboardView />
+
+  // Sales department (non–site-coordinator roles) also get travel allowance + route map.
+  if (
+    kind !== 'admin' &&
+    kind !== 'hr' &&
+    kind !== 'site_coordinator' &&
+    hasTravelDashboard(user) &&
+    !isSiteCoordinatorUser(user)
+  ) {
+    content = (
+      <>
+        {content}
+        <SiteCoordinatorDashboardView embedded />
+      </>
+    )
+  }
 
   return (
     <>

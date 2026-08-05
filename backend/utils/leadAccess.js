@@ -23,6 +23,14 @@ export const isSiteCoordinatorDesignation = (designation) => {
 export const isSiteCoordinatorEmployee = (employee) =>
   Boolean(employee && isSiteCoordinatorDesignation(employee.designation));
 
+/** Site Co-ordinator / SRE, or any employee in the Sales department. */
+export const isSiteVisitAssigneeEmployee = (employee) => {
+  if (!employee) return false;
+  if (isSiteCoordinatorEmployee(employee)) return true;
+  const department = employee.department || employee.designation?.department || '';
+  return isSalesDepartment(department);
+};
+
 /**
  * Admin, Sales Manager, or Sales Team Lead may upload/distribute and view all leads.
  * Everyone else may only see leads assigned to them.
@@ -104,31 +112,31 @@ export const assertCanAccessLead = (access, lead) => {
   }
 };
 
-/** Validate / normalize Site Visit assignment (Site Co-ordinator or Site Reliability Engineer). */
+/** Validate / normalize Site Visit assignment (Sales dept or Site Co-ordinator / SRE). */
 export const applySiteVisitAssignment = async (Employee, body = {}) => {
   if (body.status !== 'Site Visit') return body;
 
   const coordinatorId = body.siteCoordinator || body.assignedTo;
   if (!coordinatorId) {
     const err = new Error(
-      'Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit'
+      'Please select a Sales or Site Co-ordinator employee when status is Site Visit'
     );
     err.statusCode = 400;
     throw err;
   }
 
   const emp = await Employee.findById(coordinatorId)
-    .populate('designation', 'title name accessRole')
-    .select('name designation status');
+    .populate('designation', 'title name accessRole department')
+    .select('name department designation status');
 
   if (!emp || emp.status === 'Inactive') {
     const err = new Error('Selected employee was not found or is inactive');
     err.statusCode = 400;
     throw err;
   }
-  if (!isSiteCoordinatorEmployee(emp)) {
+  if (!isSiteVisitAssigneeEmployee(emp)) {
     const err = new Error(
-      'Selected employee must be a Site Co-ordinator / Site Coordinator or Site Reliability Engineer'
+      'Selected employee must be in Sales or a Site Co-ordinator / Site Reliability Engineer'
     );
     err.statusCode = 400;
     throw err;

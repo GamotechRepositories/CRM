@@ -228,22 +228,23 @@ const AddLead = ({ readOnly = false }) => {
       String(value || '')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '')
-    const isSiteVisitAssignee = (title) => {
+    const isSiteVisitAssignee = (emp) => {
+      const title =
+        emp?.designation?.title ||
+        emp?.designation?.name ||
+        (typeof emp?.designation === 'string' ? emp.designation : '')
       const key = normalizeKey(title)
-      return (
+      const isCoordinator =
         key.includes('sitecoordinator') ||
         key.includes('sitereliabilityengineer') ||
         (key.includes('sitereliability') && key.includes('engineer'))
-      )
+      const dept = String(emp?.department || emp?.designation?.department || '')
+      return isCoordinator || /sales/i.test(dept)
     }
     return employees
       .filter((e) => {
         if (e.status === 'Inactive') return false
-        const title =
-          e?.designation?.title ||
-          e?.designation?.name ||
-          (typeof e?.designation === 'string' ? e.designation : '')
-        return isSiteVisitAssignee(title)
+        return isSiteVisitAssignee(e)
       })
       .slice()
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
@@ -287,12 +288,6 @@ const AddLead = ({ readOnly = false }) => {
   const handleSiteVisitEvidence = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 8 * 1024 * 1024
-    if (file.size > maxBytes) {
-      setError('Evidence file is too large. Max 8 MB.')
-      e.target.value = ''
-      return
-    }
     const allowed = /^(image\/|application\/pdf)/i.test(file.type) || /\.(jpe?g|png|gif|webp|pdf)$/i.test(file.name)
     if (!allowed) {
       setError('Please upload an image or PDF as site visit evidence.')
@@ -333,7 +328,7 @@ const AddLead = ({ readOnly = false }) => {
       return
     }
     if (form.status === 'Site Visit' && !form.siteCoordinator) {
-      setError('Please select a Site Co-ordinator or Site Reliability Engineer when status is Site Visit')
+      setError('Please select a Sales or Site Co-ordinator employee when status is Site Visit')
       return
     }
     setLoading(true)
@@ -607,7 +602,7 @@ const AddLead = ({ readOnly = false }) => {
                 <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                   <div className='lg:col-span-2'>
                     <label className='block text-sm font-medium text-gray-700'>
-                      Site Co-ordinator / SRE <span className='text-red-500'>*</span>
+                      Site visit assignee <span className='text-red-500'>*</span>
                     </label>
                     <select
                       name='siteCoordinator'
@@ -620,7 +615,7 @@ const AddLead = ({ readOnly = false }) => {
                       <option value=''>
                         {siteCoordinatorEmployees.length
                           ? 'Select employee…'
-                          : 'No Site Co-ordinator / Site Reliability Engineer found'}
+                          : 'No Sales / Site Co-ordinator employees found'}
                       </option>
                       {siteCoordinatorEmployees.map((emp) => (
                         <option key={emp._id} value={emp._id}>
@@ -630,7 +625,7 @@ const AddLead = ({ readOnly = false }) => {
                       ))}
                     </select>
                     <p className='mt-1 text-xs text-gray-500'>
-                      Lead stays with the sales executive and is also assigned to this Site Co-ordinator / Site Reliability Engineer.
+                      Lead stays with the sales executive and is also assigned to this Sales / Site Co-ordinator employee for the visit.
                     </p>
                   </div>
                   <div className='lg:col-span-2'>
@@ -646,7 +641,7 @@ const AddLead = ({ readOnly = false }) => {
                       className={`${inputClass} file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700`}
                     />
                     <p className='mt-1 text-xs text-gray-500'>
-                      Upload a photo or PDF proving the visitor attended the site (max 8 MB).
+                      Upload a photo or PDF proving the visitor attended the site.
                     </p>
                     {form.siteVisitEvidence?.dataUrl ? (
                       <div className='mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3'>

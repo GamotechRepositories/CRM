@@ -117,13 +117,6 @@ const AddDocument = ({ documentType = 'File' }) => {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 25 * 1024 * 1024
-    if (file.size > maxBytes) {
-      setError('File is too large. Max 25 MB, or paste a Drive/Dropbox URL instead.')
-      e.target.value = ''
-      return
-    }
-
     setUploadingFile(true)
     setError(null)
     try {
@@ -299,7 +292,7 @@ const AddDocument = ({ documentType = 'File' }) => {
               {uploadingFile ? 'Uploading to cloud…' : 'Click to upload file'}
             </p>
             <p className='text-xs text-blue-600/80 mt-1'>
-              PDF, Word, Excel, images · Max 25 MB · Saved to cloud storage
+              PDF, Word, Excel, images · Saved to cloud storage
             </p>
           </button>
 
