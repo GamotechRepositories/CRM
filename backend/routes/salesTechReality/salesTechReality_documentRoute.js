@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { mediaUpload } from '../../utils/uploadMiddleware.js';
 import {
   getFiles,
   createFile,
@@ -13,9 +14,14 @@ import {
   updatePolicy,
   deletePolicy,
   getDocumentById,
+  uploadDocumentFile,
+  uploadMediaFile,
 } from '../../controllers/salesTechReality/salesTechReality_documentController.js';
 
 const router = Router();
+
+router.post('/documents/upload', mediaUpload.single('file'), uploadDocumentFile);
+router.post('/uploads', mediaUpload.single('file'), uploadMediaFile);
 
 router.get('/files', getFiles);
 router.post('/files', createFile);

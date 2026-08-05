@@ -7,7 +7,9 @@ const {
   getById,
   updateByType,
   deleteByType,
-} = createDocumentController(Document);
+  uploadDocument,
+  uploadFile,
+} = createDocumentController(Document, { tenantKey: 'mahaProperties' });
 
 export const getFiles = listByType('File');
 export const createFile = createByType('File');
@@ -25,3 +27,6 @@ export const updatePolicy = updateByType('Policy');
 export const deletePolicy = deleteByType('Policy');
 
 export const getDocumentById = getById;
+
+export const uploadDocumentFile = uploadDocument;
+export const uploadMediaFile = uploadFile;

@@ -1,4 +1,5 @@
 import { normalizeDocumentPayload, validateDocumentPayload } from './normalizeDocumentPayload.js';
+import { createUploadHandlers } from './createUploadHandlers.js';
 
 const populateOptions = [
   { path: 'uploadedBy', select: 'name email' },
@@ -14,7 +15,16 @@ const getError = (error, fallback) => {
   return { status: 500, message: error.message || fallback };
 };
 
-export const createDocumentController = (Document) => {
+export const createDocumentController = (Document, { tenantKey = 'common' } = {}) => {
+  const { uploadFile } = createUploadHandlers({ tenantKey });
+
+  /** Back-compat document upload — defaults folder to documents. */
+  const uploadDocument = async (req, res) => {
+    if (!req.body) req.body = {};
+    if (!req.body.folder) req.body.folder = 'documents';
+    return uploadFile(req, res);
+  };
+
   const listByType = (documentType) => async (req, res) => {
     try {
       const filter = { type: documentType };
@@ -101,6 +111,8 @@ export const createDocumentController = (Document) => {
   };
 
   return {
+    uploadDocument,
+    uploadFile,
     listByType,
     createByType,
     getById,

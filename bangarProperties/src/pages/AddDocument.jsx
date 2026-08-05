@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useAuth } from '../context/AuthContext'
 
 const TYPE_META = {
@@ -41,6 +42,7 @@ const AddDocument = ({ documentType = 'File' }) => {
   const [clients, setClients] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
   const [error, setError] = useState(null)
 
   const [form, setForm] = useState({
@@ -112,7 +114,7 @@ const AddDocument = ({ documentType = 'File' }) => {
 
   const updateField = (name, value) => setForm((f) => ({ ...f, [name]: value }))
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const maxBytes = 8 * 1024 * 1024
@@ -121,17 +123,22 @@ const AddDocument = ({ documentType = 'File' }) => {
       e.target.value = ''
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
+
+    setUploadingFile(true)
+    setError(null)
+    try {
+      const uploaded = await uploadFile(file, { folder: 'documents' })
       setForm((f) => ({
         ...f,
-        documentUrl: typeof reader.result === 'string' ? reader.result : '',
-        fileName: file.name,
+        documentUrl: uploaded.url || '',
+        fileName: uploaded.fileName || file.name,
       }))
-      setError(null)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload file')
+      e.target.value = ''
+    } finally {
+      setUploadingFile(false)
     }
-    reader.onerror = () => setError('Failed to read file')
-    reader.readAsDataURL(file)
   }
 
   const clearFile = () => {
@@ -276,7 +283,7 @@ const AddDocument = ({ documentType = 'File' }) => {
           <div className='flex flex-col sm:flex-row gap-2'>
             <input
               type='text'
-              value={form.documentUrl.startsWith('data:') ? '' : form.documentUrl}
+              value={form.documentUrl}
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
@@ -297,9 +304,10 @@ const AddDocument = ({ documentType = 'File' }) => {
             <button
               type='button'
               onClick={() => fileInputRef.current?.click()}
-              className='px-4 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 whitespace-nowrap'
+              disabled={uploadingFile}
+              className='px-4 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 whitespace-nowrap disabled:opacity-50'
             >
-              Upload File
+              {uploadingFile ? 'Uploading...' : 'Upload File'}
             </button>
             {(form.documentUrl || form.fileName) && (
               <button
@@ -336,7 +344,7 @@ const AddDocument = ({ documentType = 'File' }) => {
           </button>
           <button
             type='submit'
-            disabled={loading}
+            disabled={loading || uploadingFile}
             className='px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50'
           >
             {loading ? 'Saving…' : isEdit ? `Update ${meta.label}` : `Create ${meta.label}`}

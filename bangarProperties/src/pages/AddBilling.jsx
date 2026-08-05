@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useNavigate, useParams } from 'react-router-dom'
 
 const MODES = ['Bank Transfer', 'UPI', 'Cheque', 'Cash', 'Other']
@@ -261,20 +262,30 @@ const AddBilling = () => {
     })
   }, [paymentDetails.amount, projects.length])
 
-  const handleLogoFile = (e) => {
+  const handleLogoFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setCompanyLogo(reader.result)
-    reader.readAsDataURL(file)
+    try {
+      setError(null)
+      const uploaded = await uploadFile(file, { folder: 'logos' })
+      setCompanyLogo(uploaded.url)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload logo')
+      e.target.value = ''
+    }
   }
 
-  const handleSignatureFile = (e) => {
+  const handleSignatureFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setAuthorizedSignature(reader.result)
-    reader.readAsDataURL(file)
+    try {
+      setError(null)
+      const uploaded = await uploadFile(file, { folder: 'signatures' })
+      setAuthorizedSignature(uploaded.url)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload signature')
+      e.target.value = ''
+    }
   }
 
   const handleSubmit = async (e) => {

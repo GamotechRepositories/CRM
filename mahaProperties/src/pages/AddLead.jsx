@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import SearchableSelect from '../components/SearchableSelect'
@@ -281,7 +282,7 @@ const AddLead = ({ readOnly = false }) => {
     setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleSiteVisitEvidence = (e) => {
+  const handleSiteVisitEvidence = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const maxBytes = 8 * 1024 * 1024
@@ -296,21 +297,22 @@ const AddLead = ({ readOnly = false }) => {
       e.target.value = ''
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
+    try {
+      setError(null)
+      const uploaded = await uploadFile(file, { folder: 'evidence' })
       setForm((f) => ({
         ...f,
         siteVisitEvidence: {
-          fileName: file.name,
-          mimeType: file.type || '',
-          dataUrl: typeof reader.result === 'string' ? reader.result : '',
+          fileName: uploaded.fileName || file.name,
+          mimeType: uploaded.mimeType || file.type || '',
+          dataUrl: uploaded.url,
           uploadedAt: new Date().toISOString(),
         },
       }))
-      setError(null)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload evidence file')
+      e.target.value = ''
     }
-    reader.onerror = () => setError('Failed to read evidence file')
-    reader.readAsDataURL(file)
   }
 
   const clearSiteVisitEvidence = () => {

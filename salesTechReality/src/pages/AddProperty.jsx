@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useAuth } from '../context/AuthContext'
 import {
   AREA_UNITS,
@@ -60,6 +61,30 @@ const AddProperty = () => {
       .then((res) => setForm(propertyToForm(res.data)))
       .catch((err) => setError(err.response?.data?.message || 'Failed to load property'))
   }, [id, isEdit])
+
+
+  const handlePropertyImages = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    try {
+      setError(null)
+      const uploadedUrls = []
+      for (const file of files) {
+        const uploaded = await uploadFile(file, { folder: 'photos' })
+        if (uploaded.url) uploadedUrls.push(uploaded.url)
+      }
+      if (uploadedUrls.length) {
+        setForm((f) => ({
+          ...f,
+          imageUrls: [String(f.imageUrls || '').trim(), ...uploadedUrls].filter(Boolean).join('\n'),
+        }))
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload images')
+    } finally {
+      e.target.value = ''
+    }
+  }
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -362,8 +387,12 @@ const AddProperty = () => {
           <Field label='Amenities (comma separated)' className='sm:col-span-2 lg:col-span-3'>
             <input name='amenities' value={form.amenities} onChange={handleChange} className={inputClass} placeholder='Lift, Gym, Pool, Security, Power Backup' />
           </Field>
-          <Field label='Image URLs (one per line)' className='sm:col-span-2 lg:col-span-3'>
-            <textarea name='imageUrls' value={form.imageUrls} onChange={handleChange} rows={3} className={inputClass} placeholder='https://...' />
+          <Field label='Property Photos' className='sm:col-span-2 lg:col-span-3'>
+            <textarea name='imageUrls' value={form.imageUrls} onChange={handleChange} rows={3} className={inputClass} placeholder='https://... (one per line)' />
+            <label className='inline-flex items-center mt-2 px-3 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 cursor-pointer'>
+              Upload photos
+              <input type='file' accept='image/*' multiple className='hidden' onChange={handlePropertyImages} />
+            </label>
           </Field>
           <Field label='Internal Notes' className='sm:col-span-2 lg:col-span-3'>
             <textarea name='notes' value={form.notes} onChange={handleChange} rows={2} className={inputClass} />

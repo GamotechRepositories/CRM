@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useAuth } from '../context/AuthContext'
 
 const emptyItem = () => ({
@@ -205,26 +206,27 @@ const AddQuotation = () => {
     }))
   }
 
-  const handleQuotationFile = (e) => {
+  const handleQuotationFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 8 * 1024 * 1024
+    const maxBytes = 25 * 1024 * 1024
     if (file.size > maxBytes) {
-      setError('File is too large. Max 8 MB, or paste a Drive/Dropbox URL instead.')
+      setError('File is too large. Max 25 MB, or paste a Drive/Dropbox URL instead.')
       e.target.value = ''
       return
     }
-    const reader = new FileReader()
-    reader.onload = () => {
+    try {
+      setError(null)
+      const uploaded = await uploadFile(file, { folder: 'quotations' })
       setForm((f) => ({
         ...f,
-        quotationUrl: typeof reader.result === 'string' ? reader.result : '',
-        quotationFileName: file.name,
+        quotationUrl: uploaded.url,
+        quotationFileName: uploaded.fileName || file.name,
       }))
-      setError(null)
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload quotation file')
+      e.target.value = ''
     }
-    reader.onerror = () => setError('Failed to read file')
-    reader.readAsDataURL(file)
   }
 
   const clearQuotationFile = () => {

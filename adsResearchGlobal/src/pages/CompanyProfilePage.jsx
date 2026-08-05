@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useAuth } from '../context/AuthContext'
 
 const EMPTY_FORM = {
@@ -97,15 +98,18 @@ const CompanyProfilePage = () => {
     setSuccess(null)
   }
 
-  const handleLogoFile = (e) => {
+  const handleLogoFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setForm((f) => ({ ...f, companyLogo: reader.result }))
+    try {
+      setError(null)
       setSuccess(null)
+      const uploaded = await uploadFile(file, { folder: 'logos' })
+      setForm((f) => ({ ...f, companyLogo: uploaded.url }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload logo')
+      e.target.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
   const handleSubmit = async (e) => {

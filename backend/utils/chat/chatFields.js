@@ -60,9 +60,17 @@ export const getChatMessageFields = (companyPrefix) => ({
     maxlength: 5000,
     default: '',
   },
+  attachments: [
+    {
+      url: { type: String, trim: true, required: true },
+      fileName: { type: String, trim: true, default: '' },
+      mimeType: { type: String, trim: true, default: '' },
+      size: { type: Number, default: 0 },
+    },
+  ],
   messageType: {
     type: String,
-    enum: ['text', 'system', 'poll'],
+    enum: ['text', 'system', 'poll', 'file'],
     default: 'text',
   },
   readBy: [

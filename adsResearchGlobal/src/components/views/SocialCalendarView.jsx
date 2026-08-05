@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import api from '../../api/axios'
+import { uploadFile } from '../../utils/uploadFile'
 import { useAuth } from '../../context/AuthContext'
 
 const PLATFORMS = ['All', 'Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
@@ -453,28 +454,30 @@ const SocialCalendarView = () => {
     setShowAddPost(true)
   }
 
-  const handleReferenceUpload = (event) => {
+  const handleReferenceUpload = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
+    try {
+      const uploaded = await uploadFile(file, { folder: 'social' })
       setPostForm((f) => ({
         ...f,
         referenceUpload: {
-          fileName: file.name,
-          mimeType: file.type || '',
-          dataUrl: typeof reader.result === 'string' ? reader.result : '',
+          fileName: uploaded.fileName || file.name,
+          mimeType: uploaded.mimeType || file.type || '',
+          dataUrl: uploaded.url,
         },
       }))
+    } catch (err) {
+      console.error('Failed to upload reference', err)
+      event.target.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
-  const handleCarouselReferenceUpload = (index, event) => {
+  const handleCarouselReferenceUpload = async (index, event) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
+    try {
+      const uploaded = await uploadFile(file, { folder: 'social' })
       setPostForm((f) => ({
         ...f,
         carouselItems: ensureThreeCarouselSlides(f.carouselItems).map((slide, idx) =>
@@ -482,16 +485,18 @@ const SocialCalendarView = () => {
             ? {
                 ...slide,
                 referenceUpload: {
-                  fileName: file.name,
-                  mimeType: file.type || '',
-                  dataUrl: typeof reader.result === 'string' ? reader.result : '',
+                  fileName: uploaded.fileName || file.name,
+                  mimeType: uploaded.mimeType || file.type || '',
+                  dataUrl: uploaded.url,
                 },
               }
             : slide
         ),
       }))
+    } catch (err) {
+      console.error('Failed to upload carousel reference', err)
+      event.target.value = ''
     }
-    reader.readAsDataURL(file)
   }
 
   const handleDayClick = (day) => {

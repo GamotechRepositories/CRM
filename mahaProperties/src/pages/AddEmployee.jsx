@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react'
 import api from '../api/axios'
+import { uploadFile } from '../utils/uploadFile'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
@@ -198,6 +199,20 @@ const AddEmployee = () => {
   const [error, setError] = useState(null)
   const designationRef = useRef(null)
   const navigate = useNavigate()
+
+
+  const handleProfilePhotoFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setError(null)
+      const uploaded = await uploadFile(file, { folder: 'profiles' })
+      setForm((f) => ({ ...f, profilePhoto: uploaded.url }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload profile photo')
+      e.target.value = ''
+    }
+  }
 
   const inputClass = 'block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -426,7 +441,18 @@ const AddEmployee = () => {
             </p>
           </Field>
           <Field label='Full Name *'><input name='name' value={form.name} onChange={handleChange} required className={inputClass} /></Field>
-          <Field label='Profile Photo URL'><input name='profilePhoto' value={form.profilePhoto} onChange={handleChange} className={inputClass} /></Field>
+          <Field label='Profile Photo'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <input name='profilePhoto' value={form.profilePhoto} onChange={handleChange} className={inputClass} placeholder='Paste URL or upload' />
+              <label className='inline-flex items-center px-3 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 cursor-pointer whitespace-nowrap'>
+                Upload
+                <input type='file' accept='image/*' className='hidden' onChange={handleProfilePhotoFile} />
+              </label>
+            </div>
+            {form.profilePhoto ? (
+              <img src={form.profilePhoto} alt='Profile' className='mt-2 h-16 w-16 rounded-full object-cover border' />
+            ) : null}
+          </Field>
           <Field label='Gender'>
             <select name='gender' value={form.gender} onChange={handleChange} className={inputClass}>
               <option value=''>Select</option>

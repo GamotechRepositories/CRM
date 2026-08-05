@@ -404,27 +404,43 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
   const sendMessage = async (req, res) => {
     try {
       const { id } = req.params;
-      const { employeeId, body, mentions } = req.body;
-      if (!employeeId || !body?.trim()) {
-        return res.status(400).json({ message: 'employeeId and body are required' });
+      const { employeeId, body, mentions, attachments } = req.body;
+      const normalizedAttachments = (Array.isArray(attachments) ? attachments : [])
+        .map((item) => ({
+          url: String(item?.url || '').trim(),
+          fileName: String(item?.fileName || '').trim(),
+          mimeType: String(item?.mimeType || '').trim(),
+          size: Number(item?.size) || 0,
+        }))
+        .filter((item) => item.url);
+
+      const text = String(body || '').trim();
+      if (!employeeId || (!text && !normalizedAttachments.length)) {
+        return res.status(400).json({ message: 'employeeId and body or attachments are required' });
       }
 
       const { error, conv, employee } = await assertCanAccess(id, employeeId);
       if (error) return res.status(error.status).json({ message: error.message });
 
       const normalizedMentions = normalizeMentions(mentions);
+      const preview = text
+        || (normalizedAttachments.length === 1
+          ? `📎 ${normalizedAttachments[0].fileName || 'Attachment'}`
+          : `📎 ${normalizedAttachments.length} attachments`);
 
       const message = await Message.create({
         conversation: id,
         sender: employee._id,
-        body: body.trim(),
+        body: text,
+        attachments: normalizedAttachments,
+        messageType: normalizedAttachments.length && !text ? 'file' : 'text',
         mentions: normalizedMentions,
         readBy: [{ employee: employee._id, readAt: new Date() }],
       });
 
       await Conversation.findByIdAndUpdate(conv._id, {
         lastMessageAt: new Date(),
-        lastMessagePreview: previewText(body),
+        lastMessagePreview: previewText(preview),
         lastMessageSender: employee._id,
       });
 

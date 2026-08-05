@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api/axios'
+import { uploadFile } from '../../utils/uploadFile'
 import { useAuth } from '../../context/AuthContext'
 
 const getCurrentEmployeeId = (user) => user?._id || user?.id || null
@@ -577,14 +578,29 @@ const ChatPortalView = () => {
   const sendMessage = async (e) => {
     e.preventDefault()
     const body = draft.trim()
-    if (!body || !roomId || !currentUserId || sending) return
+    if ((!body && selectedFiles.length === 0) || !roomId || !currentUserId || sending) return
     setSending(true)
     setError('')
     try {
+      const attachments = []
+      for (const item of selectedFiles) {
+        if (!item.file) continue
+        const uploaded = await uploadFile(item.file, {
+          folder: item.type?.startsWith('image/') || item.type?.startsWith('video/') ? 'photos' : 'chat',
+        })
+        attachments.push({
+          url: uploaded.url,
+          fileName: uploaded.fileName || item.name,
+          mimeType: uploaded.mimeType || item.type || '',
+          size: uploaded.size || item.size || 0,
+        })
+      }
+
       const res = await api.post(`/chat/conversations/${roomId}/messages`, {
         employeeId: currentUserId,
         body,
         mentions: pendingMentions,
+        attachments,
       })
       const msg = res.data?.message
       if (msg) {
@@ -593,6 +609,10 @@ const ChatPortalView = () => {
         setDraft('')
         setPendingMentions([])
         setMentionOpen(false)
+        selectedFiles.forEach((f) => {
+          if (f.previewUrl) URL.revokeObjectURL(f.previewUrl)
+        })
+        setSelectedFiles([])
         loadConversations()
       }
     } catch (e) {
@@ -612,6 +632,7 @@ const ChatPortalView = () => {
         name: file.name,
         size: file.size,
         type: file.type,
+        file,
         previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
       })),
     ])
@@ -1070,9 +1091,45 @@ const ChatPortalView = () => {
                           voting={votingPollId === msg._id}
                         />
                       ) : (
-                        <p className='whitespace-pre-wrap break-words pr-14'>
-                          {renderMessageBody(msg.body, msg.mentions || [], mine)}
-                        </p>
+                        <div className='pr-14 space-y-2'>
+                          {Array.isArray(msg.attachments) && msg.attachments.length > 0 ? (
+                            <div className='space-y-2'>
+                              {msg.attachments.map((att, idx) => {
+                                const isImage = String(att.mimeType || '').startsWith('image/')
+                                const isVideo = String(att.mimeType || '').startsWith('video/')
+                                return (
+                                  <div key={`${msg._id}-att-${idx}`}>
+                                    {isImage ? (
+                                      <a href={att.url} target='_blank' rel='noopener noreferrer'>
+                                        <img
+                                          src={att.url}
+                                          alt={att.fileName || 'attachment'}
+                                          className='max-h-56 max-w-full rounded-lg object-cover'
+                                        />
+                                      </a>
+                                    ) : isVideo ? (
+                                      <video src={att.url} controls className='max-h-56 max-w-full rounded-lg' />
+                                    ) : (
+                                      <a
+                                        href={att.url}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        className='inline-flex items-center gap-2 rounded-lg bg-black/5 px-3 py-2 text-sm text-[#128c7e] hover:underline'
+                                      >
+                                        📎 {att.fileName || 'Attachment'}
+                                      </a>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : null}
+                          {msg.body ? (
+                            <p className='whitespace-pre-wrap break-words'>
+                              {renderMessageBody(msg.body, msg.mentions || [], mine)}
+                            </p>
+                          ) : null}
+                        </div>
                       )}
                       <span
                         className={`absolute bottom-1.5 right-2 text-[10px] leading-none text-[#667781]`}
