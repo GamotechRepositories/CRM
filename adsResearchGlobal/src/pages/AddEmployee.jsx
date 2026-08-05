@@ -214,6 +214,31 @@ const AddEmployee = () => {
     }
   }
 
+
+  const [uploadingDocField, setUploadingDocField] = useState('')
+
+  const handleDocumentUpload = async (fieldName, e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const maxBytes = 25 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setError('Document is too large. Max 25 MB.')
+      e.target.value = ''
+      return
+    }
+    setUploadingDocField(fieldName)
+    setError(null)
+    try {
+      const uploaded = await uploadFile(file, { folder: 'documents' })
+      setForm((f) => ({ ...f, [fieldName]: uploaded.url }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || `Failed to upload ${fieldName}`)
+      e.target.value = ''
+    } finally {
+      setUploadingDocField('')
+    }
+  }
+
   const inputClass = 'block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
   useEffect(() => {
@@ -554,18 +579,53 @@ const AddEmployee = () => {
           </Field>
         </Section>
 
-        <Section title='5. Documents (URL or reference)'>
-          <Field label='Resume/CV'><input name='resume' value={form.resume} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Offer Letter'><input name='offerLetter' value={form.offerLetter} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Appointment Letter'><input name='appointmentLetter' value={form.appointmentLetter} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='NDA Agreement'><input name='ndaAgreement' value={form.ndaAgreement} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Experience Letters'><input name='experienceLetters' value={form.experienceLetters} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Educational Certificates'><input name='educationalCertificates' value={form.educationalCertificates} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='PAN Card'><input name='panCard' value={form.panCard} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Aadhaar Card'><input name='aadhaarCard' value={form.aadhaarCard} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Passport'><input name='passport' value={form.passport} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Driving License'><input name='drivingLicense' value={form.drivingLicense} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Bank Passbook/Cancelled Cheque'><input name='bankPassbook' value={form.bankPassbook} onChange={handleChange} className={inputClass} /></Field>
+        <Section title='5. Documents'>
+          <p className='md:col-span-2 text-xs text-gray-500 -mt-1 mb-1'>Upload from your device or paste a link for each document.</p>
+          {[
+            ['resume', 'Resume/CV'],
+            ['offerLetter', 'Offer Letter'],
+            ['appointmentLetter', 'Appointment Letter'],
+            ['ndaAgreement', 'NDA Agreement'],
+            ['experienceLetters', 'Experience Letters'],
+            ['educationalCertificates', 'Educational Certificates'],
+            ['panCard', 'PAN Card'],
+            ['aadhaarCard', 'Aadhaar Card'],
+            ['passport', 'Passport'],
+            ['drivingLicense', 'Driving License'],
+            ['bankPassbook', 'Bank Passbook/Cancelled Cheque'],
+          ].map(([name, label]) => (
+            <Field key={name} label={label}>
+              <div className='flex flex-wrap items-center gap-2'>
+                <input
+                  name={name}
+                  value={form[name]}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder='Paste URL or upload from device'
+                />
+                <label className={`inline-flex items-center px-3 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 cursor-pointer whitespace-nowrap ${uploadingDocField === name ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {uploadingDocField === name ? 'Uploading…' : 'Upload'}
+                  <input
+                    type='file'
+                    accept='.pdf,.doc,.docx,image/*,application/pdf'
+                    className='hidden'
+                    disabled={Boolean(uploadingDocField)}
+                    onChange={(e) => handleDocumentUpload(name, e)}
+                  />
+                </label>
+              </div>
+              {form[name] ? (
+                <a
+                  href={form[name]}
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='inline-block mt-1 text-xs text-blue-600 hover:underline'
+                >
+                  Open file
+                </a>
+              ) : null}
+            </Field>
+          ))}
         </Section>
 
         <Section title='6. Salary & Payroll'>
