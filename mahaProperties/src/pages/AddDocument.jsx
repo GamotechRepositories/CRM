@@ -117,9 +117,9 @@ const AddDocument = ({ documentType = 'File' }) => {
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const maxBytes = 8 * 1024 * 1024
+    const maxBytes = 25 * 1024 * 1024
     if (file.size > maxBytes) {
-      setError('File is too large. Max 8 MB, or paste a Drive/Dropbox URL instead.')
+      setError('File is too large. Max 25 MB, or paste a Drive/Dropbox URL instead.')
       e.target.value = ''
       return
     }
@@ -132,6 +132,7 @@ const AddDocument = ({ documentType = 'File' }) => {
         ...f,
         documentUrl: uploaded.url || '',
         fileName: uploaded.fileName || file.name,
+        title: f.title || (uploaded.fileName || file.name).replace(/\.[^.]+$/, ''),
       }))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to upload file')
@@ -278,9 +279,69 @@ const AddDocument = ({ documentType = 'File' }) => {
           </div>
         )}
 
+
         <div>
-          <label className='block text-sm font-medium text-gray-700 mb-1'>Document URL</label>
-          <div className='flex flex-col sm:flex-row gap-2'>
+          <label className='block text-sm font-medium text-gray-700 mb-1'>Upload document</label>
+          <input
+            ref={fileInputRef}
+            type='file'
+            accept='.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*,application/pdf'
+            className='hidden'
+            onChange={handleFileUpload}
+          />
+          <button
+            type='button'
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingFile}
+            className='w-full rounded-xl border-2 border-dashed border-blue-300 bg-blue-50/60 hover:bg-blue-50 px-4 py-8 text-center transition disabled:opacity-50'
+          >
+            <p className='text-sm font-semibold text-blue-700'>
+              {uploadingFile ? 'Uploading to cloud…' : 'Click to upload file'}
+            </p>
+            <p className='text-xs text-blue-600/80 mt-1'>
+              PDF, Word, Excel, images · Max 25 MB · Saved to cloud storage
+            </p>
+          </button>
+
+          {(form.fileName || form.documentUrl) && (
+            <div className='mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2'>
+              <div className='min-w-0'>
+                <p className='text-sm font-medium text-emerald-800 truncate'>
+                  {form.fileName || 'Linked file'}
+                </p>
+                {form.documentUrl ? (
+                  <a
+                    href={form.documentUrl}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-xs text-emerald-700 hover:underline break-all'
+                  >
+                    Open file
+                  </a>
+                ) : null}
+              </div>
+              <div className='flex gap-2 shrink-0'>
+                <button
+                  type='button'
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className='px-3 py-1.5 rounded-lg border border-blue-600 text-blue-700 text-xs font-medium hover:bg-blue-50 disabled:opacity-50'
+                >
+                  Replace
+                </button>
+                <button
+                  type='button'
+                  onClick={clearFile}
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50'
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className='mt-3'>
+            <label className='block text-xs font-medium text-gray-500 mb-1'>Or paste an external link</label>
             <input
               type='text'
               value={form.documentUrl}
@@ -288,40 +349,13 @@ const AddDocument = ({ documentType = 'File' }) => {
                 setForm((f) => ({
                   ...f,
                   documentUrl: e.target.value,
-                  fileName: e.target.value ? '' : f.fileName,
+                  fileName: e.target.value && !f.fileName ? '' : (e.target.value ? f.fileName : ''),
                 }))
               }
-              placeholder='Paste Drive / Dropbox / file link'
-              className='flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm'
+              placeholder='https://drive.google.com/... or Dropbox link'
+              className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
             />
-            <input
-              ref={fileInputRef}
-              type='file'
-              accept='.pdf,.doc,.docx,image/*,application/pdf'
-              className='hidden'
-              onChange={handleFileUpload}
-            />
-            <button
-              type='button'
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingFile}
-              className='px-4 py-2 rounded-lg border border-blue-600 text-blue-700 text-sm font-medium hover:bg-blue-50 whitespace-nowrap disabled:opacity-50'
-            >
-              {uploadingFile ? 'Uploading...' : 'Upload File'}
-            </button>
-            {(form.documentUrl || form.fileName) && (
-              <button
-                type='button'
-                onClick={clearFile}
-                className='px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50'
-              >
-                Clear
-              </button>
-            )}
           </div>
-          {form.fileName && (
-            <p className='text-xs text-emerald-700 mt-2'>Uploaded: {form.fileName}</p>
-          )}
         </div>
 
         <div>
