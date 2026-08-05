@@ -4,6 +4,7 @@ import {
   getEmployees,
   getEmployeeById,
   updateEmployee,
+  updateProfilePhoto,
   deleteEmployee,
   getEmployeeProfile,
   getEmployeesAvailability,
@@ -17,6 +18,7 @@ router.post('/employees', createEmployee)
 router.get('/employees/:id/profile', getEmployeeProfile)
 router.get('/employees/:id', getEmployeeById)
 router.put('/employees/:id', updateEmployee)
+router.patch('/employees/:id/profile-photo', updateProfilePhoto)
 router.delete('/employees/:id', deleteEmployee)
 
 export default router

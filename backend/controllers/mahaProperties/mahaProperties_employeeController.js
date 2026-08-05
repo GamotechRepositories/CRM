@@ -11,6 +11,7 @@ import { createGetEmployeesAvailabilityHandler } from "../../utils/buildEmployee
 import { normalizeEmployeePayload } from "../../utils/normalizeEmployeePayload.js";
 import { getEmployeeApiError, validateEmployeePayload } from "../../utils/employeeApiErrors.js";
 import { assignEmployeeCodeOnCreate, validateEmployeeCodeOnUpdate } from "../../utils/employeeCode.js";
+import { createUpdateProfilePhotoHandler } from '../../utils/updateEmployeeProfilePhoto.js';
 import bcrypt from "bcryptjs";
 
 const COMPANY_KEY = 'mahaProperties';
@@ -85,6 +86,8 @@ export const updateEmployee = async (req, res) => {
     res.status(error.status || status).json({ message: error.message || message });
   }
 };
+
+export const updateProfilePhoto = createUpdateProfilePhotoHandler(Employee);
 
 // Delete an employee by ID
 export const deleteEmployee = async (req, res) => {

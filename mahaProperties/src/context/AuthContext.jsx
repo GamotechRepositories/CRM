@@ -86,6 +86,15 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(AUTH_KEY)
   }
 
+  const updateUser = (patch) => {
+    setUser((prev) => {
+      if (!prev) return prev
+      const next = normalizeStoredUser({ ...prev, ...patch })
+      localStorage.setItem(AUTH_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
   const getDesignationTitle = () => getUserDesignationTitle(user)
 
   const isAdmin = () => isAdminUser(user)
@@ -127,6 +136,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         logout,
+        updateUser,
         isHRManager,
         hasFullAccess,
         canAddProject,

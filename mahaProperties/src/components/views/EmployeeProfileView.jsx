@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import { uploadFile } from '../../utils/uploadFile'
 
 const TABS = [
   'Overview',
@@ -297,13 +298,48 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
   const { id: routeId } = useParams()
   const id = employeeIdProp || routeId
   const navigate = useNavigate()
-  const { getDashboardPath } = useAuth()
+  const { getDashboardPath, updateUser } = useAuth()
   const [profile, setProfile] = useState(null)
   const [assignedAssets, setAssignedAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('Overview')
   const [docPreview, setDocPreview] = useState(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoMessage, setPhotoMessage] = useState('')
+  const photoInputRef = useRef(null)
+
+  const handleProfilePhotoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !id) return
+    if (!file.type.startsWith('image/')) {
+      setPhotoMessage('Please choose an image file (JPG, PNG, etc.).')
+      e.target.value = ''
+      return
+    }
+    setPhotoUploading(true)
+    setPhotoMessage('')
+    setError(null)
+    try {
+      const uploaded = await uploadFile(file, { folder: 'profiles' })
+      const res = await api.patch(`/employees/${id}/profile-photo`, {
+        profilePhoto: uploaded.url,
+      })
+      const nextPhoto = res.data?.employee?.profilePhoto || uploaded.url
+      setProfile((prev) =>
+        prev?.employee
+          ? { ...prev, employee: { ...prev.employee, profilePhoto: nextPhoto } }
+          : prev
+      )
+      if (isSelfProfile && updateUser) updateUser({ profilePhoto: nextPhoto })
+      setPhotoMessage('Profile photo updated.')
+    } catch (err) {
+      setPhotoMessage(err.response?.data?.message || err.message || 'Failed to upload photo')
+    } finally {
+      setPhotoUploading(false)
+      e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -768,8 +804,47 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
         {/* Hero card */}
         <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6'>
           <div className='flex flex-col lg:flex-row gap-6'>
-            <div className='w-28 h-28 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-3xl font-bold shrink-0 overflow-hidden border-4 border-white shadow-md mx-auto lg:mx-0'>
-              {e.profilePhoto ? <img src={e.profilePhoto} alt={e.name} className='w-full h-full object-cover' /> : (e.name || '?').charAt(0).toUpperCase()}
+            <div className='flex flex-col items-center gap-2 shrink-0 mx-auto lg:mx-0'>
+              <div className='relative w-28 h-28 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-3xl font-bold overflow-hidden border-4 border-white shadow-md'>
+                {e.profilePhoto ? (
+                  <img src={e.profilePhoto} alt={e.name} className='w-full h-full object-cover' />
+                ) : (
+                  (e.name || '?').charAt(0).toUpperCase()
+                )}
+                {photoUploading ? (
+                  <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium'>
+                    Uploading…
+                  </div>
+                ) : null}
+              </div>
+              {isSelfProfile ? (
+                <>
+                  <input
+                    ref={photoInputRef}
+                    type='file'
+                    accept='image/*'
+                    className='hidden'
+                    onChange={handleProfilePhotoUpload}
+                  />
+                  <button
+                    type='button'
+                    disabled={photoUploading}
+                    onClick={() => photoInputRef.current?.click()}
+                    className='px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-60'
+                  >
+                    {e.profilePhoto ? 'Change photo' : 'Upload photo'}
+                  </button>
+                  {photoMessage ? (
+                    <p
+                      className={`text-xs text-center max-w-[10rem] ${
+                        photoMessage.includes('updated') ? 'text-green-600' : 'text-red-600'
+                      }`}
+                    >
+                      {photoMessage}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
             </div>
             <div className='flex-1 min-w-0'>
               <div className='flex flex-wrap items-center gap-3 mb-1'>
