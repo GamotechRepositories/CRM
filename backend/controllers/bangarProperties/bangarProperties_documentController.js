@@ -9,6 +9,8 @@ const {
   deleteByType,
   uploadDocument,
   uploadFile,
+  createPresignedUpload,
+  createDocumentPresignedUpload,
 } = createDocumentController(Document, { tenantKey: 'bangarProperties' });
 
 export const getFiles = listByType('File');
@@ -30,3 +32,5 @@ export const getDocumentById = getById;
 
 export const uploadDocumentFile = uploadDocument;
 export const uploadMediaFile = uploadFile;
+export const createPresignedUploadUrl = createPresignedUpload;
+export const createDocumentPresignedUploadUrl = createDocumentPresignedUpload;

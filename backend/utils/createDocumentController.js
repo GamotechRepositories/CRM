@@ -16,13 +16,19 @@ const getError = (error, fallback) => {
 };
 
 export const createDocumentController = (Document, { tenantKey = 'common' } = {}) => {
-  const { uploadFile } = createUploadHandlers({ tenantKey });
+  const { uploadFile, createPresignedUpload } = createUploadHandlers({ tenantKey });
 
   /** Back-compat document upload — defaults folder to documents. */
   const uploadDocument = async (req, res) => {
     if (!req.body) req.body = {};
     if (!req.body.folder) req.body.folder = 'documents';
     return uploadFile(req, res);
+  };
+
+  const createDocumentPresignedUpload = async (req, res) => {
+    if (!req.body) req.body = {};
+    if (!req.body.folder) req.body.folder = 'documents';
+    return createPresignedUpload(req, res);
   };
 
   const listByType = (documentType) => async (req, res) => {
@@ -113,6 +119,8 @@ export const createDocumentController = (Document, { tenantKey = 'common' } = {}
   return {
     uploadDocument,
     uploadFile,
+    createPresignedUpload,
+    createDocumentPresignedUpload,
     listByType,
     createByType,
     getById,

@@ -16,10 +16,14 @@ import {
   getDocumentById,
   uploadDocumentFile,
   uploadMediaFile,
+  createPresignedUploadUrl,
+  createDocumentPresignedUploadUrl,
 } from '../../controllers/salesTechReality/salesTechReality_documentController.js';
 
 const router = Router();
 
+router.post('/uploads/presign', createPresignedUploadUrl);
+router.post('/documents/upload/presign', createDocumentPresignedUploadUrl);
 router.post('/documents/upload', mediaUpload.single('file'), uploadDocumentFile);
 router.post('/uploads', mediaUpload.single('file'), uploadMediaFile);
 

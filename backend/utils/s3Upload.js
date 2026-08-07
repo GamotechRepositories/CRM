@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 let cachedClient = null;
 
@@ -48,6 +49,12 @@ const getS3Client = () => {
   return cachedClient;
 };
 
+const buildObjectKey = ({ tenantKey = 'common', folder = 'misc', originalName }) => {
+  const safeFolder = sanitizeFolder(folder);
+  const key = `${tenantKey}/${safeFolder}/${Date.now()}-${sanitizeFileName(originalName)}`;
+  return { key, folder: safeFolder };
+};
+
 /** Public URL stored in DB — prefers CloudFront when AWS_CLOUDFRONT_URL is set. */
 export const buildPublicFileUrl = (key) => {
   const cloudfront = String(process.env.AWS_CLOUDFRONT_URL || '').trim().replace(/\/+$/, '');
@@ -58,7 +65,40 @@ export const buildPublicFileUrl = (key) => {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 };
 
-/** Upload any file buffer to the tenant's S3 prefix. */
+/**
+ * Browser uploads directly to S3 with this URL (no file bytes through API).
+ * Client MUST send the same Content-Type header used when signing.
+ */
+export const createPresignedPutUrl = async ({
+  originalName,
+  mimeType,
+  tenantKey = 'common',
+  folder = 'misc',
+  expiresIn = 15 * 60,
+}) => {
+  const bucket = requiredEnv('AWS_BUCKET_NAME');
+  const contentType = mimeType || 'application/octet-stream';
+  const { key, folder: safeFolder } = buildObjectKey({ tenantKey, folder, originalName });
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  const uploadUrl = await getSignedUrl(getS3Client(), command, { expiresIn });
+
+  return {
+    key,
+    folder: safeFolder,
+    url: buildPublicFileUrl(key),
+    uploadUrl,
+    headers: { 'Content-Type': contentType },
+    expiresIn,
+  };
+};
+
+/** Server-side upload (legacy). Prefer createPresignedPutUrl for large files. */
 export const uploadFileToS3 = async ({
   fileBuffer,
   originalName,
@@ -73,15 +113,15 @@ export const uploadFileToS3 = async ({
   }
 
   const bucket = requiredEnv('AWS_BUCKET_NAME');
-  const safeFolder = sanitizeFolder(folder);
-  const key = `${tenantKey}/${safeFolder}/${Date.now()}-${sanitizeFileName(originalName)}`;
+  const contentType = mimeType || 'application/octet-stream';
+  const { key, folder: safeFolder } = buildObjectKey({ tenantKey, folder, originalName });
 
   await getS3Client().send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: fileBuffer,
-      ContentType: mimeType || 'application/octet-stream',
+      ContentType: contentType,
     })
   );
 
