@@ -2,6 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../api/axios'
 import { uploadFile } from '../../utils/uploadFile'
 import { useAuth } from '../../context/AuthContext'
+import {
+  connectRealtimeSocket,
+  getTenantId,
+  joinChatConversation,
+  leaveChatConversation,
+  onChatConversationUpdated,
+  onChatMessage,
+  onChatMessageUpdated,
+} from '../../utils/realtimeSocket'
 
 const getCurrentEmployeeId = (user) => user?._id || user?.id || null
 
@@ -297,7 +306,6 @@ const ChatPortalView = () => {
   const fileInputRef = useRef(null)
   const photoInputRef = useRef(null)
   const attachMenuRef = useRef(null)
-  const pollMs = integration?.pollingIntervalMs || 5000
 
   const [selectedFiles, setSelectedFiles] = useState([])
   const [attachMenuOpen, setAttachMenuOpen] = useState(false)
@@ -455,33 +463,6 @@ const ChatPortalView = () => {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [hasOlderDays, loadingOlder, loadingMessages, loadingConversations, loadOlderMessages, messages.length])
-
-  const pollNewMessages = useCallback(async () => {
-    if (!currentUserId || !roomId) return
-    if (messages.length === 0) {
-      loadTodayMessages(roomId, { silent: true })
-      return
-    }
-    const last = messages[messages.length - 1]
-    try {
-      const res = await api.get(`/chat/conversations/${roomId}/messages`, {
-        params: { employeeId: currentUserId, after: last.createdAt },
-      })
-      const incoming = res.data?.messages || []
-      if (incoming.length > 0) {
-        stickToBottomRef.current = true
-        setMessages((prev) => {
-          const ids = new Set(prev.map((m) => String(m._id)))
-          const unique = incoming.filter((m) => !ids.has(String(m._id)))
-          return [...prev, ...unique]
-        })
-        await api.patch(`/chat/conversations/${roomId}/read`, { employeeId: currentUserId })
-        loadConversations()
-      }
-    } catch {
-      /* ignore poll errors */
-    }
-  }, [currentUserId, roomId, messages, loadTodayMessages, loadConversations])
 
   const searchNewChatEmployees = useCallback(async (query) => {
     setLoadingNewChat(true)
@@ -793,9 +774,70 @@ const ChatPortalView = () => {
   }, [messages, roomId])
 
   useEffect(() => {
-    const id = setInterval(pollNewMessages, pollMs)
-    return () => clearInterval(id)
-  }, [pollNewMessages, pollMs])
+    if (!currentUserId) return undefined
+    connectRealtimeSocket(currentUserId, { tenantId: getTenantId() })
+
+    const unsubMessage = onChatMessage((payload) => {
+      const conversationId = String(payload?.conversationId || '')
+      const msg = payload?.message
+      if (!msg?._id) return
+
+      if (roomId && conversationId === String(roomId)) {
+        stickToBottomRef.current = true
+        setMessages((prev) => {
+          if (prev.some((m) => String(m._id) === String(msg._id))) return prev
+          return [...prev, msg]
+        })
+        api.patch(`/chat/conversations/${roomId}/read`, { employeeId: currentUserId }).catch(() => {})
+      }
+    })
+
+    const unsubUpdated = onChatMessageUpdated((payload) => {
+      const conversationId = String(payload?.conversationId || '')
+      const msg = payload?.message
+      if (!msg?._id) return
+      if (!roomId || conversationId !== String(roomId)) return
+      setMessages((prev) => prev.map((m) => (String(m._id) === String(msg._id) ? msg : m)))
+    })
+
+    const unsubConv = onChatConversationUpdated((payload) => {
+      const conversationId = String(payload?.conversationId || '')
+      if (!conversationId) return
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => String(c._id) === conversationId)
+        if (idx < 0) {
+          // Unknown conversation (e.g. new DM) — soft refresh list once.
+          loadConversations()
+          return prev
+        }
+        const next = [...prev]
+        const current = next[idx]
+        next[idx] = {
+          ...current,
+          lastMessageAt: payload.lastMessageAt || current.lastMessageAt,
+          lastMessagePreview: payload.lastMessagePreview ?? current.lastMessagePreview,
+          lastMessageSender: payload.lastMessageSender || current.lastMessageSender,
+        }
+        next.sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
+        return next
+      })
+    })
+
+    return () => {
+      unsubMessage()
+      unsubUpdated()
+      unsubConv()
+    }
+  }, [currentUserId, roomId, loadConversations])
+
+  useEffect(() => {
+    if (!currentUserId || !roomId) return undefined
+    connectRealtimeSocket(currentUserId, { tenantId: getTenantId() })
+    joinChatConversation(roomId)
+    return () => {
+      leaveChatConversation(roomId)
+    }
+  }, [currentUserId, roomId])
 
   useEffect(() => {
     if (!mentionOpen) return

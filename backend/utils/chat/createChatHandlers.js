@@ -1,5 +1,9 @@
 import mongoose from 'mongoose';
 import { buildDirectParticipantKey } from './chatFields.js';
+import {
+  emitChatMessage,
+  emitChatMessageUpdated,
+} from '../../services/realtimeNotification.service.js';
 
 const toObjectId = (id) => {
   if (!id || !mongoose.Types.ObjectId.isValid(id)) return null;
@@ -449,6 +453,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         .populate('mentions.employee', 'name email')
         .lean();
 
+      emitChatMessage({ tenantId, conversation: conv, message: populated });
       res.status(201).json({ message: populated });
     } catch (error) {
       res.status(500).json({ message: 'Error sending message', error: error?.message });
@@ -504,6 +509,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         .populate('poll.options.votes.employee', 'name')
         .lean();
 
+      emitChatMessage({ tenantId, conversation: conv, message: populated });
       res.status(201).json({ message: populated });
     } catch (error) {
       res.status(500).json({ message: 'Error creating poll', error: error?.message });
@@ -560,6 +566,7 @@ export const createChatHandlers = ({ Conversation, Message, Employee, tenantId, 
         .populate('poll.options.votes.employee', 'name')
         .lean();
 
+      emitChatMessageUpdated({ conversationId: message.conversation, message: populated });
       res.status(200).json({ message: populated });
     } catch (error) {
       res.status(500).json({ message: 'Error voting on poll', error: error?.message });

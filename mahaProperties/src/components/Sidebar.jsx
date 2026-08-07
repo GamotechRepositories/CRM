@@ -14,7 +14,7 @@ import {
 } from '../utils/taskAssignmentAlert'
 import {
   connectRealtimeSocket,
-  disconnectRealtimeSocket,
+  getTenantId,
   onTaskChanged,
 } from '../utils/realtimeSocket'
 
@@ -147,7 +147,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
 
     // Initial badge load only — further updates come from Socket.IO.
     fetchPendingMyTasks()
-    connectRealtimeSocket(user._id)
+    connectRealtimeSocket(user._id, { tenantId: getTenantId() })
     const unsubscribe = onTaskChanged((payload) => {
       const reason = String(payload?.reason || '')
       scheduleRefresh({ playAlert: reason === 'assigned' })
@@ -164,7 +164,6 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       if (refreshTimer) window.clearTimeout(refreshTimer)
       unsubscribe()
       window.removeEventListener('focus', handleFocus)
-      disconnectRealtimeSocket()
     }
   }, [user?._id])
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/axios'
 import { getDashboardPathForUser } from '../config/dashboardRoutes'
+import { disconnectRealtimeSocket } from '../utils/realtimeSocket'
 import {
   canAddProjectForUser,
   canEditProjectForUser,
@@ -82,6 +83,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   const logout = () => {
+    disconnectRealtimeSocket()
     setUser(null)
     localStorage.removeItem(AUTH_KEY)
   }

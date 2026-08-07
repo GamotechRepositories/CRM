@@ -1,5 +1,5 @@
 /**
- * Real-time Socket.IO layer for notifications + meeting list sync.
+ * Real-time Socket.IO layer for notifications, tasks, meetings, and chat.
  * @module services/realtimeNotification.service
  */
 import logger from '../utils/logger.js';
@@ -12,6 +12,14 @@ const onlineUsers = new Set();
 
 export const MEETINGS_ROOM = 'meetings';
 
+export function chatConversationRoom(conversationId) {
+  return `chat:conv:${String(conversationId)}`;
+}
+
+export function chatCompanyRoom(tenantId) {
+  return `chat:company:${String(tenantId)}`;
+}
+
 /**
  * Bind Socket.IO server instance (call once at app startup).
  * @param {import('socket.io').Server} socketServer
@@ -22,9 +30,14 @@ export function bindSocketServer(socketServer) {
   io.on('connection', (socket) => {
     const userId =
       socket.handshake.auth?.userId || socket.handshake.query?.userId;
+    const tenantId =
+      socket.handshake.auth?.tenantId || socket.handshake.query?.tenantId;
 
-    // All meeting-app clients join shared room for list sync.
     socket.join(MEETINGS_ROOM);
+
+    if (tenantId) {
+      socket.join(chatCompanyRoom(tenantId));
+    }
 
     if (userId) {
       const room = userRoom(userId);
@@ -32,6 +45,7 @@ export function bindSocketServer(socketServer) {
       onlineUsers.add(String(userId));
       logger.info('SocketConnect', 'User connected', {
         userId: String(userId),
+        tenantId: tenantId ? String(tenantId) : undefined,
         socketId: socket.id,
       });
     } else {
@@ -39,6 +53,18 @@ export function bindSocketServer(socketServer) {
         socketId: socket.id,
       });
     }
+
+    socket.on('chat:join', (conversationId) => {
+      const id = String(conversationId || '').trim();
+      if (!id) return;
+      socket.join(chatConversationRoom(id));
+    });
+
+    socket.on('chat:leave', (conversationId) => {
+      const id = String(conversationId || '').trim();
+      if (!id) return;
+      socket.leave(chatConversationRoom(id));
+    });
 
     socket.on('disconnect', () => {
       if (userId) {
@@ -68,10 +94,6 @@ export function isUserOnline(userId) {
   return onlineUsers.has(String(userId));
 }
 
-/**
- * Emit notification to connected user via Socket.IO.
- * @returns {boolean} true if delivered via socket
- */
 export function emitToUser(userId, payload) {
   if (!io) return false;
   io.to(userRoom(userId)).emit('notification', payload);
@@ -79,10 +101,6 @@ export function emitToUser(userId, payload) {
   return true;
 }
 
-/**
- * Notify a user that their task list / pending badge should refresh.
- * Fired on assign, unassign, and status changes.
- */
 export function emitTaskChanged(userId, payload = {}) {
   if (!io || !userId) return false;
   const eventPayload = {
@@ -101,11 +119,61 @@ export function emitTaskChanged(userId, payload = {}) {
   return true;
 }
 
-/**
- * Broadcast meeting list change to all connected meeting-app clients.
- * @param {{ action: string, meetingId?: string }} payload
- * @param {string[]} [_userIds] ignored (kept for call-site compatibility)
- */
+const participantIdsFromConversation = (conversation) => {
+  const list = Array.isArray(conversation?.participants) ? conversation.participants : [];
+  return list
+    .map((p) => String(p?.employee?._id || p?.employee || p?._id || '').trim())
+    .filter((id) => id && id !== 'undefined' && id !== 'null');
+};
+
+export function emitChatMessage({ tenantId, conversation, message }) {
+  if (!io || !conversation || !message) return false;
+  const conversationId = String(conversation._id || conversation);
+  const payload = {
+    conversationId,
+    message,
+    ts: new Date().toISOString(),
+  };
+
+  io.to(chatConversationRoom(conversationId)).emit('chat:message', payload);
+
+  const listPayload = {
+    conversationId,
+    type: conversation.type || 'direct',
+    lastMessageAt: message.createdAt || new Date().toISOString(),
+    lastMessagePreview:
+      message.messageType === 'poll'
+        ? `Poll: ${message.poll?.question || message.body || ''}`
+        : message.body ||
+          (Array.isArray(message.attachments) && message.attachments.length
+            ? `📎 ${message.attachments.length} attachment(s)`
+            : ''),
+    lastMessageSender: message.sender?._id || message.sender || null,
+    ts: new Date().toISOString(),
+  };
+
+  if (conversation.type === 'team' && tenantId) {
+    io.to(chatCompanyRoom(tenantId)).emit('chat:conversation:updated', listPayload);
+  } else {
+    for (const userId of participantIdsFromConversation(conversation)) {
+      io.to(userRoom(userId)).emit('chat:conversation:updated', listPayload);
+    }
+  }
+
+  logger.info('SocketDelivered', 'chat:message emitted', { conversationId });
+  return true;
+}
+
+export function emitChatMessageUpdated({ conversationId, message }) {
+  if (!io || !conversationId || !message) return false;
+  io.to(chatConversationRoom(conversationId)).emit('chat:message:updated', {
+    conversationId: String(conversationId),
+    message,
+    ts: new Date().toISOString(),
+  });
+  return true;
+}
+
 export function emitMeetingChange(_userIds = [], payload = {}) {
   if (!io) {
     logger.warn('SocketEmit', 'Socket not ready — meeting change not broadcast');
@@ -118,9 +186,7 @@ export function emitMeetingChange(_userIds = [], payload = {}) {
     ts: new Date().toISOString(),
   };
 
-  // Broadcast to shared room (all logged-in app clients).
   io.to(MEETINGS_ROOM).emit('meetings:changed', eventPayload);
-  // Also emit globally so any client not yet in room still receives it.
   io.emit('meetings:changed', eventPayload);
 
   const rooms = io.sockets.adapter.rooms.get(MEETINGS_ROOM);
@@ -132,10 +198,6 @@ export function emitMeetingChange(_userIds = [], payload = {}) {
   return listeners;
 }
 
-/**
- * Split user ids into online (socket) vs offline (FCM).
- * @param {string[]} userIds
- */
 export function partitionByOnlineStatus(userIds = []) {
   const online = [];
   const offline = [];
@@ -152,6 +214,8 @@ export default {
   isUserOnline,
   emitToUser,
   emitTaskChanged,
+  emitChatMessage,
+  emitChatMessageUpdated,
   emitMeetingChange,
   partitionByOnlineStatus,
 };
