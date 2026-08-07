@@ -1,6 +1,7 @@
 import Task from '../../models/bangarProperties/bangarProperties_task.js';
 import { syncClientProfileByProjectId } from './bangarProperties_clientProfileSync.js';
 import { applyScheduledTimes } from '../workingHoursTimeline.js';
+import { emitTaskChanged } from '../../services/realtimeNotification.service.js';
 
 const MAX_BATCH_SIZE = 100;
 
@@ -71,6 +72,14 @@ const createTaskFromTemplate = async (template, scheduledFor) => {
 
   await generatedTask.save();
   await syncClientProfileByProjectId(template.project);
+  if (generatedTask.assignedTo) {
+    emitTaskChanged(generatedTask.assignedTo, {
+      reason: 'assigned',
+      taskId: generatedTask._id,
+      status: generatedTask.status,
+      title: generatedTask.title,
+    });
+  }
   return true;
 };
 

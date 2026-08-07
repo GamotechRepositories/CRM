@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Logo from '../assets/logo.png'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -12,6 +12,11 @@ import {
   initTaskAssignmentAudio,
   notifyNewTaskAssigned,
 } from '../utils/taskAssignmentAlert'
+import {
+  connectRealtimeSocket,
+  disconnectRealtimeSocket,
+  onTaskChanged,
+} from '../utils/realtimeSocket'
 
 const MenuToggleIcon = () => (
   <svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' strokeWidth={1.5} stroke='currentColor' className='size-6'>
@@ -57,6 +62,16 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [pendingMyTasksCount, setPendingMyTasksCount] = useState(0)
   const [alertsEnabled, setAlertsEnabled] = useState(false)
+  const alertsEnabledRef = useRef(false)
+  const navigateRef = useRef(navigate)
+
+  useEffect(() => {
+    alertsEnabledRef.current = alertsEnabled
+  }, [alertsEnabled])
+
+  useEffect(() => {
+    navigateRef.current = navigate
+  }, [navigate])
 
   useEffect(() => {
     initTaskAssignmentAudio()
@@ -88,58 +103,70 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
 
   useEffect(() => {
     let cancelled = false
-    let timerId = null
     let previousPendingCount = null
+    let inFlight = false
+    let refreshTimer = null
 
-    const fetchPendingMyTasks = async () => {
+    const fetchPendingMyTasks = async ({ playAlert = false } = {}) => {
       if (!user?._id) {
         if (!cancelled) setPendingMyTasksCount(0)
         return
       }
+      if (inFlight) return
+      inFlight = true
       try {
         const res = await api.get('/tasks', { params: { employeeId: user._id } })
         const list = Array.isArray(res.data) ? res.data : []
         const pendingCount = list.filter((task) => String(task?.status || '').trim() === 'Pending').length
-        if (alertsEnabled && previousPendingCount !== null && pendingCount > previousPendingCount) {
+        if (
+          playAlert &&
+          alertsEnabledRef.current &&
+          previousPendingCount !== null &&
+          pendingCount > previousPendingCount
+        ) {
           notifyNewTaskAssigned({
             pendingCount,
-            navigate,
+            navigate: navigateRef.current,
           })
         }
         previousPendingCount = pendingCount
         if (!cancelled) setPendingMyTasksCount(pendingCount)
       } catch {
         if (!cancelled) setPendingMyTasksCount(0)
+      } finally {
+        inFlight = false
       }
     }
 
-    const handleVisibilityOrFocus = () => {
-      fetchPendingMyTasks()
+    const scheduleRefresh = (opts) => {
+      if (refreshTimer) window.clearTimeout(refreshTimer)
+      refreshTimer = window.setTimeout(() => {
+        fetchPendingMyTasks(opts)
+      }, 150)
     }
 
-    const schedulePolling = () => {
-      if (timerId) window.clearInterval(timerId)
-      const intervalMs = document.hidden ? 3000 : 5000
-      timerId = window.setInterval(fetchPendingMyTasks, intervalMs)
-    }
-
-    const handleVisibilityChange = () => {
-      schedulePolling()
-      fetchPendingMyTasks()
-    }
-
+    // Initial badge load only — further updates come from Socket.IO.
     fetchPendingMyTasks()
-    schedulePolling()
-    window.addEventListener('focus', handleVisibilityOrFocus)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    connectRealtimeSocket(user._id)
+    const unsubscribe = onTaskChanged((payload) => {
+      const reason = String(payload?.reason || '')
+      scheduleRefresh({ playAlert: reason === 'assigned' })
+    })
+
+    const handleFocus = () => {
+      // One catch-up fetch if the tab was away (missed socket while sleeping).
+      if (!document.hidden) fetchPendingMyTasks()
+    }
+    window.addEventListener('focus', handleFocus)
 
     return () => {
       cancelled = true
-      if (timerId) window.clearInterval(timerId)
-      window.removeEventListener('focus', handleVisibilityOrFocus)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (refreshTimer) window.clearTimeout(refreshTimer)
+      unsubscribe()
+      window.removeEventListener('focus', handleFocus)
+      disconnectRealtimeSocket()
     }
-  }, [user?._id, alertsEnabled, navigate])
+  }, [user?._id])
 
   const toggleSection = (id) => {
     setExpanded((prev) => (prev[id] ? {} : { [id]: true }))

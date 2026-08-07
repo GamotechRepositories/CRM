@@ -80,6 +80,28 @@ export function emitToUser(userId, payload) {
 }
 
 /**
+ * Notify a user that their task list / pending badge should refresh.
+ * Fired on assign, unassign, and status changes.
+ */
+export function emitTaskChanged(userId, payload = {}) {
+  if (!io || !userId) return false;
+  const eventPayload = {
+    reason: String(payload.reason || 'updated'),
+    taskId: payload.taskId ? String(payload.taskId) : undefined,
+    status: payload.status ? String(payload.status) : undefined,
+    previousStatus: payload.previousStatus ? String(payload.previousStatus) : undefined,
+    title: payload.title ? String(payload.title) : undefined,
+    ts: new Date().toISOString(),
+  };
+  io.to(userRoom(userId)).emit('task:changed', eventPayload);
+  logger.info('SocketDelivered', 'task:changed emitted', {
+    userId: String(userId),
+    ...eventPayload,
+  });
+  return true;
+}
+
+/**
  * Broadcast meeting list change to all connected meeting-app clients.
  * @param {{ action: string, meetingId?: string }} payload
  * @param {string[]} [_userIds] ignored (kept for call-site compatibility)
@@ -129,6 +151,7 @@ export default {
   isRealtimeEnabled,
   isUserOnline,
   emitToUser,
+  emitTaskChanged,
   emitMeetingChange,
   partitionByOnlineStatus,
 };

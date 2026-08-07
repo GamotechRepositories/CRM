@@ -147,12 +147,14 @@ const TasksView = ({ isMyTasks = false }) => {
     }
   }
 
-  useEffect(() => {
-    if (canAssignTask() || user?._id) fetchTasks()
-  }, [filterProject, filterAssignee, canAssignTask, user?._id, isMyTasks])
+  const canAssign = canAssignTask()
 
   useEffect(() => {
-    if (canAssignTask() && !isMyTasks) {
+    if (canAssign || user?._id) fetchTasks()
+  }, [filterProject, filterAssignee, canAssign, user?._id, isMyTasks])
+
+  useEffect(() => {
+    if (canAssign && !isMyTasks) {
       fetchProjects()
       const fetchEmployees = async () => {
         try {
@@ -165,7 +167,7 @@ const TasksView = ({ isMyTasks = false }) => {
       }
       fetchEmployees()
     }
-  }, [canAssignTask, isMyTasks])
+  }, [canAssign, isMyTasks])
 
   const isDelayed = (t) => {
     if (!t?.dueDate) return false
