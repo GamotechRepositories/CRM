@@ -1,17 +1,32 @@
-# centralized_app
+# Centralized employee app
 
-A new Flutter project.
+Flutter app for MultiCRM employees. Pick a **company** on login, then all API calls use that company's base URL.
 
-## Getting Started
+## Setup
 
-This project is a starting point for a Flutter application.
+```bash
+cd centralized_app
+cp .env.example .env   # if needed
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+Edit `.env` for local/production API hosts (same values as each web CRM `VITE_API_URL`).
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Structure
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| Path | Role |
+|------|------|
+| `.env` | Base URLs + socket host |
+| `lib/config/` | Env + company registry |
+| `lib/api/*_api.dart` | Per-company API modules (mirrors web `src/api/axios.js`) |
+| `lib/api/api_client.dart` | Shared HTTP client |
+| `lib/screens/login_screen.dart` | Compact company + login UI |
+| `lib/auth/auth_session.dart` | Selected company + session |
+
+## Companies
+
+- Sales Tech Reality → `SALES_TECH_REALITY_API_URL`
+- Bangar Properties → `BANGAR_PROPERTIES_API_URL`
+- Maha Properties → `MAHA_PROPERTIES_API_URL`
+- Ads Research Global → `ADS_RESEARCH_GLOBAL_API_URL`
