@@ -3,11 +3,23 @@ import { endOfBusinessDay, startOfBusinessDay } from './businessTime.js';
 const isSalesDepartment = (value = '') =>
   /sales/i.test(String(value || '').trim());
 
+const normalizeDesignationKey = (value = '') =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+
 const isTeamLeaderDesignation = (designation) => {
   if (!designation) return false;
   if (String(designation.accessRole || '').trim() === 'team_leader') return true;
-  const title = String(designation.title || '').toLowerCase();
+  const title = String(designation.title || designation.name || '').toLowerCase();
   return title.includes('team leader') || title.includes('team lead') || title.includes('sales team lead');
+};
+
+/** Lead distribution recipients — Sales Executive only (not Site Co-ordinator, managers, etc.). */
+export const isSalesExecutiveDesignation = (designation) => {
+  if (!designation) return false;
+  const key = normalizeDesignationKey(designation.title || designation.name || '');
+  return key.includes('salesexecutive');
 };
 
 /**
@@ -47,13 +59,14 @@ export const findTeamMembersForLeader = async (Employee, teamLeaderId) => {
     status: 'Active',
     reportingManager: teamLeaderId,
   })
-    .populate('designation', 'title accessRole')
+    .populate('designation', 'title name accessRole')
     .select('name email department designation reportingManager status')
     .sort({ name: 1 });
 
-  // Prefer Sales-department reportees; if none tagged Sales, use all reportees.
-  const salesMembers = members.filter((m) => isSalesDepartment(m.department));
-  return salesMembers.length ? salesMembers : members;
+  // Only Sales Executives in the Sales department receive distributed leads.
+  return members.filter(
+    (m) => isSalesDepartment(m.department) && isSalesExecutiveDesignation(m.designation)
+  );
 };
 
 export const buildLeadDistributionPlan = async ({
@@ -88,34 +101,48 @@ export const buildLeadDistributionPlan = async ({
     throw error;
   }
 
+  const leadersWithMembers = [];
+  for (const tl of teamLeaders) {
+    const members = await findTeamMembersForLeader(Employee, tl._id);
+    if (members.length) {
+      leadersWithMembers.push({ tl, members });
+    }
+  }
+
+  if (!leadersWithMembers.length) {
+    const error = new Error(
+      'No Sales Executives found under Sales Team Leaders. Leads are only distributed to Active employees with designation Sales Executive.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (!leads.length) {
     return {
       totalLeads: 0,
-      teamLeaderCount: teamLeaders.length,
+      teamLeaderCount: leadersWithMembers.length,
       dayStart,
       dayEnd,
       assignments: [],
-      plan: teamLeaders.map((tl) => ({
+      plan: leadersWithMembers.map(({ tl, members }) => ({
         teamLeader: { _id: tl._id, name: tl.name, email: tl.email },
         leadCount: 0,
-        members: [],
+        members: members.map((m) => ({
+          employee: { _id: m._id, name: m.name, email: m.email },
+          leadCount: 0,
+          leadIds: [],
+        })),
       })),
     };
   }
 
-  const leaderBuckets = splitEvenly(leads, teamLeaders.length);
+  const leaderBuckets = splitEvenly(leads, leadersWithMembers.length);
   const plan = [];
   const assignments = [];
 
-  for (let i = 0; i < teamLeaders.length; i += 1) {
-    const tl = teamLeaders[i];
+  for (let i = 0; i < leadersWithMembers.length; i += 1) {
+    const { tl, members } = leadersWithMembers[i];
     const bucket = leaderBuckets[i] || [];
-    let members = await findTeamMembersForLeader(Employee, tl._id);
-
-    // If TL has no team, assign the pool to the team leader themselves.
-    if (!members.length) {
-      members = [tl];
-    }
 
     const memberBuckets = splitEvenly(bucket, members.length);
     const memberPlan = members.map((member, idx) => {
@@ -143,7 +170,7 @@ export const buildLeadDistributionPlan = async ({
 
   return {
     totalLeads: leads.length,
-    teamLeaderCount: teamLeaders.length,
+    teamLeaderCount: leadersWithMembers.length,
     dayStart,
     dayEnd,
     plan,

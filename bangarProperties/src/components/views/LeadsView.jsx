@@ -499,7 +499,7 @@ const LeadsView = () => {
               <div>
                 <h3 className='text-lg font-semibold text-gray-900'>Distribute today’s leads</h3>
                 <p className='text-xs text-gray-500 mt-0.5'>
-                  Unassigned leads are split equally across Sales Team Leaders, then across each leader’s team.
+                  Unassigned leads are split equally across Sales Team Leaders, then only to Sales Executives on each team (not Site Co-ordinators).
                 </p>
               </div>
               <button

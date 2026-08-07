@@ -11,13 +11,26 @@ const emptyForm = {
   department: '',
   level: '',
   accessRole: 'employee',
+  sortOrder: '',
 }
+
+const designationToForm = (designation) => ({
+  title: designation?.title || '',
+  department: designation?.department || '',
+  level: designation?.level || '',
+  accessRole: designation?.accessRole || 'employee',
+  sortOrder:
+    designation?.sortOrder === 0 || designation?.sortOrder
+      ? String(designation.sortOrder)
+      : '',
+})
 
 const DesignationsModuleView = () => {
   const [designations, setDesignations] = useState([])
   const [employees, setEmployees] = useState([])
   const [customDepartments, setCustomDepartments] = useState(() => readCustomDepartments())
   const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -81,24 +94,50 @@ const DesignationsModuleView = () => {
     [designations]
   )
 
-  const createDesignation = async (e) => {
+  const resetForm = () => {
+    setForm(emptyForm)
+    setEditingId(null)
+  }
+
+  const startEdit = (designation) => {
+    setEditingId(designation._id)
+    setForm(designationToForm(designation))
+    setError(null)
+    setSuccess('')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const saveDesignation = async (e) => {
     e.preventDefault()
     if (!form.title.trim()) return
     try {
       setSaving(true)
       setError(null)
       setSuccess('')
-      await api.post('/designations', {
+      const payload = {
         title: form.title.trim(),
         department: form.department.trim(),
         level: form.level,
         accessRole: form.accessRole,
-      })
-      setForm(emptyForm)
-      setSuccess('Designation created successfully.')
+      }
+      if (form.sortOrder !== '' && form.sortOrder != null) {
+        payload.sortOrder = Number(form.sortOrder)
+      }
+      if (editingId) {
+        await api.put(`/designations/${editingId}`, payload)
+        setSuccess('Designation updated successfully.')
+      } else {
+        await api.post('/designations', payload)
+        setSuccess('Designation created successfully.')
+      }
+      resetForm()
       await fetchData()
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to create designation')
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          (editingId ? 'Failed to update designation' : 'Failed to create designation')
+      )
     } finally {
       setSaving(false)
     }
@@ -113,7 +152,7 @@ const DesignationsModuleView = () => {
       <div className='mb-6'>
         <h1 className='text-2xl font-bold text-gray-900'>Designations</h1>
         <p className='text-sm text-gray-600 mt-1'>
-          Create new designations and keep role structure organized.
+          Create and edit designations to keep role structure organized.
         </p>
       </div>
 
@@ -128,8 +167,10 @@ const DesignationsModuleView = () => {
         </div>
       )}
 
-      <form onSubmit={createDesignation} className='bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6'>
-        <h2 className='text-sm font-semibold text-gray-900 mb-4'>Create Designation</h2>
+      <form onSubmit={saveDesignation} className='bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6'>
+        <h2 className='text-sm font-semibold text-gray-900 mb-4'>
+          {editingId ? 'Edit Designation' : 'Create Designation'}
+        </h2>
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3'>
           <input
             value={form.title}
@@ -178,7 +219,7 @@ const DesignationsModuleView = () => {
             <option value='admin'>Admin</option>
           </select>
         </div>
-        <div className='mt-3 flex items-center gap-3'>
+        <div className='mt-3 flex flex-wrap items-center gap-3'>
           <input
             type='number'
             value={form.sortOrder}
@@ -191,8 +232,24 @@ const DesignationsModuleView = () => {
             disabled={saving}
             className='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50'
           >
-            {saving ? 'Creating…' : 'Create Designation'}
+            {saving
+              ? editingId
+                ? 'Saving…'
+                : 'Creating…'
+              : editingId
+                ? 'Save Changes'
+                : 'Create Designation'}
           </button>
+          {editingId ? (
+            <button
+              type='button'
+              onClick={resetForm}
+              disabled={saving}
+              className='px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-50'
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       </form>
 
@@ -209,20 +266,33 @@ const DesignationsModuleView = () => {
                 <th className='px-4 py-3'>Level</th>
                 <th className='px-4 py-3'>Access Role</th>
                 <th className='px-4 py-3'>Employees</th>
+                <th className='px-4 py-3'>Actions</th>
               </tr>
             </thead>
             <tbody className='divide-y divide-gray-100'>
               {sortedDesignations.length ? sortedDesignations.map((designation) => (
-                <tr key={designation._id}>
+                <tr
+                  key={designation._id}
+                  className={editingId === designation._id ? 'bg-indigo-50/60' : undefined}
+                >
                   <td className='px-4 py-3 font-medium text-gray-900'>{designation.title || '—'}</td>
                   <td className='px-4 py-3 text-gray-700'>{designation.department || '—'}</td>
                   <td className='px-4 py-3 text-gray-700'>{designation.level || '—'}</td>
                   <td className='px-4 py-3 text-gray-700'>{designation.accessRole || 'employee'}</td>
                   <td className='px-4 py-3 text-gray-700'>{designation.employeeCount ?? 0}</td>
+                  <td className='px-4 py-3'>
+                    <button
+                      type='button'
+                      onClick={() => startEdit(designation)}
+                      className='text-indigo-600 hover:text-indigo-800 font-medium text-sm'
+                    >
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className='px-4 py-12 text-center text-gray-500'>
+                  <td colSpan={6} className='px-4 py-12 text-center text-gray-500'>
                     No designations found.
                   </td>
                 </tr>
