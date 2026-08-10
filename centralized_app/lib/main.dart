@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'auth/auth_session.dart';
 import 'config/app_env.dart';
-import 'screens/home_screen.dart';
+import 'screens/app_home.dart';
 import 'screens/login_screen.dart';
 
 Future<void> main() async {
@@ -34,13 +34,12 @@ class CentralizedApp extends StatelessWidget {
             seedColor: const Color(0xFF2563EB),
             brightness: Brightness.light,
           ),
-          textTheme: ThemeData.light().textTheme.apply(
-                fontSizeFactor: 0.92,
+          textTheme: ThemeData(useMaterial3: true).textTheme.apply(
                 bodyColor: const Color(0xFF0F172A),
                 displayColor: const Color(0xFF0F172A),
               ),
         ),
-        home: session.isLoggedIn ? const HomeScreen() : const LoginScreen(),
+        home: session.isLoggedIn ? const AppHome() : const LoginScreen(),
       ),
     );
   }

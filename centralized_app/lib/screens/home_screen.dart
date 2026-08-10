@@ -80,6 +80,21 @@ class HomeScreen extends StatelessWidget {
             'Signed in to the selected company. Further modules will use this company API base.',
             style: TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
           ),
+          if (session.canViewAdminDashboard) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 36,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF2563EB),
+                  textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+                child: const Text('Back to dashboard'),
+              ),
+            ),
+          ],
         ],
       ),
     );

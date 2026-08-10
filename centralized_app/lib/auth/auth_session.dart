@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/company_api.dart';
 import '../config/company_config.dart';
+import 'role_access.dart';
 
 const _kCompanyKey = 'crm_selected_company';
 const _kUserKey = 'crm_user';
@@ -27,6 +28,7 @@ class AuthSession extends ChangeNotifier {
   String get userName => (_user?['name'] ?? '').toString();
   String get userEmail => (_user?['email'] ?? '').toString();
   String get userId => (_user?['_id'] ?? _user?['id'] ?? '').toString();
+  bool get canViewAdminDashboard => RoleAccess.canViewAdminDashboard(_user);
 
   CompanyApi? get api =>
       _company == null ? null : CompanyApi(_company!);
@@ -48,6 +50,7 @@ class AuthSession extends ChangeNotifier {
   }
 
   void selectCompany(CompanyConfig? company) {
+    if (_company?.key == company?.key && _error == null) return;
     _company = company;
     _error = null;
     notifyListeners();
