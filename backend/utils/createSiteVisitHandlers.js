@@ -6,6 +6,7 @@ import {
   roundKm,
 } from './travelDistance.js';
 import { endOfBusinessDay, startOfBusinessDay } from './businessTime.js';
+import { isCoordOnlyAddress, resolveAddressOrCoords } from './reverseGeocode.js';
 
 const toNumberOrNull = (value) => {
   if (value === undefined || value === null || value === '') return null;
@@ -65,6 +66,23 @@ const parseCoords = (body = {}) => {
     longitude,
     address: String(body.address || '').trim(),
   };
+};
+
+/** Same as parseCoords, but fills place name via shared reverse-geocode API. */
+const parseAndResolveCoords = async (body = {}) => {
+  const coords = parseCoords(body);
+  if (!coords) return null;
+  coords.address = await resolveAddressOrCoords(coords.latitude, coords.longitude, coords.address);
+  return coords;
+};
+
+const enrichPointAddress = async (point) => {
+  if (!point) return point;
+  const lat = toNumberOrNull(point.latitude);
+  const lon = toNumberOrNull(point.longitude);
+  if (lat == null || lon == null) return point;
+  const address = await resolveAddressOrCoords(lat, lon, point.address);
+  return { ...point, address };
 };
 
 const serializeJourney = (journey) => {
@@ -200,7 +218,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         return res.status(400).json({ message: 'employeeId is required' });
       }
 
-      const coords = parseCoords(req.body);
+      const coords = await parseAndResolveCoords(req.body);
       if (!coords) {
         return res.status(400).json({ message: 'Valid latitude and longitude are required to start journey' });
       }
@@ -258,7 +276,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         return res.status(400).json({ message: 'employeeId is required' });
       }
 
-      const coords = parseCoords(req.body);
+      const coords = await parseAndResolveCoords(req.body);
       const now = new Date();
       const dayStart = startOfBusinessDay(req.body.date ? new Date(req.body.date) : now);
       const journey = await findJourneyForDay(TravelJourney, employeeId, dayStart);
@@ -293,7 +311,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
   const checkInSiteVisit = async (req, res) => {
     try {
-      const coords = parseCoords(req.body);
+      const coords = await parseAndResolveCoords(req.body);
       if (!coords) {
         return res.status(400).json({ message: 'Valid latitude and longitude are required to check in' });
       }
@@ -369,7 +387,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
   const checkOutSiteVisit = async (req, res) => {
     try {
-      const coords = parseCoords(req.body);
+      const coords = await parseAndResolveCoords(req.body);
       if (!coords) {
         return res.status(400).json({ message: 'Valid latitude and longitude are required to check out' });
       }
@@ -540,6 +558,48 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
       const estimatedExpense = roundKm(totalDistanceKm * ratePerKm, 0);
       const routeUrl = journeyStarted ? buildGoogleMapsDirectionsUrl(timeline) : null;
 
+      // Enrich coord-only addresses with place names (same for web + Flutter clients).
+      const enrichedTimeline = await Promise.all(timeline.map((p) => enrichPointAddress(p)));
+      let journeyPayload = serializeJourney(journey);
+      if (journeyPayload?.startLatitude != null && journeyPayload?.startLongitude != null) {
+        const startAddress = await resolveAddressOrCoords(
+          journeyPayload.startLatitude,
+          journeyPayload.startLongitude,
+          journeyPayload.startAddress
+        );
+        journeyPayload = { ...journeyPayload, startAddress };
+        // Persist if previously stored as coordinates only
+        if (
+          journey &&
+          startAddress &&
+          isCoordOnlyAddress(journey.startAddress) &&
+          !isCoordOnlyAddress(startAddress)
+        ) {
+          journey.startAddress = startAddress;
+          await journey.save().catch(() => {});
+        }
+      }
+      if (
+        journeyPayload?.endLatitude != null &&
+        journeyPayload?.endLongitude != null
+      ) {
+        const endAddress = await resolveAddressOrCoords(
+          journeyPayload.endLatitude,
+          journeyPayload.endLongitude,
+          journeyPayload.endAddress
+        );
+        journeyPayload = { ...journeyPayload, endAddress };
+        if (
+          journey &&
+          endAddress &&
+          isCoordOnlyAddress(journey.endAddress) &&
+          !isCoordOnlyAddress(endAddress)
+        ) {
+          journey.endAddress = endAddress;
+          await journey.save().catch(() => {});
+        }
+      }
+
       return res.status(200).json({
         date: dayStart.toISOString(),
         employeeId,
@@ -548,10 +608,10 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         estimatedExpense,
         currency: 'INR',
         routeUrl,
-        journey: serializeJourney(journey),
+        journey: journeyPayload,
         journeyStarted,
         visits,
-        timeline,
+        timeline: enrichedTimeline,
       });
     } catch (error) {
       return res.status(500).json({ message: 'Error building travel timeline', error: error?.message || error });

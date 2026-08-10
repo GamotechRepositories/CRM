@@ -5,6 +5,7 @@ import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import 'assign_task_page.dart';
 import 'attendance_page.dart';
+import 'chat_page.dart';
 import 'dashboard_page.dart';
 import 'leave_page.dart';
 import 'my_projects_page.dart';
@@ -149,19 +150,10 @@ String currentMonthKey() {
 class AppPageFactory {
   AppPageFactory._();
 
-  static bool isDashboardPath(String path) {
-    return const {
-      '/dashboard',
-      '/admin-dashboard',
-      '/hr-dashboard',
-      '/manager-dashboard',
-      '/team-leader-dashboard',
-      '/site-coordinator-dashboard',
-    }.contains(path);
-  }
+  static bool isDashboardPath(String path) => RoleAccess.isDashboardPath(path);
 
   static Widget build(String path) {
-    if (isDashboardPath(path)) return const DashboardPage();
+    if (isDashboardPath(path)) return DashboardPage(requestedPath: path);
     if (path == '/my-profile') return const ProfilePage();
     if (path == '/settings') return const SettingsPage();
 
@@ -249,11 +241,7 @@ class AppPageFactory {
           subtitleFor: (i) => '${_fmtDate(i['createdAt'])} · ${i['message'] ?? i['content'] ?? ''}',
         );
       case '/module/chat':
-        return const PlaceholderPage(
-          title: 'Chat',
-          subtitle: 'Real-time chat uses Socket.IO in the web app. Mobile chat is coming next.',
-          webPath: '/module/chat',
-        );
+        return const ChatPage();
       case '/my-team':
         return ModuleListPage(
           title: 'Team Members',

@@ -12,6 +12,10 @@ class AppEnv {
   static String get socketUrl =>
       dotenv.env['SOCKET_URL']?.trim() ?? apiHost;
 
+  /// Optional — enables Google Maps Embed in travel dashboard (`VITE_GOOGLE_MAPS_API_KEY` on web).
+  static String get googleMapsApiKey =>
+      dotenv.env['GOOGLE_MAPS_API_KEY']?.trim() ?? '';
+
   static String require(String key) {
     final value = dotenv.env[key]?.trim();
     if (value == null || value.isEmpty) {

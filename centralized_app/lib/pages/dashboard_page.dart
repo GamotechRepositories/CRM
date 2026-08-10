@@ -5,11 +5,15 @@ import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../dashboard/dashboard_stats.dart';
 import '../dashboard/employee_dashboard_stats.dart';
+import '../navigation/app_nav.dart';
 import 'employee_dashboard_body.dart';
+import 'site_coordinator_dashboard_body.dart';
 
-/// Dashboard body — admin KPIs or employee dashboard.
+/// Dashboard body — role-specific KPIs (admin, site coordinator, employee, …).
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, this.requestedPath = '/dashboard'});
+
+  final String requestedPath;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -24,12 +28,31 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = context.read<AuthSession>();
+      final canonical = RoleAccess.dashboardPath(session.user);
+      if (widget.requestedPath != canonical && RoleAccess.isDashboardPath(widget.requestedPath)) {
+        AppNavScope.navigate(context, canonical);
+        return;
+      }
+      _load();
+    });
   }
 
   Future<void> _load() async {
     final session = context.read<AuthSession>();
-    final isAdmin = RoleAccess.canViewAdminDashboard(session.user);
+    final kind = RoleAccess.getDashboardKind(session.user);
+    if (kind == DashboardKind.siteCoordinator) {
+      setState(() {
+        _loading = false;
+        _error = null;
+        _stats = null;
+        _employeeStats = null;
+      });
+      return;
+    }
+
+    final isAdmin = kind == DashboardKind.admin;
     final api = session.api;
     if (api == null) {
       setState(() {
@@ -72,8 +95,35 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<AuthSession>();
-    final isAdmin = RoleAccess.canViewAdminDashboard(session.user);
+    final kind = RoleAccess.getDashboardKind(session.user);
     final firstName = session.userName.split(' ').first;
+
+    if (kind == DashboardKind.siteCoordinator) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Welcome, ${firstName.isEmpty ? 'Coordinator' : firstName}',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+                const Text(
+                  'Travel Dashboard',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const Expanded(child: SiteCoordinatorDashboardBody()),
+        ],
+      );
+    }
+
+    final isAdmin = kind == DashboardKind.admin;
 
     if (!isAdmin) {
       return RefreshIndicator(

@@ -8,6 +8,18 @@ import 'crm_paths.dart';
 import 'maha_properties_api.dart';
 import 'sales_tech_reality_api.dart';
 
+class ChatMessagesPage {
+  const ChatMessagesPage({
+    required this.messages,
+    this.day,
+    this.hasOlder = false,
+  });
+
+  final List<Map<String, dynamic>> messages;
+  final String? day;
+  final bool hasOlder;
+}
+
 /// Factory that routes calls to the selected company's API module.
 class CompanyApi {
   CompanyApi(this.company) : client = ApiClient(company: company);
@@ -249,6 +261,182 @@ class CompanyApi {
 
   Future<List<Map<String, dynamic>>> fetchAttendanceForEmployee(String employeeId) =>
       _list(CrmPaths.attendanceForEmployee(employeeId), softFail: true);
+
+  Future<List<Map<String, dynamic>>> fetchChatConversations(String employeeId) async {
+    final res = await client.getJson(CrmPaths.chatConversations, query: {'employeeId': employeeId});
+    return _asMapListFromKey(res, 'conversations');
+  }
+
+  Future<Map<String, dynamic>> createDirectChat({
+    required String employeeId,
+    required String peerId,
+  }) async {
+    final res = await client.postJson(CrmPaths.chatConversations, body: {
+      'employeeId': employeeId,
+      'peerId': peerId,
+    });
+    final conv = res['conversation'];
+    if (conv is Map) return Map<String, dynamic>.from(conv);
+    return res;
+  }
+
+  Future<ChatMessagesPage> fetchChatMessages({
+    required String conversationId,
+    required String employeeId,
+    String day = 'today',
+  }) async {
+    final res = await client.getJson(
+      CrmPaths.chatMessages(conversationId),
+      query: {'employeeId': employeeId, 'day': day},
+    );
+    return ChatMessagesPage(
+      messages: _asMapListFromKey(res, 'messages'),
+      day: res['day']?.toString(),
+      hasOlder: res['hasOlder'] == true,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendChatMessage({
+    required String conversationId,
+    required String employeeId,
+    required String body,
+    List<Map<String, dynamic>> mentions = const [],
+    List<Map<String, dynamic>> attachments = const [],
+  }) async {
+    final res = await client.postJson(CrmPaths.chatMessages(conversationId), body: {
+      'employeeId': employeeId,
+      'body': body,
+      'mentions': mentions,
+      'attachments': attachments,
+    });
+    final msg = res['message'];
+    if (msg is Map) return Map<String, dynamic>.from(msg);
+    return res;
+  }
+
+  Future<void> markChatRead({
+    required String conversationId,
+    required String employeeId,
+  }) async {
+    await client.patchJson(CrmPaths.chatRead(conversationId), body: {'employeeId': employeeId});
+  }
+
+  Future<List<Map<String, dynamic>>> searchChatEmployees(String search) async {
+    final res = await client.getJson(
+      CrmPaths.chatEmployees,
+      query: search.trim().isEmpty ? null : {'search': search.trim()},
+    );
+    return _asMapListFromKey(res, 'employees');
+  }
+
+  Future<Map<String, dynamic>> voteChatPoll({
+    required String messageId,
+    required String employeeId,
+    required int optionIndex,
+  }) async {
+    final res = await client.postJson(CrmPaths.chatVote(messageId), body: {
+      'employeeId': employeeId,
+      'optionIndex': optionIndex,
+    });
+    final msg = res['message'];
+    if (msg is Map) return Map<String, dynamic>.from(msg);
+    return res;
+  }
+
+  Future<Map<String, dynamic>> fetchTravelTimeline({
+    required String employeeId,
+    required String date,
+  }) =>
+      client.getJson(CrmPaths.siteVisitsTravelTimeline, query: {
+        'employeeId': employeeId,
+        'date': date,
+      });
+
+  Future<List<Map<String, dynamic>>> fetchSiteVisits({
+    required String assignedTo,
+    required String from,
+    required String to,
+  }) async {
+    final res = await client.getJson(CrmPaths.siteVisits, query: {
+      'assignedTo': assignedTo,
+      'from': from,
+      'to': to,
+    });
+    return _asMapList(res);
+  }
+
+  Future<Map<String, dynamic>> startTravelJourney({
+    required String employeeId,
+    required String date,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) =>
+      client.postJson(CrmPaths.siteVisitsStartJourney, body: {
+        'employeeId': employeeId,
+        'date': date,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+      });
+
+  Future<Map<String, dynamic>> endTravelJourney({
+    required String employeeId,
+    required String date,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) =>
+      client.postJson(CrmPaths.siteVisitsEndJourney, body: {
+        'employeeId': employeeId,
+        'date': date,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+      });
+
+  Future<Map<String, dynamic>> allocateTravelExpense({
+    required String employeeId,
+    required String date,
+  }) =>
+      client.postJson(CrmPaths.siteVisitsAllocateExpense, body: {
+        'employeeId': employeeId,
+        'date': date,
+      });
+
+  Future<Map<String, dynamic>> checkInSiteVisit({
+    required String visitId,
+    required String employeeId,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) =>
+      client.postJson(CrmPaths.siteVisitCheckIn(visitId), body: {
+        'employeeId': employeeId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+      });
+
+  Future<Map<String, dynamic>> checkOutSiteVisit({
+    required String visitId,
+    required String employeeId,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) =>
+      client.postJson(CrmPaths.siteVisitCheckOut(visitId), body: {
+        'employeeId': employeeId,
+        'latitude': latitude,
+        'longitude': longitude,
+        'address': address,
+      });
+
+  static List<Map<String, dynamic>> _asMapListFromKey(Map<String, dynamic> res, String key) {
+    final raw = res[key] ?? res['data'] ?? res;
+    if (raw is! List) return [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
 
   /// Same 7 list endpoints as web `/admin-dashboard`, for the selected company.
   Future<DashboardStats> fetchAdminDashboard({String? viewerId}) async {

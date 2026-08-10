@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'ist_time.dart';
+
 /// Attendance helpers mirroring web `attendanceLate.js` and `AttendanceView.jsx`.
 class AttendanceHelpers {
   AttendanceHelpers._();
@@ -43,29 +45,15 @@ class AttendanceHelpers {
     return DateTime.tryParse(v.toString());
   }
 
-  /// Local wall-clock time — matches web `new Date(iso).getHours()` etc.
-  static DateTime? parseLocalDateTime(dynamic v) {
-    final d = parseDateTime(v);
-    if (d == null) return null;
-    return d.isUtc ? d.toLocal() : d;
-  }
+  /// Parse as IST wall-clock (UTC+05:30) — CRM times are India-based.
+  static DateTime? parseLocalDateTime(dynamic v) => IstTime.parse(v);
 
-  static String formatTimeOfDay(DateTime d) {
-    final local = d.isUtc ? d.toLocal() : d;
-    final h = local.hour > 12 ? local.hour - 12 : (local.hour == 0 ? 12 : local.hour);
-    final ampm = local.hour >= 12 ? 'PM' : 'AM';
-    final m = local.minute.toString().padLeft(2, '0');
-    final s = local.second.toString().padLeft(2, '0');
-    return '$h:$m:$s $ampm';
-  }
+  static String formatTimeOfDay(DateTime d) => IstTime.formatTimeOfDay(d);
 
-  static String todayKey([DateTime? ref]) {
-    final d = ref ?? DateTime.now();
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
+  static String todayKey([DateTime? ref]) => IstTime.dateKey(ref);
 
   static String monthKey([DateTime? ref]) {
-    final d = ref ?? DateTime.now();
+    final d = ref != null ? IstTime.toIst(ref.toUtc()) : IstTime.now();
     return '${d.year}-${d.month.toString().padLeft(2, '0')}';
   }
 
@@ -139,11 +127,7 @@ class AttendanceHelpers {
     return '$h:$m:$s $ampm';
   }
 
-  static String formatTimeOnly(dynamic value) {
-    final d = parseLocalDateTime(value);
-    if (d == null) return '—';
-    return formatTimeOfDay(d);
-  }
+  static String formatTimeOnly(dynamic value) => IstTime.formatTimeOfDay(value);
 
   static String formatDateLabel(String dateKey) {
     final d = DateTime.tryParse('${dateKey}T12:00:00');

@@ -6,24 +6,87 @@ import TravelRouteMap from '../TravelRouteMap'
 import {
   getCurrentLocation,
   getMapsUrl,
+  isCoordOnlyAddress,
   locationErrorMessage,
+  resolveAddressFromCoords,
 } from '../../utils/geolocation'
 
-const localYmd = (d = new Date()) => {
-  const x = new Date(d)
-  const y = x.getFullYear()
-  const m = String(x.getMonth() + 1).padStart(2, '0')
-  const day = String(x.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+/** Today's date key in IST (Asia/Kolkata). */
+const localYmd = (d = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(d))
 
+/** 12-hour AM/PM time in IST. */
 const formatTime = (d) => {
   if (!d) return '—'
-  return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  })
 }
 
 const formatINR = (n) =>
   `₹ ${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
+
+/** Reverse-geocode coord-only addresses for timeline / visit rows. */
+const PlaceAddress = ({ address, latitude, longitude, className = 'text-xs text-gray-600 mt-1 line-clamp-2' }) => {
+  const [place, setPlace] = useState(() => (address && !isCoordOnlyAddress(address) ? address : ''))
+  const [loading, setLoading] = useState(() => !address || isCoordOnlyAddress(address))
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const raw = String(address || '').trim()
+      if (raw && !isCoordOnlyAddress(raw)) {
+        if (!cancelled) {
+          setPlace(raw)
+          setLoading(false)
+        }
+        return
+      }
+
+      let lat = latitude != null ? Number(latitude) : NaN
+      let lon = longitude != null ? Number(longitude) : NaN
+      if ((!Number.isFinite(lat) || !Number.isFinite(lon)) && isCoordOnlyAddress(raw)) {
+        const parts = raw.split(',').map((s) => Number(s.trim()))
+        if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+          lat = parts[0]
+          lon = parts[1]
+        }
+      }
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        if (!cancelled) {
+          setPlace(raw || '—')
+          setLoading(false)
+        }
+        return
+      }
+
+      if (!cancelled) setLoading(true)
+      const resolved = await resolveAddressFromCoords(lat, lon)
+      if (!cancelled) {
+        setPlace(resolved || raw || '—')
+        setLoading(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [address, latitude, longitude])
+
+  if (loading && !place) {
+    return <span className={className}>Resolving place…</span>
+  }
+  return <span className={className}>{place || '—'}</span>
+}
 
 const Kpi = ({ label, value, hint }) => (
   <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-4'>
@@ -246,7 +309,17 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
             {journeyActive ? (
               <p className='text-sm text-emerald-800 mt-1'>
                 Journey active since {formatTime(journey.startedAt)}
-                {journey.startAddress ? ` · ${journey.startAddress}` : ''}
+                {journey.startAddress ? (
+                  <>
+                    {' · '}
+                    <PlaceAddress
+                      address={journey.startAddress}
+                      latitude={journey.startLatitude}
+                      longitude={journey.startLongitude}
+                      className='inline text-sm text-emerald-800'
+                    />
+                  </>
+                ) : null}
               </p>
             ) : null}
             {journeyEnded ? (
@@ -430,7 +503,12 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                         {point.checkOutAt ? ` → ${formatTime(point.checkOutAt)}` : ''}
                         {point.city ? ` · ${point.city}` : ''}
                       </p>
-                      <p className='text-xs text-gray-600 mt-1 line-clamp-2'>{point.address || '—'}</p>
+                      <PlaceAddress
+                        address={point.address}
+                        latitude={point.latitude}
+                        longitude={point.longitude}
+                        className='block text-xs text-gray-600 mt-1 line-clamp-2'
+                      />
                       {point.mapsUrl ? (
                         <a
                           href={point.mapsUrl}

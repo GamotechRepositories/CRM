@@ -1,6 +1,18 @@
 /// Role helpers mirroring web `dashboardRoutes` / `authPermissions`.
+enum DashboardKind {
+  admin,
+  hr,
+  manager,
+  teamLeader,
+  siteCoordinator,
+  employee,
+}
+
 class RoleAccess {
   RoleAccess._();
+
+  static String _normalizeKey(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
 
   static String designationTitle(Map<String, dynamic>? user) {
     final d = user?['designation'];
@@ -63,6 +75,38 @@ class RoleAccess {
     return title.contains('team lead') || title == 'team leader';
   }
 
+  /// Site Co-ordinator / Site Coordinator / Site Reliability Engineer.
+  static bool isSiteCoordinatorUser(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    final role = accessRole(user);
+    if (role == 'site_coordinator') return true;
+    final key = _normalizeKey(designationTitle(user));
+    if (key.contains('sitecoordinator')) return true;
+    if (key.contains('sitereliabilityengineer')) return true;
+    if (key.contains('sitereliability') && key.contains('engineer')) return true;
+    return false;
+  }
+
+  static bool _isManagerTitle(String title) {
+    final t = title.toLowerCase();
+    if (t == 'hr manager') return false;
+    if (['admin', 'technical lead'].contains(t)) return false;
+    if (t.contains('manager')) return true;
+    if (t.contains('operations')) return true;
+    return false;
+  }
+
+  static DashboardKind getDashboardKind(Map<String, dynamic>? user) {
+    if (canViewAdminDashboard(user)) return DashboardKind.admin;
+    final role = accessRole(user);
+    final title = designationTitle(user).toLowerCase();
+    if (role == 'hr' || title == 'hr manager') return DashboardKind.hr;
+    if (isTeamLeader(user)) return DashboardKind.teamLeader;
+    if (role == 'manager' || _isManagerTitle(title)) return DashboardKind.manager;
+    if (isSiteCoordinatorUser(user)) return DashboardKind.siteCoordinator;
+    return DashboardKind.employee;
+  }
+
   static List<String>? sidebarSections(Map<String, dynamic>? user) {
     if (hasFullAccess(user)) return null;
     final raw = user?['access']?['sidebarSections'];
@@ -81,14 +125,31 @@ class RoleAccess {
   }
 
   static String dashboardPath(Map<String, dynamic>? user) {
-    if (canViewAdminDashboard(user)) return '/admin-dashboard';
-    final role = accessRole(user);
-    if (role == 'hr' || designationTitle(user).toLowerCase() == 'hr manager') {
-      return '/hr-dashboard';
+    switch (getDashboardKind(user)) {
+      case DashboardKind.admin:
+        return '/admin-dashboard';
+      case DashboardKind.hr:
+        return '/hr-dashboard';
+      case DashboardKind.teamLeader:
+        return '/team-leader-dashboard';
+      case DashboardKind.manager:
+        return '/manager-dashboard';
+      case DashboardKind.siteCoordinator:
+        return '/site-coordinator-dashboard';
+      case DashboardKind.employee:
+        return '/dashboard';
     }
-    if (isTeamLeader(user)) return '/team-leader-dashboard';
-    if (role == 'manager') return '/manager-dashboard';
-    return '/dashboard';
+  }
+
+  static bool isDashboardPath(String path) {
+    return const {
+      '/dashboard',
+      '/admin-dashboard',
+      '/hr-dashboard',
+      '/manager-dashboard',
+      '/team-leader-dashboard',
+      '/site-coordinator-dashboard',
+    }.contains(path);
   }
 
   /// Mirrors web `canApproveLeaveForUser`.

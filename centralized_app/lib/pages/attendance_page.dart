@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/attendance_helpers.dart';
+import '../utils/geocode_helpers.dart';
 
 enum _ViewMode { live, monthly }
 
@@ -247,7 +248,7 @@ class _AttendancePageState extends State<AttendancePage> {
       setState(() => _error = _locationError ?? 'Location unavailable. Enable GPS and try again.');
       return null;
     }
-    final address = AttendanceHelpers.formatCoords(pos.latitude, pos.longitude);
+    final address = await GeocodeHelpers.resolveAddressOrCoords(pos.latitude, pos.longitude);
     return (lat: pos.latitude, lon: pos.longitude, address: address);
   }
 
