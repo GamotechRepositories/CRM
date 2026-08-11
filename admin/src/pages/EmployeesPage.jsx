@@ -258,11 +258,13 @@ const EmployeesPage = () => {
                           >
                             <td className='px-4 py-3'>
                               <div className='flex items-center gap-3'>
-                                <div
-                                  className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${AVATAR_COLORS[index % AVATAR_COLORS.length]}`}
-                                >
-                                  {getInitials(row.name)}
-                                </div>
+                                {row.profilePhoto ? (
+                                  <img src={row.profilePhoto} alt={row.name} className='w-10 h-10 rounded-full object-cover' />
+                                ) : (
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${AVATAR_COLORS[index % AVATAR_COLORS.length]}`}>
+                                    {getInitials(row.name)}
+                                  </div>
+                                )}
                                 <div className='min-w-0'>
                                   <p className='font-semibold text-gray-900 truncate'>{row.name || '—'}</p>
                                   <p className='text-xs text-gray-400 truncate'>{row.email || '—'}</p>
