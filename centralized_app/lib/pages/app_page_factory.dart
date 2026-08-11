@@ -3,16 +3,50 @@ import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../auth/role_guard.dart';
 import 'assign_task_page.dart';
 import 'attendance_page.dart';
 import 'chat_page.dart';
+import 'collaborators_page.dart';
 import 'dashboard_page.dart';
+import 'directory_page.dart';
+import 'lead_management_page.dart';
+
 import 'leave_page.dart';
+
+
+import 'assets_page.dart';
+import 'campaigns_page.dart';
+import 'companies_page.dart';
+import 'departments_page.dart';
+import 'designations_page.dart';
+import 'email_marketing_page.dart';
+import 'expenses_page.dart';
+import 'gst_page.dart';
+import 'hr_dashboard_page.dart';
+import 'invoices_page.dart';
+import 'manager_dashboard_page.dart';
+import 'sms_marketing_page.dart';
+import 'social_media_page.dart';
+import 'team_leader_dashboard_page.dart';
+import 'whatsapp_marketing_page.dart';
+
 import 'my_projects_page.dart';
 import 'my_tasks_page.dart';
+import 'milestones_page.dart';
+import 'payroll_page.dart';
+import 'performance_page.dart';
 import 'placeholder_page.dart';
 import 'profile_page.dart';
+import 'quotations_page.dart';
+import 'reports_page.dart';
+import 'revenue_page.dart';
 import 'settings_page.dart';
+import 'timesheets_page.dart';
+
+
+
+
 
 typedef ListFetcher = Future<List<Map<String, dynamic>>> Function(AuthSession session);
 
@@ -128,11 +162,6 @@ class _ModuleListPageState extends State<ModuleListPage> {
   }
 }
 
-String _populatedName(dynamic v) {
-  if (v is Map) return (v['name'] ?? v['title'] ?? '').toString();
-  return v?.toString() ?? '';
-}
-
 String _fmtDate(dynamic v) {
   if (v == null) return '—';
   final d = DateTime.tryParse(v.toString());
@@ -154,30 +183,32 @@ class AppPageFactory {
 
   static Widget build(String path) {
     if (isDashboardPath(path)) return DashboardPage(requestedPath: path);
+    return RoleGuard(
+      path: path,
+      child: _buildRaw(path),
+    );
+  }
+
+  static Widget _buildRaw(String path) {
     if (path == '/my-profile') return const ProfilePage();
     if (path == '/settings') return const SettingsPage();
 
     switch (path) {
       case '/leads':
       case '/lead-management':
-        return ModuleListPage(
-          title: 'Leads',
-          fetch: (s) => s.api!.fetchLeads(viewerId: s.userId),
-          titleFor: (i) => (i['businessName'] ?? i['name'] ?? 'Lead').toString(),
-          subtitleFor: (i) => '${i['status'] ?? '—'} · ${i['leadSource'] ?? '—'}',
-        );
+        return const LeadManagementPage();
+      case '/collaborators':
+      case '/contacts':
+        return const CollaboratorsPage();
+      case '/companies':
+        return const CompaniesPage();
+      case '/quotations':
+        return const QuotationsPage();
       case '/employees':
-        return ModuleListPage(
-          title: 'Employees',
-          fetch: (s) => s.api!.fetchEmployees(),
-          titleFor: (i) => (i['name'] ?? 'Employee').toString(),
-          subtitleFor: (i) {
-            final d = i['designation'];
-            final title = d is Map ? (d['title'] ?? d['name']) : d;
-            return '${i['department'] ?? '—'} · ${title ?? '—'}';
-          },
-        );
+      case '/directory':
+        return const DirectoryPage();
       case '/clients':
+
         return ModuleListPage(
           title: 'Clients',
           fetch: (s) => s.api!.fetchClients(),
@@ -185,23 +216,19 @@ class AppPageFactory {
           subtitleFor: (i) => '${i['email'] ?? i['phone'] ?? '—'}',
         );
       case '/projects':
-        return ModuleListPage(
-          title: 'Projects',
-          fetch: (s) => s.api!.fetchProjects(),
-          titleFor: (i) => (i['projectName'] ?? i['name'] ?? 'Project').toString(),
-          subtitleFor: (i) => '${i['status'] ?? '—'} · ${_fmtDate(i['createdAt'])}',
-        );
+        return const MyProjectsPage(isAllProjects: true);
       case '/my-projects':
-        return const MyProjectsPage();
+        return const MyProjectsPage(isAllProjects: false);
       case '/tasks':
-        return ModuleListPage(
-          title: 'Tasks',
-          fetch: (s) => s.api!.fetchTasks(),
-          titleFor: (i) => (i['title'] ?? 'Task').toString(),
-          subtitleFor: (i) => '${i['status'] ?? '—'} · ${_fmtDate(i['dueDate'] ?? i['updatedAt'])}',
-        );
+        return const MyTasksPage(isAllTasks: true);
       case '/my-tasks':
-        return const MyTasksPage();
+        return const MyTasksPage(isAllTasks: false);
+      case '/module/milestones':
+      case '/milestones':
+        return const MilestonesPage();
+      case '/module/timesheets':
+      case '/timesheets':
+        return const TimesheetsPage();
       case '/assign-task':
         return const AssignTaskPage();
       case '/assign-task-self':
@@ -212,20 +239,67 @@ class AppPageFactory {
         return const AttendancePage();
       case '/my-attendance':
         return const AttendancePage(forceSelfMode: true);
+      case '/module/performance':
+      case '/performance':
+        return const PerformancePage();
+      case '/module/assets':
+      case '/assets':
+        return const AssetsPage();
+
       case '/billings':
-        return ModuleListPage(
-          title: 'Invoices',
-          fetch: (s) => s.api!.fetchBillings(),
-          titleFor: (i) {
-            final client = i['client'];
-            final name = client is Map ? (client['clientName'] ?? client['name']) : client;
-            return (name ?? 'Invoice').toString();
-          },
-          subtitleFor: (i) {
-            final amount = i['paymentDetails'] is Map ? i['paymentDetails']['amount'] : null;
-            return '₹${amount ?? 0} · ${_fmtDate(i['createdAt'])}';
-          },
-        );
+      case '/invoices':
+        return const InvoicesPage();
+      case '/expenses':
+        return const ExpensesPage();
+      case '/revenue':
+        return const RevenuePage();
+      case '/salaries':
+      case '/payroll':
+        return const PayrollPage();
+      case '/module/gst':
+      case '/gst':
+        return const GstPage();
+      case '/reports':
+        return const ReportsPage();
+      case '/module/departments':
+      case '/departments':
+        return const DepartmentsPage();
+      case '/module/designations':
+      case '/designations':
+        return const DesignationsPage();
+      case '/campaigns':
+        return const CampaignsPage();
+      case '/module/email':
+      case '/email':
+        return const EmailMarketingPage();
+      case '/module/sms':
+      case '/sms':
+        return const SmsMarketingPage();
+      case '/module/whatsapp':
+      case '/whatsapp':
+        return const WhatsappMarketingPage();
+      case '/social-calendar':
+      case '/social':
+        return const SocialMediaPage();
+      case '/hr-dashboard':
+      case '/dashboard/hr':
+      case '/hr':
+        return const HrDashboardPage();
+      case '/manager-dashboard':
+      case '/dashboard/manager':
+      case '/manager':
+        return const ManagerDashboardPage();
+      case '/team-leader-dashboard':
+      case '/dashboard/team_leader':
+      case '/team-leader':
+        return const TeamLeaderDashboardPage();
+
+
+
+
+
+
+
       case '/properties':
         return ModuleListPage(
           title: 'Properties',

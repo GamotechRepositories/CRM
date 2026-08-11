@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_session.dart';
 import '../services/chat_realtime_service.dart';
@@ -19,6 +20,7 @@ class _ChatPageState extends State<ChatPage> {
   List<Map<String, dynamic>> _conversations = [];
   String? _activeConversationId;
   List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _pendingAttachments = [];
   String? _oldestLoadedDay;
   bool _hasOlderDays = false;
 
@@ -160,6 +162,7 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _activeConversationId = conversationId;
       _messages = [];
+      _pendingAttachments = [];
       _oldestLoadedDay = null;
       _hasOlderDays = false;
       _error = null;
@@ -175,6 +178,7 @@ class _ChatPageState extends State<ChatPage> {
     setState(() {
       _activeConversationId = null;
       _messages = [];
+      _pendingAttachments = [];
       _draftCtrl.clear();
     });
   }
@@ -249,14 +253,19 @@ class _ChatPageState extends State<ChatPage> {
     final api = context.read<AuthSession>().api;
     final roomId = _activeConversationId;
     final body = _draftCtrl.text.trim();
-    if (api == null || roomId == null || body.isEmpty || _sending) return;
+    if (api == null || roomId == null || (body.isEmpty && _pendingAttachments.isEmpty) || _sending) return;
 
     setState(() => _sending = true);
     try {
+      final textToSend = body.isEmpty && _pendingAttachments.isNotEmpty
+          ? (_pendingAttachments.first['fileName'] ?? 'Attachment').toString()
+          : body;
+
       final msg = await api.sendChatMessage(
         conversationId: roomId,
         employeeId: _employeeId,
-        body: body,
+        body: textToSend,
+        attachments: _pendingAttachments,
       );
       if (!mounted) return;
       setState(() {
@@ -264,6 +273,7 @@ class _ChatPageState extends State<ChatPage> {
           _messages = [..._messages, msg];
         }
         _draftCtrl.clear();
+        _pendingAttachments = [];
         _sending = false;
       });
       _loadConversations(silent: true);
@@ -288,7 +298,8 @@ class _ChatPageState extends State<ChatPage> {
       );
       if (!mounted) return;
       setState(() {
-        _messages = _messages.map((m) => '${m['_id']}' == '$messageId' ? updated : m).toList();
+        _messages = _messages.map((m) => '${m['_id']}' == messageId ? updated : m).toList();
+
       });
     } catch (e) {
       if (!mounted) return;
@@ -296,6 +307,53 @@ class _ChatPageState extends State<ChatPage> {
         SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     }
+  }
+
+  Future<void> _createPoll({
+    required String question,
+    required List<String> options,
+    bool allowMultiple = false,
+  }) async {
+    final api = context.read<AuthSession>().api;
+    final roomId = _activeConversationId;
+    if (api == null || roomId == null) return;
+
+    try {
+      final msg = await api.createChatPoll(
+        conversationId: roomId,
+        employeeId: _employeeId,
+        question: question,
+        options: options,
+        allowMultiple: allowMultiple,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (!_messages.any((m) => '${m['_id']}' == '${msg['_id']}')) {
+          _messages = [..._messages, msg];
+        }
+      });
+      _loadConversations(silent: true);
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
+  void _addAttachment(Map<String, dynamic> attachment) {
+    setState(() {
+      _pendingAttachments = [..._pendingAttachments, attachment];
+    });
+  }
+
+  void _removeAttachment(int index) {
+    setState(() {
+      final list = [..._pendingAttachments];
+      list.removeAt(index);
+      _pendingAttachments = list;
+    });
   }
 
   void _onScroll() {
@@ -341,6 +399,7 @@ class _ChatPageState extends State<ChatPage> {
           ? _ChatThread(
               conversation: _activeConversation,
               messages: _messages,
+              pendingAttachments: _pendingAttachments,
               loading: _loadingMessages,
               loadingOlder: _loadingOlder,
               sending: _sending,
@@ -351,6 +410,9 @@ class _ChatPageState extends State<ChatPage> {
               onBack: _closeConversation,
               onSend: _sendMessage,
               onVote: _votePoll,
+              onCreatePoll: _createPoll,
+              onAddAttachment: _addAttachment,
+              onRemoveAttachment: _removeAttachment,
               onRefresh: () => _loadTodayMessages(_activeConversationId!, silent: true),
             )
           : _ChatList(
@@ -409,90 +471,91 @@ class _ChatList extends StatelessWidget {
   final String? error;
   final TextEditingController searchCtrl;
   final ValueChanged<String> onSearchChanged;
-  final Future<void> Function({bool silent}) onRefresh;
+  final Future<void> Function() onRefresh;
   final ValueChanged<String> onSelect;
   final VoidCallback onNewChat;
 
   @override
   Widget build(BuildContext context) {
-    if (loading && conversations.isEmpty) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: searchCtrl,
-                  onChanged: onSearchChanged,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'Search chats...',
-                    hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                    prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF94A3B8)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                  ),
-                  style: const TextStyle(fontSize: 11),
-                ),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Messages', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF128C7E)),
+            onPressed: onNewChat,
+            tooltip: 'New Chat',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: TextField(
+              controller: searchCtrl,
+              onChanged: onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search or start new chat',
+                hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                prefixIcon: const Icon(Icons.search, size: 16, color: Color(0xFF64748B)),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                fillColor: const Color(0xFFF1F5F9),
+                filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
               ),
-              const SizedBox(width: 8),
-              Material(
-                color: const Color(0xFF128C7E),
-                borderRadius: BorderRadius.circular(8),
-                child: InkWell(
-                  onTap: onNewChat,
-                  borderRadius: BorderRadius.circular(8),
-                  child: const SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 18),
-                  ),
-                ),
-              ),
-            ],
+              style: const TextStyle(fontSize: 11),
+            ),
           ),
-        ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Text(error!, style: const TextStyle(fontSize: 11, color: Color(0xFFB91C1C))),
-          ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => onRefresh(),
-            child: conversations.isEmpty
-                ? ListView(
-                    children: const [
-                      SizedBox(height: 80),
-                      Center(child: Text('No conversations yet', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
-                    ],
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 16),
-                    itemCount: conversations.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 4),
-                    itemBuilder: (context, i) {
-                      final c = conversations[i];
-                      return _ConversationTile(conversation: c, onTap: () => onSelect('${c['_id']}'));
-                    },
+          if (error != null)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFFEF2F2),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(error!, style: const TextStyle(fontSize: 11, color: Color(0xFFB91C1C))),
+            ),
+          Expanded(
+            child: loading && conversations.isEmpty
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : RefreshIndicator(
+                    onRefresh: onRefresh,
+                    child: conversations.isEmpty
+                        ? ListView(
+                            children: const [
+                              Padding(
+                                padding: EdgeInsets.only(top: 80),
+                                child: Center(child: Text('No conversations yet', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            itemCount: conversations.length,
+                            separatorBuilder: (context, _) => const SizedBox(height: 6),
+                            itemBuilder: (context, index) {
+                              final conv = conversations[index];
+                              final id = '${conv['_id']}';
+                              return _ConversationTile(
+                                conversation: conv,
+                                onTap: () => onSelect(id),
+                              );
+                            },
+                          ),
                   ),
           ),
-        ),
-      ],
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: onNewChat,
+        backgroundColor: const Color(0xFF128C7E),
+        child: const Icon(Icons.message_rounded, color: Colors.white),
+      ),
     );
   }
 }
@@ -573,6 +636,7 @@ class _ChatThread extends StatelessWidget {
   const _ChatThread({
     required this.conversation,
     required this.messages,
+    required this.pendingAttachments,
     required this.loading,
     required this.loadingOlder,
     required this.sending,
@@ -583,11 +647,15 @@ class _ChatThread extends StatelessWidget {
     required this.onBack,
     required this.onSend,
     required this.onVote,
+    required this.onCreatePoll,
+    required this.onAddAttachment,
+    required this.onRemoveAttachment,
     required this.onRefresh,
   });
 
   final Map<String, dynamic>? conversation;
   final List<Map<String, dynamic>> messages;
+  final List<Map<String, dynamic>> pendingAttachments;
   final bool loading;
   final bool loadingOlder;
   final bool sending;
@@ -598,6 +666,9 @@ class _ChatThread extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onSend;
   final Future<void> Function(String messageId, int optionIndex) onVote;
+  final Future<void> Function({required String question, required List<String> options, bool allowMultiple}) onCreatePoll;
+  final ValueChanged<Map<String, dynamic>> onAddAttachment;
+  final ValueChanged<int> onRemoveAttachment;
   final Future<void> Function() onRefresh;
 
   @override
@@ -680,7 +751,8 @@ class _ChatThread extends StatelessWidget {
                           message: msg,
                           mine: mine,
                           employeeId: employeeId,
-                          onVote: onVote,
+                          onVote: (msgId, idx) => onVote(msgId, idx),
+
                         );
                       },
                     ),
@@ -689,8 +761,12 @@ class _ChatThread extends StatelessWidget {
         ),
         _MessageComposer(
           controller: draftCtrl,
+          pendingAttachments: pendingAttachments,
           sending: sending,
           onSend: onSend,
+          onCreatePoll: onCreatePoll,
+          onAddAttachment: onAddAttachment,
+          onRemoveAttachment: onRemoveAttachment,
         ),
       ],
     );
@@ -758,26 +834,145 @@ class _TextContent extends StatelessWidget {
 
   final Map<String, dynamic> message;
 
+  Future<void> _makeCall(BuildContext context, String number) async {
+    final cleanNumber = number.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (cleanNumber.isEmpty) return;
+    final uri = Uri.parse('tel:$cleanNumber');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final body = '${message['body'] ?? ''}';
     final attachments = message['attachments'];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (body.isNotEmpty) Text(body, style: const TextStyle(fontSize: 12, color: Color(0xFF111B21), height: 1.35)),
         if (attachments is List)
           ...attachments.whereType<Map>().map((a) {
-            final name = (a['fileName'] ?? 'Attachment').toString();
+            final name = (a['fileName'] ?? a['name'] ?? 'Attachment').toString();
+            final url = (a['fileUrl'] ?? a['url'] ?? '').toString();
+            final fileType = (a['fileType'] ?? a['type'] ?? '').toString().toLowerCase();
+
+            if (fileType == 'contact') {
+              final phone = (a['contactPhone'] ?? '').toString();
+              final email = (a['contactEmail'] ?? '').toString();
+
+              return Container(
+                margin: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Color(0xFFFF7A45),
+                          child: Icon(Icons.person, size: 14, color: Colors.white),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        ),
+                      ],
+                    ),
+                    if (phone.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone, size: 10, color: Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Text(phone, style: const TextStyle(fontSize: 10, color: Color(0xFF334155))),
+                          const Spacer(),
+                          InkWell(
+                            onTap: () => _makeCall(context, phone),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Text('Call', style: TextStyle(fontSize: 10, color: Color(0xFF2563EB), fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (email.isNotEmpty)
+                      Row(
+                        children: [
+                          const Icon(Icons.email, size: 10, color: Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Text(email, style: const TextStyle(fontSize: 10, color: Color(0xFF334155))),
+                        ],
+                      ),
+                  ],
+                ),
+              );
+            }
+
+            if (fileType == 'image' && url.isNotEmpty) {
+              return Container(
+                margin: const EdgeInsets.only(top: 6),
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Image.network(
+                  url,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    padding: const EdgeInsets.all(12),
+                    color: const Color(0xFFF1F5F9),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.image, size: 16, color: Color(0xFF007BFC)),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(name, style: const TextStyle(fontSize: 11, color: Color(0xFF007BFC)))),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             return Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.attach_file, size: 12, color: Color(0xFF128C7E)),
-                  const SizedBox(width: 4),
-                  Flexible(child: Text(name, style: const TextStyle(fontSize: 10, color: Color(0xFF128C7E)), overflow: TextOverflow.ellipsis)),
-                ],
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      fileType == 'image' ? Icons.image : Icons.insert_drive_file,
+                      size: 14,
+                      color: const Color(0xFF128C7E),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF128C7E), fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }),
@@ -833,7 +1028,8 @@ class _PollContent extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: InkWell(
-              onTap: () => onVote('${message['_id']}', idx),
+              onTap: () => onVote((message['_id'] ?? '').toString(), idx),
+
               borderRadius: BorderRadius.circular(6),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -861,56 +1057,489 @@ class _PollContent extends StatelessWidget {
 class _MessageComposer extends StatelessWidget {
   const _MessageComposer({
     required this.controller,
+    required this.pendingAttachments,
     required this.sending,
     required this.onSend,
+    required this.onCreatePoll,
+    required this.onAddAttachment,
+    required this.onRemoveAttachment,
   });
 
   final TextEditingController controller;
+  final List<Map<String, dynamic>> pendingAttachments;
   final bool sending;
   final VoidCallback onSend;
+  final Future<void> Function({required String question, required List<String> options, bool allowMultiple}) onCreatePoll;
+  final ValueChanged<Map<String, dynamic>> onAddAttachment;
+  final ValueChanged<int> onRemoveAttachment;
+
+  void _showAttachmentMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Share Content', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildAttachOption(
+                    context: ctx,
+                    label: 'Document',
+                    color: const Color(0xFF7F66FF),
+                    icon: Icons.insert_drive_file,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showDocumentAttachModal(context);
+                    },
+                  ),
+                  _buildAttachOption(
+                    context: ctx,
+                    label: 'Photos & Videos',
+                    color: const Color(0xFF007BFC),
+                    icon: Icons.photo_library,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showMediaAttachModal(context);
+                    },
+                  ),
+                  _buildAttachOption(
+                    context: ctx,
+                    label: 'Poll',
+                    color: const Color(0xFFFFBB00),
+                    icon: Icons.poll,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showCreatePollModal(context);
+                    },
+                  ),
+                  _buildAttachOption(
+                    context: ctx,
+                    label: 'Contact',
+                    color: const Color(0xFFFF7A45),
+                    icon: Icons.person_add,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showContactAttachModal(context);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAttachOption({
+    required BuildContext context,
+    required String label,
+    required Color color,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: color,
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+        ],
+      ),
+    );
+  }
+
+  void _showDocumentAttachModal(BuildContext context) {
+    final titleCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Attach Document / File', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Document Name *', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: urlCtrl,
+                decoration: const InputDecoration(labelText: 'File URL / Link (optional)', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final name = titleCtrl.text.trim();
+                if (name.isEmpty) return;
+                onAddAttachment({
+                  'fileName': name,
+                  'fileUrl': urlCtrl.text.trim(),
+                  'fileType': 'document',
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Attach'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showMediaAttachModal(BuildContext context) {
+    final titleCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Attach Photo or Video', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Media Title *', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: urlCtrl,
+                decoration: const InputDecoration(labelText: 'Image / Video URL *', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final name = titleCtrl.text.trim();
+                final url = urlCtrl.text.trim();
+                if (name.isEmpty && url.isEmpty) return;
+                onAddAttachment({
+                  'fileName': name.isNotEmpty ? name : 'Photo Attachment',
+                  'fileUrl': url,
+                  'fileType': 'image',
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Attach'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showCreatePollModal(BuildContext context) {
+    final qCtrl = TextEditingController();
+    final opt1Ctrl = TextEditingController();
+    final opt2Ctrl = TextEditingController();
+    final extraOpts = <TextEditingController>[];
+    bool allowMultiple = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Create a Poll', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                    const Divider(),
+                    TextField(
+                      controller: qCtrl,
+                      decoration: const InputDecoration(labelText: 'Question *', isDense: true),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('Options', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: opt1Ctrl,
+                      decoration: const InputDecoration(labelText: 'Option 1 *', isDense: true),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: opt2Ctrl,
+                      decoration: const InputDecoration(labelText: 'Option 2 *', isDense: true),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    ...List.generate(extraOpts.length, (idx) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: extraOpts[idx],
+                                decoration: InputDecoration(labelText: 'Option ${idx + 3}', isDense: true),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                              onPressed: () {
+                                setModalState(() {
+                                  extraOpts[idx].dispose();
+                                  extraOpts.removeAt(idx);
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        setModalState(() {
+                          extraOpts.add(TextEditingController());
+                        });
+                      },
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add Option', style: TextStyle(fontSize: 11)),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Expanded(child: Text('Allow multiple answers', style: TextStyle(fontSize: 11))),
+                        Switch(
+                          value: allowMultiple,
+                          onChanged: (v) => setModalState(() => allowMultiple = v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final question = qCtrl.text.trim();
+                          final o1 = opt1Ctrl.text.trim();
+                          final o2 = opt2Ctrl.text.trim();
+                          if (question.isEmpty || o1.isEmpty || o2.isEmpty) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Question and at least 2 options are required')),
+                            );
+                            return;
+                          }
+                          final options = [o1, o2, ...extraOpts.map((c) => c.text.trim()).where((t) => t.isNotEmpty)];
+                          Navigator.pop(ctx);
+                          await onCreatePoll(question: question, options: options, allowMultiple: allowMultiple);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF128C7E),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Create Poll'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showContactAttachModal(BuildContext context) {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Share Contact', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Contact Name *', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Phone Number', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email', isDense: true),
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                onAddAttachment({
+                  'fileName': name,
+                  'fileType': 'contact',
+                  'contactPhone': phoneCtrl.text.trim(),
+                  'contactEmail': emailCtrl.text.trim(),
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Attach Contact'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF0F2F5),
       padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + MediaQuery.paddingOf(context).bottom),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'Type a message',
-                hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+          if (pendingAttachments.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFCBD5E1)),
               ),
-              style: const TextStyle(fontSize: 12),
-              onSubmitted: (_) => onSend(),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Material(
-            color: const Color(0xFF128C7E),
-            borderRadius: BorderRadius.circular(24),
-            child: InkWell(
-              onTap: sending ? null : onSend,
-              borderRadius: BorderRadius.circular(24),
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: sending
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: List.generate(pendingAttachments.length, (idx) {
+                  final att = pendingAttachments[idx];
+                  final name = (att['fileName'] ?? 'Attachment').toString();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.attach_file, size: 12, color: Color(0xFF128C7E)),
+                        const SizedBox(width: 4),
+                        Text(name, style: const TextStyle(fontSize: 10, color: Color(0xFF0F172A))),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => onRemoveAttachment(idx),
+                          child: const Icon(Icons.close, size: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ),
             ),
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFF128C7E), size: 24),
+                onPressed: () => _showAttachmentMenu(context),
+                tooltip: 'Attach Content',
+              ),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: 'Type a message',
+                    hintStyle: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  onSubmitted: (_) => onSend(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Material(
+                color: const Color(0xFF128C7E),
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  onTap: sending ? null : onSend,
+                  borderRadius: BorderRadius.circular(24),
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: sending
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -948,7 +1577,7 @@ class _NewChatSheetState extends State<_NewChatSheet> {
 
   void _search(String query) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 250), () async {
+    _debounce = Timer(const Duration(milliseconds: 300), () async {
       final api = context.read<AuthSession>().api;
       if (api == null) return;
       setState(() => _loading = true);
@@ -961,76 +1590,80 @@ class _NewChatSheetState extends State<_NewChatSheet> {
         });
       } catch (_) {
         if (!mounted) return;
-        setState(() {
-          _employees = [];
-          _loading = false;
-        });
+        setState(() => _loading = false);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.92,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+            ),
+            child: Row(
+              children: [
+                const Expanded(child: Text('New Chat', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold))),
+                IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
           ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2))),
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('New chat', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: _search,
+              decoration: InputDecoration(
+                hintText: 'Search people...',
+                hintStyle: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                prefixIcon: const Icon(Icons.search, size: 16),
+                isDense: true,
+                fillColor: const Color(0xFFF1F5F9),
+                filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: _search,
-                  decoration: InputDecoration(
-                    hintText: 'Search employees...',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (_loading) const LinearProgressIndicator(minHeight: 2),
-              Expanded(
-                child: ListView.builder(
-                  controller: scrollController,
-                  itemCount: _employees.length,
-                  itemBuilder: (context, i) {
-                    final emp = _employees[i];
-                    final name = (emp['name'] ?? 'Employee').toString();
-                    final dept = (emp['department'] ?? '').toString();
-                    return ListTile(
-                      dense: true,
-                      leading: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: ChatHelpers.avatarColor(name).withValues(alpha: 0.15),
-                        child: Text(ChatHelpers.initials(name), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: ChatHelpers.avatarColor(name))),
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : _employees.isEmpty
+                    ? const Center(child: Text('No contacts found', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))))
+                    : ListView.separated(
+                        itemCount: _employees.length,
+                        separatorBuilder: (context, _) => const Divider(height: 1, indent: 60),
+                        itemBuilder: (context, idx) {
+                          final emp = _employees[idx];
+                          final name = (emp['name'] ?? 'Employee').toString();
+                          final dept = (emp['department'] ?? '').toString();
+                          final id = '${emp['_id']}';
+                          final color = ChatHelpers.avatarColor(name);
+
+                          return ListTile(
+                            leading: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: color.withValues(alpha: 0.15),
+                              child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
+                            ),
+                            title: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            subtitle: dept.isNotEmpty ? Text(dept, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))) : null,
+                            onTap: () => Navigator.pop(context, id),
+                          );
+                        },
                       ),
-                      title: Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      subtitle: dept.isNotEmpty ? Text(dept, style: const TextStyle(fontSize: 10)) : null,
-                      onTap: () => Navigator.pop(context, '${emp['_id']}'),
-                    );
-                  },
-                ),
-              ),
-            ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

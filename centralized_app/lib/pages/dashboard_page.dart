@@ -7,7 +7,10 @@ import '../dashboard/dashboard_stats.dart';
 import '../dashboard/employee_dashboard_stats.dart';
 import '../navigation/app_nav.dart';
 import 'employee_dashboard_body.dart';
+import 'hr_dashboard_page.dart';
+import 'manager_dashboard_page.dart';
 import 'site_coordinator_dashboard_body.dart';
+import 'team_leader_dashboard_page.dart';
 
 /// Dashboard body — role-specific KPIs (admin, site coordinator, employee, …).
 class DashboardPage extends StatefulWidget {
@@ -97,6 +100,18 @@ class _DashboardPageState extends State<DashboardPage> {
     final session = context.watch<AuthSession>();
     final kind = RoleAccess.getDashboardKind(session.user);
     final firstName = session.userName.split(' ').first;
+
+    if (kind == DashboardKind.hr) {
+      return const HrDashboardPage();
+    }
+
+    if (kind == DashboardKind.manager) {
+      return const ManagerDashboardPage();
+    }
+
+    if (kind == DashboardKind.teamLeader) {
+      return const TeamLeaderDashboardPage();
+    }
 
     if (kind == DashboardKind.siteCoordinator) {
       return Column(
@@ -230,19 +245,28 @@ class DashboardStatsBody extends StatelessWidget {
 
   Widget _kpiGrid(BuildContext context, DashboardStats s) {
     final items = [
-      _KpiData('Users', '${s.employeeCount}', s.employeeGrowth),
-      _KpiData('Revenue', formatCompactInr(s.revenue), s.revenueGrowth),
-      _KpiData('New Leads', '${s.newLeadsThisMonth}', s.leadGrowth),
-      _KpiData('Open Deals', '${s.openDeals}', s.dealGrowth),
-      _KpiData('Tasks Done', '${s.completedTasks}', s.taskGrowth),
+      _KpiData('Users', '${s.employeeCount}', s.employeeGrowth, '👥'),
+      _KpiData('Revenue', formatCompactInr(s.revenue), s.revenueGrowth, '💰'),
+      _KpiData('New Leads', '${s.newLeadsThisMonth}', s.leadGrowth, '📈'),
+      _KpiData('Open Deals', '${s.openDeals}', s.dealGrowth, '🤝'),
+      _KpiData('Tasks Done', '${s.completedTasks}', s.taskGrowth, '✅'),
     ];
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: items
-          .map((k) => SizedBox(
-                width: (MediaQuery.sizeOf(context).width - 26) / 2,
-                child: _KpiCard(data: k),
+          .map((k) => GestureDetector(
+                onTap: () {
+                  if (k.title == 'Users') AppNavScope.navigate(context, '/employees');
+                  if (k.title == 'Revenue') AppNavScope.navigate(context, '/finance');
+                  if (k.title == 'New Leads') AppNavScope.navigate(context, '/leads');
+                  if (k.title == 'Open Deals') AppNavScope.navigate(context, '/deals');
+                  if (k.title == 'Tasks Done') AppNavScope.navigate(context, '/tasks');
+                },
+                child: SizedBox(
+                  width: (MediaQuery.sizeOf(context).width - 26) / 2,
+                  child: _KpiCard(data: k),
+                ),
               ))
           .toList(),
     );
@@ -452,10 +476,11 @@ class DashboardStatsBody extends StatelessWidget {
 }
 
 class _KpiData {
-  const _KpiData(this.title, this.value, this.change);
+  const _KpiData(this.title, this.value, this.change, this.emoji);
   final String title;
   final String value;
   final double change;
+  final String emoji;
 }
 
 class _KpiCard extends StatelessWidget {
@@ -465,29 +490,35 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = data.change >= 0;
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: positive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(data.title, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+          Row(
+            children: [
+              Text(data.emoji, style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 4),
+              Text(data.title, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+            ],
+          ),
           const SizedBox(height: 2),
           Text(data.value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
-              color: positive ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
               '${positive ? '↑' : '↓'} ${data.change.abs()}% MoM',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: positive ? const Color(0xFF047857) : const Color(0xFFB91C1C)),
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF475569)),
             ),
           ),
         ],

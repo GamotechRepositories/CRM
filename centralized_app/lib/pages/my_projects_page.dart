@@ -5,9 +5,11 @@ import '../auth/auth_session.dart';
 import '../navigation/app_nav.dart';
 import '../utils/project_helpers.dart';
 
-/// `/my-projects` — projects where the user is PM or team member.
+/// Projects Page — supports all projects (`/projects`) or user projects (`/my-projects`).
 class MyProjectsPage extends StatefulWidget {
-  const MyProjectsPage({super.key});
+  const MyProjectsPage({super.key, this.isAllProjects = false});
+
+  final bool isAllProjects;
 
   @override
   State<MyProjectsPage> createState() => _MyProjectsPageState();
@@ -45,7 +47,9 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
     });
 
     try {
-      final items = await api.fetchMyProjects(session.userId);
+      final items = widget.isAllProjects
+          ? await api.fetchProjects()
+          : await api.fetchMyProjects(session.userId);
       if (!mounted) return;
       setState(() {
         _projects = items;
@@ -128,9 +132,11 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
           ListView(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 72),
             children: [
-              const Text(
-                'Projects where you are assigned as project manager or team member.',
-                style: TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
+              Text(
+                widget.isAllProjects
+                    ? 'Track and manage all projects in one place.'
+                    : 'Projects where you are assigned as project manager or team member.',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -375,12 +381,13 @@ class _FiltersBar extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 isDense: true,
-                value: filterClient,
+                initialValue: filterClient,
                 decoration: _filterDecoration('Client'),
                 style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
                 items: [
-                  const DropdownMenuItem(value: 'All', child: Text('All Clients', style: TextStyle(fontSize: 11))),
+                  const DropdownMenuItem(value: 'All', child: Text('All Clients', style: TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
                   ...clients.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))),
                 ],
                 onChanged: (v) => onClientChanged(v ?? 'All'),

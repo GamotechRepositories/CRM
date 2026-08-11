@@ -119,9 +119,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   constraints: const BoxConstraints(maxWidth: 400),
                   child: Column(
                     children: [
-                      const _AppLogo(),
+                      _AppLogo(company: _company),
                       const SizedBox(height: 16),
-                      _BrandTitle(appName: AppEnv.appName),
+                      _BrandTitle(appName: _company?.displayName ?? AppEnv.appName),
+                      if (_company != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _company!.tagline,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
@@ -144,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Text('Company', style: _labelStyle),
+                            const Text('Select Organization', style: _labelStyle),
                             const SizedBox(height: 6),
                             DropdownButtonFormField<CompanyConfig>(
                               key: ValueKey(_company?.key ?? 'company'),
@@ -163,10 +170,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                   .map(
                                     (c) => DropdownMenuItem(
                                       value: c,
-                                      child: Text(
-                                        '${c.displayName} (${c.shortName})',
-                                        style: _inputStyle,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Row(
+                                        children: [
+                                          CompanyLogoWidget(company: c, size: 24),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              c.displayName,
+                                              style: _inputStyle,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: c.primaryColor.withAlpha(30),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              c.shortName,
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: c.primaryColor),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   )
@@ -422,13 +448,17 @@ class _LoginBackgroundPainter extends CustomPainter {
 }
 
 class _AppLogo extends StatelessWidget {
-  const _AppLogo();
+  final CompanyConfig? company;
+  const _AppLogo({Key? key, this.company}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    if (company != null) {
+      return CompanyLogoWidget(company: company!, size: 72);
+    }
     return Container(
-      width: 72,
-      height: 72,
+      width: 120,
+      height: 120,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
@@ -446,7 +476,7 @@ class _AppLogo extends StatelessWidget {
       ),
       child: CustomPaint(
         painter: _LogoIconPainter(),
-        size: const Size(72, 72),
+        size: Size(72, 72),
       ),
     );
   }

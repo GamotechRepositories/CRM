@@ -94,14 +94,184 @@ class CompanyApi {
   }) =>
       _list(path, query: query, softFail: softFail);
 
-  Future<List<Map<String, dynamic>>> fetchLeads({String? viewerId}) {
-    final query = (usesLeadsViewerId && viewerId != null && viewerId.isNotEmpty)
-        ? {'viewerId': viewerId}
-        : null;
-    return _list(CrmPaths.leads, query: query, softFail: true);
+  Future<List<Map<String, dynamic>>> fetchLeads({
+    String? viewerId,
+    Map<String, String>? filters,
+  }) {
+    final query = <String, String>{};
+    if (usesLeadsViewerId && viewerId != null && viewerId.isNotEmpty) {
+      query['viewerId'] = viewerId;
+    }
+    if (filters != null) {
+      filters.forEach((k, v) {
+        if (v.trim().isNotEmpty) query[k] = v.trim();
+      });
+    }
+    return _list(CrmPaths.leads, query: query.isEmpty ? null : query, softFail: true);
   }
 
+  Future<Map<String, dynamic>> createLead(Map<String, dynamic> body) {
+    return client.postJson(CrmPaths.leads, body: body);
+  }
+
+  Future<Map<String, dynamic>> updateLead(String id, Map<String, dynamic> body) {
+    return client.putJson('${CrmPaths.leads}/$id', body: body);
+  }
+
+  Future<Map<String, dynamic>> fetchLeadById(String id) {
+    return client.getJson('${CrmPaths.leads}/$id');
+  }
+
+  Future<Map<String, dynamic>> addLeadFollowUp(String id, Map<String, dynamic> body) {
+    return client.postJson('${CrmPaths.leads}/$id/follow-up', body: body);
+  }
+
+  Future<Map<String, dynamic>> fetchDistributionPreview(String actorId) {
+    return client.getJson('${CrmPaths.leads}/distribution-preview', query: {'actorId': actorId});
+  }
+
+  Future<Map<String, dynamic>> distributeLeads(String distributedBy) {
+    return client.postJson('${CrmPaths.leads}/distribute', body: {'distributedBy': distributedBy});
+  }
+
+  Future<Map<String, dynamic>> importLeadsCsv({
+    required String csvText,
+    required String fileName,
+    required String importedBy,
+  }) {
+    return client.postJson('${CrmPaths.leads}/import-csv', body: {
+      'csvText': csvText,
+      'fileName': fileName,
+      'importedBy': importedBy,
+    });
+  }
+
+
   Future<List<Map<String, dynamic>>> fetchEmployees() => _list(CrmPaths.employees);
+
+  Future<Map<String, dynamic>> createEmployee(Map<String, dynamic> body) async {
+    return client.postJson(CrmPaths.employees, body: body);
+  }
+
+  Future<Map<String, dynamic>> updateEmployee(String id, Map<String, dynamic> body) async {
+    return client.putJson('${CrmPaths.employees}/$id', body: body);
+  }
+
+  Future<void> deleteEmployee(String id) async {
+    await client.deleteJson('${CrmPaths.employees}/$id');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAssets({Map<String, String>? query}) =>
+      _list('/assets', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createAsset(Map<String, dynamic> body) =>
+      client.postJson('/assets', body: body);
+
+  Future<Map<String, dynamic>> updateAsset(String id, Map<String, dynamic> body) =>
+      client.putJson('/assets/$id', body: body);
+
+  Future<void> deleteAsset(String id) =>
+      client.deleteJson('/assets/$id');
+
+  Future<Map<String, dynamic>> assignAsset(String assetId, String employeeId) =>
+      client.putJson('/assets/$assetId/assign', body: {'assignedTo': employeeId});
+
+  // --- FINANCE API METHODS ---
+  Future<List<Map<String, dynamic>>> fetchBillings({Map<String, String>? query}) =>
+      _list(CrmPaths.billing, query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createBilling(Map<String, dynamic> body) =>
+      client.postJson(CrmPaths.billing, body: body);
+
+  Future<Map<String, dynamic>> updateBilling(String id, Map<String, dynamic> body) =>
+      client.putJson('${CrmPaths.billing}/$id', body: body);
+
+  Future<void> deleteBilling(String id) =>
+      client.deleteJson('${CrmPaths.billing}/$id');
+
+  Future<List<Map<String, dynamic>>> fetchExpenses({Map<String, String>? query}) =>
+      _list('/expenses', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createExpense(Map<String, dynamic> body) =>
+      client.postJson('/expenses', body: body);
+
+  Future<Map<String, dynamic>> updateExpense(String id, Map<String, dynamic> body) =>
+      client.putJson('/expenses/$id', body: body);
+
+  Future<void> deleteExpense(String id) =>
+      client.deleteJson('/expenses/$id');
+
+  Future<List<Map<String, dynamic>>> fetchSalaries({Map<String, String>? query}) =>
+      _list('/salaries', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createSalary(Map<String, dynamic> body) =>
+      client.postJson('/salaries', body: body);
+
+  Future<Map<String, dynamic>> updateSalary(String id, Map<String, dynamic> body) =>
+      client.putJson('/salaries/$id', body: body);
+
+  Future<void> deleteSalary(String id) =>
+      client.deleteJson('/salaries/$id');
+
+  // --- COMPANIES & QUOTATIONS API METHODS ---
+  Future<List<Map<String, dynamic>>> fetchCompanies({Map<String, String>? query}) =>
+      _list('/companies', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createCompanyRecord(Map<String, dynamic> body) =>
+      client.postJson('/companies', body: body);
+
+  Future<Map<String, dynamic>> updateCompanyRecord(String id, Map<String, dynamic> body) =>
+      client.putJson('/companies/$id', body: body);
+
+  Future<void> deleteCompanyRecord(String id) =>
+      client.deleteJson('/companies/$id');
+
+  Future<List<Map<String, dynamic>>> fetchQuotations({Map<String, String>? query}) =>
+      _list('/quotations', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createQuotation(Map<String, dynamic> body) =>
+      client.postJson('/quotations', body: body);
+
+  Future<Map<String, dynamic>> updateQuotation(String id, Map<String, dynamic> body) =>
+      client.putJson('/quotations/$id', body: body);
+
+  Future<void> deleteQuotation(String id) =>
+      client.deleteJson('/quotations/$id');
+
+  // --- DESIGNATIONS API METHODS ---
+  Future<List<Map<String, dynamic>>> fetchDesignations({Map<String, String>? query}) =>
+      _list('/designations', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createDesignation(Map<String, dynamic> body) =>
+      client.postJson('/designations', body: body);
+
+  Future<Map<String, dynamic>> updateDesignation(String id, Map<String, dynamic> body) =>
+      client.putJson('/designations/$id', body: body);
+
+  Future<void> deleteDesignation(String id) =>
+      client.deleteJson('/designations/$id');
+
+  // --- MARKETING API METHODS ---
+  Future<List<Map<String, dynamic>>> fetchCampaigns({Map<String, String>? query}) =>
+      _list('/campaigns', query: query, softFail: true);
+
+  Future<Map<String, dynamic>> createCampaign(Map<String, dynamic> body) =>
+      client.postJson('/campaigns', body: body);
+
+  Future<Map<String, dynamic>> updateCampaign(String id, Map<String, dynamic> body) =>
+      client.putJson('/campaigns/$id', body: body);
+
+  Future<void> deleteCampaign(String id) =>
+      client.deleteJson('/campaigns/$id');
+
+  Future<List<Map<String, dynamic>>> fetchSocialCalendar({Map<String, String>? query}) =>
+      _list('/social-calendars', query: query, softFail: true);
+
+
+
+
+
+
 
   Future<List<Map<String, dynamic>>> fetchClients() => _list(CrmPaths.clients);
 
@@ -168,8 +338,6 @@ class CompanyApi {
         'actorId': actorId,
         if (comment.isNotEmpty) 'comment': comment,
       });
-
-  Future<List<Map<String, dynamic>>> fetchBillings() => _list(CrmPaths.billing, softFail: true);
 
   Future<List<Map<String, dynamic>>> fetchProperties() =>
       _list(CrmPaths.properties, softFail: true);
@@ -343,6 +511,25 @@ class CompanyApi {
     return res;
   }
 
+  Future<Map<String, dynamic>> createChatPoll({
+    required String conversationId,
+    required String employeeId,
+    required String question,
+    required List<String> options,
+    bool allowMultiple = false,
+  }) async {
+    final res = await client.postJson(CrmPaths.chatPolls(conversationId), body: {
+      'employeeId': employeeId,
+      'question': question,
+      'options': options,
+      'allowMultiple': allowMultiple,
+    });
+    final msg = res['message'];
+    if (msg is Map) return Map<String, dynamic>.from(msg);
+    return res;
+  }
+
+
   Future<Map<String, dynamic>> fetchTravelTimeline({
     required String employeeId,
     required String date,
@@ -464,4 +651,47 @@ class CompanyApi {
       leaves: results[6],
     );
   }
+
+  // --- COLLABORATORS API ---
+  Future<List<Map<String, dynamic>>> getCollaborators({
+    String? rateType,
+    String? city,
+    String? individualType,
+  }) async {
+    final query = <String, String>{};
+    if (rateType != null && rateType.isNotEmpty) query['rateType'] = rateType;
+    if (city != null && city.isNotEmpty) query['city'] = city;
+    if (individualType != null && individualType.isNotEmpty) {
+      query['individualType'] = individualType;
+    }
+    final res = await client.getJson('/collaborators', query: query);
+    final data = res['data'] ?? res;
+    if (data is List) {
+      return data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    return [];
+
+  }
+
+  Future<Map<String, dynamic>> getCollaboratorById(String id) async {
+    final res = await client.getJson('/collaborators/$id');
+    return res;
+  }
+
+  Future<Map<String, dynamic>> createCollaborator(Map<String, dynamic> body) async {
+    final res = await client.postJson('/collaborators', body: body);
+    return res;
+  }
+
+  Future<Map<String, dynamic>> updateCollaborator(String id, Map<String, dynamic> body) async {
+    final res = await client.putJson('/collaborators/$id', body: body);
+    return res;
+  }
+
+  Future<void> deleteCollaborator(String id) async {
+    await client.deleteJson('/collaborators/$id');
+  }
+
 }
+
+

@@ -26,9 +26,13 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _initPathHistoryIfNeeded() {
-    if (_pathHistory.isNotEmpty) return;
     final session = context.read<AuthSession>();
-    _pathHistory = [RoleAccess.dashboardPath(session.user)];
+    final canonical = RoleAccess.dashboardPath(session.user);
+    if (_pathHistory.isEmpty) {
+      _pathHistory = [canonical];
+    } else if (_pathHistory.length == 1 && RoleAccess.isDashboardPath(_pathHistory.first)) {
+      _pathHistory = [canonical];
+    }
   }
 
   @override
@@ -56,12 +60,17 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  final Map<String, Widget> _cachedPages = {};
+
   @override
   Widget build(BuildContext context) {
     _initPathHistoryIfNeeded();
     final session = context.watch<AuthSession>();
     final nav = SidebarNav.build(sidebarContextForSession(session));
     final pageTitle = SidebarNav.labelForPath(nav, _selectedPath) ?? 'CRM';
+
+    // Retrieve cached page or build a new one.
+    final page = _cachedPages[_selectedPath] ??= AppPageFactory.build(_selectedPath);
 
     return PopScope(
       canPop: _pathHistory.length <= 1,
@@ -104,10 +113,7 @@ class _AppShellState extends State<AppShell> {
         ),
         body: AppNavScope(
           goTo: _selectPath,
-          child: KeyedSubtree(
-            key: ValueKey(_selectedPath),
-            child: AppPageFactory.build(_selectedPath),
-          ),
+          child: page,
         ),
       ),
     );

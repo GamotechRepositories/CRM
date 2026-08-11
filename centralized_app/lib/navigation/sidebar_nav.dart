@@ -252,6 +252,9 @@ class SidebarNav {
         icon: '📢',
         children: const [
           SidebarChildItem(id: 'campaigns', label: 'Campaigns', path: '/campaigns', requiresFullAccess: true),
+          SidebarChildItem(id: 'email', label: 'Email', path: '/module/email', requiresFullAccess: true),
+          SidebarChildItem(id: 'sms', label: 'SMS', path: '/module/sms', requiresFullAccess: true),
+          SidebarChildItem(id: 'whatsapp', label: 'WhatsApp', path: '/module/whatsapp', requiresFullAccess: true),
           SidebarChildItem(id: 'social', label: 'Social Media', path: '/social-calendar'),
         ],
       ),

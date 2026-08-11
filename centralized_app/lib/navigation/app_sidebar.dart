@@ -28,7 +28,7 @@ class AppSidebar extends StatefulWidget {
 }
 
 class _AppSidebarState extends State<AppSidebar> {
-  final Set<String> _expanded = {'workspace', 'crm', 'communication'};
+  final Set<String> _expanded = {};
 
   @override
   Widget build(BuildContext context) {
@@ -43,31 +43,96 @@ class _AppSidebarState extends State<AppSidebar> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    company?.displayName ?? 'MultiCRM',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                  Row(
+                    children: [
+                      if (company != null)
+                        CompanyLogoWidget(company: company, size: 36)
+                      else
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.business_rounded, color: Colors.white, size: 20),
+                        ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              company?.displayName ?? 'MultiCRM',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (company != null) ...[
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: company.primaryColor.withAlpha(50),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: company.primaryColor.withAlpha(100)),
+                                ),
+                                child: Text(
+                                  company.shortName,
+                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: company.primaryColor),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: const Color(0xFF334155),
+                          child: Text(
+                            session.userName.isNotEmpty ? session.userName[0].toUpperCase() : 'U',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                session.userName.isEmpty ? 'Logged User' : session.userName,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                session.userEmail,
+                                style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8)),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    session.userName.isEmpty ? session.userEmail : session.userName,
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (company != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      company.shortName,
-                      style: const TextStyle(fontSize: 9, color: Color(0xFF64748B)),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -111,6 +176,7 @@ class _AppSidebarState extends State<AppSidebar> {
             if (expanded) {
               _expanded.remove(entry.id);
             } else {
+              _expanded.clear();
               _expanded.add(entry.id);
             }
           }),

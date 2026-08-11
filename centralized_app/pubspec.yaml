@@ -30,3 +30,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/ads.jpg
+    - assets/bangar.jpg
+    - assets/mahaProperties.png
+    - assets/str.jpg

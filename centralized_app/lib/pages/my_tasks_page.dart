@@ -5,9 +5,11 @@ import '../auth/auth_session.dart';
 import '../navigation/app_nav.dart';
 import '../utils/task_status.dart';
 
-/// `/my-tasks` — assigned tasks for the logged-in employee.
+/// Tasks Page — supports all company tasks (`/tasks`) or user tasks (`/my-tasks`).
 class MyTasksPage extends StatefulWidget {
-  const MyTasksPage({super.key});
+  const MyTasksPage({super.key, this.isAllTasks = false});
+
+  final bool isAllTasks;
 
   @override
   State<MyTasksPage> createState() => _MyTasksPageState();
@@ -42,7 +44,9 @@ class _MyTasksPageState extends State<MyTasksPage> {
       _error = null;
     });
     try {
-      final items = await api.fetchTasks(query: {'employeeId': session.userId});
+      final items = widget.isAllTasks
+          ? await api.fetchTasks()
+          : await api.fetchTasks(query: {'employeeId': session.userId});
       if (!mounted) return;
       setState(() {
         _tasks = items;
@@ -125,9 +129,11 @@ class _MyTasksPageState extends State<MyTasksPage> {
           ListView(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 72),
             children: [
-          const Text(
-            'Tasks assigned to you by project managers and team leads.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
+          Text(
+            widget.isAllTasks
+                ? 'Overview and status of all company tasks across all projects.'
+                : 'Tasks assigned to you by project managers and team leads.',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -341,12 +347,14 @@ class _FiltersBar extends StatelessWidget {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 isDense: true,
-                value: filterProject.isEmpty ? '' : filterProject,
+                initialValue: filterProject.isEmpty ? '' : filterProject,
                 decoration: _filterDecoration('Project'),
+
                 style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
                 items: [
-                  const DropdownMenuItem(value: '', child: Text('All projects', style: TextStyle(fontSize: 11))),
+                  const DropdownMenuItem(value: '', child: Text('All projects', style: TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
                   ...projects.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))),
                 ],
                 onChanged: (v) => onProjectChanged(v ?? ''),
@@ -613,8 +621,9 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 DropdownButtonFormField<String>(
-                                  value: _selectedStatus,
+                                  initialValue: _selectedStatus,
                                   isDense: true,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -622,7 +631,7 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                                   ),
                                   style: const TextStyle(fontSize: 11),
                                   items: options
-                                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 11))))
+                                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)))
                                       .toList(),
                                   onChanged: canEdit ? (v) => setState(() => _selectedStatus = v) : null,
                                 ),
@@ -678,8 +687,8 @@ class _DetailCard extends StatelessWidget {
             Text(title!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
           ],
-          if (child != null) child!,
-          for (final row in rows) row,
+          ?child,
+          ...rows,
         ],
       ),
     );
