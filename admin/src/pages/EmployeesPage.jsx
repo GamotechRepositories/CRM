@@ -329,9 +329,13 @@ const EmployeesPage = () => {
 
           <div className='bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5'>
             <div className='flex flex-wrap items-start gap-4'>
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white ${AVATAR_COLORS[0]}`}>
-                {getInitials(emp.name)}
-              </div>
+              {emp.profilePhoto ? (
+                <img src={emp.profilePhoto} alt={emp.name} className='w-16 h-16 rounded-2xl object-cover' />
+              ) : (
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white ${AVATAR_COLORS[0]}`}>
+                  {getInitials(emp.name)}
+                </div>
+              )}
               <div className='min-w-0 flex-1'>
                 <div className='flex flex-wrap items-center gap-2'>
                   <h1 className='text-2xl font-bold text-gray-900'>{emp.name}</h1>
