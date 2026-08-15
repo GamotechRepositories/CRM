@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/crm_companies.dart';
-import '../../../../core/error/result.dart';
 import '../../../../core/extensions/context_extensions.dart';
-import '../../../../core/network/api_health_service.dart';
 import '../../../../core/rbac/rbac_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -25,7 +23,6 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final colorScheme = context.colorScheme;
-    final healthAsync = ref.watch(apiHealthProvider);
     final permissions = ref.watch(permissionSetProvider);
     final user = ref.watch(authSessionProvider).session?.user;
     final meetings = ref.watch(meetingsControllerProvider).meetings;
@@ -372,51 +369,6 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ).animate().fadeIn(delay: 120.ms),
-          const SizedBox(height: AppSpacing.md),
-
-          // Connection
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Connection',
-                  style: context.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                healthAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (error, _) => Text(
-                    'Could not reach server',
-                    style: context.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.error,
-                    ),
-                  ),
-                  data: (result) => switch (result) {
-                    Success() => const _InfoLine(
-                      icon: Icons.check_circle_rounded,
-                      text: 'Connected to meeting server',
-                      color: AppColors.success,
-                    ),
-                    Error(:final failure) => _InfoLine(
-                      icon: Icons.error_outline_rounded,
-                      text: failure.message,
-                      color: colorScheme.error,
-                    ),
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppButton(
-                  label: 'Test connection',
-                  icon: Icons.wifi_tethering,
-                  variant: AppButtonVariant.outlined,
-                  onPressed: () => ref.invalidate(apiHealthProvider),
-                ),
-              ],
-            ),
-          ).animate().fadeIn(delay: 150.ms),
           const SizedBox(height: AppSpacing.md),
 
           // About

@@ -42,10 +42,18 @@ class AuthHeroLogo extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(
-                Icons.groups_rounded,
-                size: size * 0.48,
-                color: scheme.onPrimary,
+              child: ClipOval(
+                child: Image.asset(
+                  AppConstants.appLogoPath,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    Icons.groups_rounded,
+                    size: size * 0.48,
+                    color: scheme.onPrimary,
+                  ),
+                ),
               ),
             ),
           ),

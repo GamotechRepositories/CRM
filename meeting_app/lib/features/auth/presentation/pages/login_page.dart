@@ -14,7 +14,6 @@ import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/loading/loading_overlay.dart';
 import '../providers/auth_providers.dart';
 import '../states/login_state.dart';
-import '../widgets/mobile_number_field.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -29,7 +28,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailFocus = FocusNode();
   final _passwordFocus = FocusNode();
   var _obscurePassword = true;
-  var _showHint = false;
 
   @override
   void dispose() {
@@ -85,8 +83,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         color: muted,
         fontWeight: FontWeight.w500,
       ),
-      floatingLabelStyle: TextStyle(
-        color: scheme.primary,
+      floatingLabelStyle: const TextStyle(
+        color: Color(0xFF0F766E),
         fontWeight: FontWeight.w600,
       ),
       hintStyle: TextStyle(
@@ -110,7 +108,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
-        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFF0F766E), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: AppRadius.lgAll,
@@ -159,25 +157,43 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           message: 'Signing in…',
           child: Stack(
             children: [
-              // Soft ambient top wash
+              // Top-left colorful gradient orb
               Positioned(
-                top: -80,
-                left: -40,
-                right: -40,
+                top: -90,
+                left: -50,
                 child: Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF0F766E)
+                            .withValues(alpha: isDark ? 0.35 : 0.2),
+                        const Color(0xFF2563EB)
+                            .withValues(alpha: isDark ? 0.2 : 0.1),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Bottom-right colorful gradient orb
+              Positioned(
+                bottom: -60,
+                right: -50,
+                child: Container(
+                  width: 280,
                   height: 280,
                   decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     gradient: RadialGradient(
-                      center: Alignment.topCenter,
-                      radius: 1.1,
                       colors: [
-                        AppColors.secondary.withValues(
-                          alpha: isDark ? 0.22 : 0.14,
-                        ),
-                        AppColors.primary.withValues(
-                          alpha: isDark ? 0.14 : 0.06,
-                        ),
-                        pageBg,
+                        const Color(0xFF7C3AED)
+                            .withValues(alpha: isDark ? 0.3 : 0.15),
+                        const Color(0xFF0F766E)
+                            .withValues(alpha: isDark ? 0.15 : 0.05),
+                        Colors.transparent,
                       ],
                     ),
                   ),
@@ -201,47 +217,67 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const SizedBox(height: AppSpacing.md),
-                            // Brand
+                            // Brand Header
                             Column(
                               children: [
                                 Container(
-                                  width: 64,
-                                  height: 64,
+                                  width: 72,
+                                  height: 72,
+                                  padding: const EdgeInsets.all(3),
                                   decoration: BoxDecoration(
-                                    borderRadius: AppRadius.lgAll,
+                                    borderRadius: BorderRadius.circular(20),
                                     gradient: const LinearGradient(
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                       colors: [
                                         Color(0xFF0F766E),
-                                        Color(0xFF1D4ED8),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF7C3AED),
                                       ],
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.secondary.withValues(
-                                          alpha: 0.28,
-                                        ),
-                                        blurRadius: 16,
+                                        color: const Color(0xFF0F766E)
+                                            .withValues(alpha: 0.38),
+                                        blurRadius: 20,
                                         offset: const Offset(0, 8),
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
-                                    Icons.groups_rounded,
-                                    color: Colors.white,
-                                    size: 32,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(17),
+                                    child: Image.asset(
+                                      AppConstants.appLogoPath,
+                                      width: 66,
+                                      height: 66,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Icon(
+                                        Icons.groups_rounded,
+                                        color: Colors.white,
+                                        size: 36,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: AppSpacing.md),
-                                Text(
-                                  AppConstants.appName,
-                                  textAlign: TextAlign.center,
-                                  style: context.textTheme.headlineSmall
-                                      ?.copyWith(
-                                    color: primaryText,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.3,
+                                ShaderMask(
+                                  shaderCallback: (bounds) => const LinearGradient(
+                                    colors: [
+                                      Color(0xFF0F766E),
+                                      Color(0xFF2563EB),
+                                    ],
+                                  ).createShader(bounds),
+                                  child: Text(
+                                    AppConstants.appName,
+                                    textAlign: TextAlign.center,
+                                    style: context.textTheme.headlineMedium
+                                        ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.4,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -260,9 +296,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 .slideY(begin: -0.06, end: 0),
                             const SizedBox(height: AppSpacing.lg),
 
-                            // Form card
+                            // Colorful Form Card
                             Container(
-                              padding: const EdgeInsets.all(AppSpacing.lg),
+                              clipBehavior: Clip.antiAlias,
                               decoration: BoxDecoration(
                                 color: cardBg,
                                 borderRadius: AppRadius.xlAll,
@@ -270,141 +306,242 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(
-                                      alpha: isDark ? 0.35 : 0.05,
+                                      alpha: isDark ? 0.4 : 0.07,
                                     ),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 10),
                                   ),
                                 ],
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(
-                                    'Welcome back',
-                                    style: context.textTheme.titleLarge
-                                        ?.copyWith(
-                                      color: primaryText,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Sign in with your Create Team email and password.',
-                                    style: context.textTheme.bodyMedium
-                                        ?.copyWith(
-                                      color: secondaryText,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppSpacing.lg),
-                                  TextField(
-                                    controller: _emailController,
-                                    focusNode: _emailFocus,
-                                    enabled: !state.isLoading,
-                                    keyboardType: TextInputType.emailAddress,
-                                    textInputAction: TextInputAction.next,
-                                    style: _fieldTextStyle(scheme),
-                                    cursorColor: scheme.primary,
-                                    autofillHints: const [
-                                      AutofillHints.email,
-                                    ],
-                                    decoration: _fieldDecoration(
-                                      scheme: scheme,
-                                      isDark: isDark,
-                                      label: 'Email',
-                                      hint: 'you@company.com',
-                                      icon: Icons.email_outlined,
-                                    ),
-                                    onChanged: ref
-                                        .read(loginControllerProvider.notifier)
-                                        .onEmailChanged,
-                                    onSubmitted: (_) =>
-                                        _passwordFocus.requestFocus(),
-                                  ),
-                                  const SizedBox(height: AppSpacing.md),
-                                  TextField(
-                                    controller: _passwordController,
-                                    focusNode: _passwordFocus,
-                                    enabled: !state.isLoading,
-                                    obscureText: _obscurePassword,
-                                    textInputAction: TextInputAction.done,
-                                    style: _fieldTextStyle(scheme),
-                                    cursorColor: scheme.primary,
-                                    autofillHints: const [
-                                      AutofillHints.password,
-                                    ],
-                                    decoration: _fieldDecoration(
-                                      scheme: scheme,
-                                      isDark: isDark,
-                                      label: 'Password',
-                                      hint: 'Enter your password',
-                                      icon: Icons.lock_outline_rounded,
-                                      suffix: IconButton(
-                                        tooltip: _obscurePassword
-                                            ? 'Show password'
-                                            : 'Hide password',
-                                        onPressed: () => setState(
-                                          () => _obscurePassword =
-                                              !_obscurePassword,
-                                        ),
-                                        icon: Icon(
-                                          _obscurePassword
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                          color: secondaryText,
-                                        ),
-                                      ),
-                                    ),
-                                    onChanged: ref
-                                        .read(loginControllerProvider.notifier)
-                                        .onPasswordChanged,
-                                    onSubmitted: (_) {
-                                      if (state.canSubmit) _onLogin();
-                                    },
-                                  ),
-                                  if (state.status == LoginStatus.error &&
-                                      state.errorMessage != null) ...[
-                                    const SizedBox(height: AppSpacing.md),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.error.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                        borderRadius: AppRadius.mdAll,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.error_outline_rounded,
-                                            size: 18,
-                                            color: AppColors.error,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              state.errorMessage!,
-                                              style: context
-                                                  .textTheme.bodySmall
-                                                  ?.copyWith(
-                                                color: AppColors.error,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
+                                  // Top vibrant accent bar
+                                  Container(
+                                    height: 4,
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color(0xFF0F766E),
+                                          Color(0xFF2563EB),
+                                          Color(0xFF7C3AED),
                                         ],
                                       ),
                                     ),
-                                  ],
-                                  const SizedBox(height: AppSpacing.lg),
-                                  AuthPrimaryButton(
-                                    label: 'Sign in',
-                                    icon: Icons.arrow_forward_rounded,
-                                    isLoading: state.isLoading,
-                                    enabled: state.canSubmit,
-                                    onPressed: _onLogin,
+                                  ),
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.all(AppSpacing.lg),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Text(
+                                          'Welcome back',
+                                          style: context.textTheme.titleLarge
+                                              ?.copyWith(
+                                            color: primaryText,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Sign in with your email and password.',
+                                          style: context.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            color: secondaryText,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                        const SizedBox(height: AppSpacing.lg),
+                                        TextField(
+                                          controller: _emailController,
+                                          focusNode: _emailFocus,
+                                          enabled: !state.isLoading,
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          textInputAction: TextInputAction.next,
+                                          style: _fieldTextStyle(scheme),
+                                          cursorColor: const Color(0xFF0F766E),
+                                          autofillHints: const [
+                                            AutofillHints.email,
+                                          ],
+                                          decoration: _fieldDecoration(
+                                            scheme: scheme,
+                                            isDark: isDark,
+                                            label: 'Email',
+                                            hint: 'you@company.com',
+                                            icon: Icons.email_outlined,
+                                          ),
+                                          onChanged: ref
+                                              .read(loginControllerProvider
+                                                  .notifier)
+                                              .onEmailChanged,
+                                          onSubmitted: (_) =>
+                                              _passwordFocus.requestFocus(),
+                                        ),
+                                        const SizedBox(height: AppSpacing.md),
+                                        TextField(
+                                          controller: _passwordController,
+                                          focusNode: _passwordFocus,
+                                          enabled: !state.isLoading,
+                                          obscureText: _obscurePassword,
+                                          textInputAction: TextInputAction.done,
+                                          style: _fieldTextStyle(scheme),
+                                          cursorColor: const Color(0xFF0F766E),
+                                          autofillHints: const [
+                                            AutofillHints.password,
+                                          ],
+                                          decoration: _fieldDecoration(
+                                            scheme: scheme,
+                                            isDark: isDark,
+                                            label: 'Password',
+                                            hint: 'Enter your password',
+                                            icon: Icons.lock_outline_rounded,
+                                            suffix: IconButton(
+                                              tooltip: _obscurePassword
+                                                  ? 'Show password'
+                                                  : 'Hide password',
+                                              onPressed: () => setState(
+                                                () => _obscurePassword =
+                                                    !_obscurePassword,
+                                              ),
+                                              icon: Icon(
+                                                _obscurePassword
+                                                    ? Icons.visibility_outlined
+                                                    : Icons
+                                                        .visibility_off_outlined,
+                                                color: secondaryText,
+                                              ),
+                                            ),
+                                          ),
+                                          onChanged: ref
+                                              .read(loginControllerProvider
+                                                  .notifier)
+                                              .onPasswordChanged,
+                                          onSubmitted: (_) {
+                                            if (state.canSubmit) _onLogin();
+                                          },
+                                        ),
+                                        if (state.status == LoginStatus.error &&
+                                            state.errorMessage != null) ...[
+                                          const SizedBox(height: AppSpacing.md),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.error.withValues(
+                                                alpha: 0.08,
+                                              ),
+                                              borderRadius: AppRadius.mdAll,
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.error_outline_rounded,
+                                                  size: 18,
+                                                  color: AppColors.error,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    state.errorMessage!,
+                                                    style: context
+                                                        .textTheme.bodySmall
+                                                        ?.copyWith(
+                                                      color: AppColors.error,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: AppSpacing.lg),
+
+                                        // Vibrant Gradient Sign In Button
+                                        Container(
+                                          height: AppConstants.minTouchTarget + 4,
+                                          decoration: BoxDecoration(
+                                            borderRadius: AppRadius.lgAll,
+                                            gradient: state.canSubmit
+                                                ? const LinearGradient(
+                                                    colors: [
+                                                      Color(0xFF0F766E),
+                                                      Color(0xFF2563EB),
+                                                    ],
+                                                  )
+                                                : null,
+                                            color: !state.canSubmit
+                                                ? (isDark
+                                                    ? Colors.white12
+                                                    : Colors.black12)
+                                                : null,
+                                            boxShadow: state.canSubmit
+                                                ? [
+                                                    BoxShadow(
+                                                      color: const Color(
+                                                              0xFF0F766E)
+                                                          .withValues(
+                                                              alpha: 0.35),
+                                                      blurRadius: 16,
+                                                      offset: const Offset(0, 6),
+                                                    ),
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              onTap: state.canSubmit
+                                                  ? _onLogin
+                                                  : null,
+                                              borderRadius: AppRadius.lgAll,
+                                              child: Center(
+                                                child: state.isLoading
+                                                    ? const SizedBox(
+                                                        width: 22,
+                                                        height: 22,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                          strokeWidth: 2.4,
+                                                          color: Colors.white,
+                                                        ),
+                                                      )
+                                                    : Row(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment
+                                                                .center,
+                                                        children: [
+                                                          Text(
+                                                            'Sign in',
+                                                            style: context
+                                                                .textTheme
+                                                                .labelLarge
+                                                                ?.copyWith(
+                                                              color: Colors.white,
+                                                              fontWeight:
+                                                                  FontWeight.w700,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 8),
+                                                          const Icon(
+                                                            Icons
+                                                                .arrow_forward_rounded,
+                                                            size: 18,
+                                                            color: Colors.white,
+                                                          ),
+                                                        ],
+                                                      ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -412,80 +549,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 .animate()
                                 .fadeIn(delay: 80.ms, duration: 420.ms)
                                 .slideY(begin: 0.04, end: 0),
-                            const SizedBox(height: AppSpacing.md),
-
-                            // Help / demo access
-                            Material(
-                              color: cardBg,
-                              borderRadius: AppRadius.lgAll,
-                              child: InkWell(
-                                borderRadius: AppRadius.lgAll,
-                                onTap: () =>
-                                    setState(() => _showHint = !_showHint),
-                                child: Ink(
-                                  decoration: BoxDecoration(
-                                    borderRadius: AppRadius.lgAll,
-                                    border: Border.all(color: cardBorder),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.help_outline_rounded,
-                                              size: 18,
-                                              color: secondaryText,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Need access help?',
-                                                style: context
-                                                    .textTheme.labelLarge
-                                                    ?.copyWith(
-                                                  color: primaryText,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                            ),
-                                            Icon(
-                                              _showHint
-                                                  ? Icons.expand_less_rounded
-                                                  : Icons.expand_more_rounded,
-                                              color: secondaryText,
-                                            ),
-                                          ],
-                                        ),
-                                        if (_showHint) ...[
-                                          const SizedBox(height: 10),
-                                          Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Text(
-                                              'Boss: root@gmail.com / root@2026\n'
-                                              'Team: team@gmail.com / team@2026\n'
-                                              'Or use your company CRM employee email + password',
-                                              style: context
-                                                  .textTheme.bodySmall
-                                                  ?.copyWith(
-                                                color: secondaryText,
-                                                height: 1.45,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ).animate().fadeIn(delay: 140.ms),
                             const Spacer(),
-                            // Bottom anchor
+
+                            // Bottom footer text
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Column(
@@ -502,7 +568,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       ),
                                       const SizedBox(width: 6),
                                       Text(
-                                        'Secure Create Team sign-in',
+                                        'Secure Sign-in',
                                         style: context.textTheme.labelSmall
                                             ?.copyWith(
                                           color: secondaryText.withValues(
@@ -515,7 +581,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Meetings for the Boss · managed by your team',
+                                    'Bangar Group · Enterprise Meeting Management',
                                     textAlign: TextAlign.center,
                                     style: context.textTheme.labelSmall
                                         ?.copyWith(

@@ -29,10 +29,16 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
-        systemOverlayStyle: isLight
-            ? SystemUiOverlayStyle.dark
-            : SystemUiOverlayStyle.light,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness:
+              isLight ? Brightness.dark : Brightness.light,
+          statusBarBrightness: isLight ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
+        ),
         titleTextStyle: textTheme.titleLarge,
       ),
       cardTheme: CardThemeData(

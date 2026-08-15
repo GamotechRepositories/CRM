@@ -15,6 +15,7 @@ class AppScaffold extends StatelessWidget {
     this.drawer,
     this.backgroundColor,
     this.useSafeArea = true,
+    this.pinAppBar = false,
     this.padFloatingNav = false,
     this.maxContentWidth,
   });
@@ -26,6 +27,7 @@ class AppScaffold extends StatelessWidget {
   final Widget? drawer;
   final Color? backgroundColor;
   final bool useSafeArea;
+  final bool pinAppBar;
 
   /// Extra bottom padding so content clears the floating pill nav.
   final bool padFloatingNav;
@@ -45,6 +47,7 @@ class AppScaffold extends StatelessWidget {
 
     if (useSafeArea) {
       content = SafeArea(
+        top: appBar == null,
         bottom: !padFloatingNav,
         child: content,
       );
@@ -67,11 +70,58 @@ class AppScaffold extends StatelessWidget {
       );
     }
 
+    final effectiveBg =
+        backgroundColor ?? Theme.of(context).scaffoldBackgroundColor;
+
+    if (appBar != null) {
+      final appBarWidget = appBar;
+      final Widget sliverHeader = appBarWidget is AppBar
+          ? SliverAppBar(
+              floating: !pinAppBar,
+              pinned: pinAppBar,
+              snap: false,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              title: appBarWidget.title,
+              actions: appBarWidget.actions,
+              leading: appBarWidget.leading,
+              automaticallyImplyLeading:
+                  appBarWidget.automaticallyImplyLeading,
+              bottom: appBarWidget.bottom,
+              centerTitle: appBarWidget.centerTitle,
+              titleSpacing: appBarWidget.titleSpacing,
+              titleTextStyle: appBarWidget.titleTextStyle,
+            )
+          : SliverToBoxAdapter(
+              child: SafeArea(
+                bottom: false,
+                child: appBarWidget!,
+              ),
+            );
+
+      return Scaffold(
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        drawer: drawer,
+        backgroundColor: effectiveBg,
+        floatingActionButton: fab,
+        bottomNavigationBar: bottomNavigationBar,
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            sliverHeader,
+          ],
+          body: content,
+        ),
+      );
+    }
+
     return Scaffold(
-      appBar: appBar,
+      extendBody: true,
+      extendBodyBehindAppBar: true,
       drawer: drawer,
-      backgroundColor:
-          backgroundColor ?? Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: effectiveBg,
       floatingActionButton: fab,
       bottomNavigationBar: bottomNavigationBar,
       body: content,

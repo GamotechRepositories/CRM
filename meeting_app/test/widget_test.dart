@@ -49,13 +49,13 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Executive Meeting'), findsWidgets);
+    expect(find.text('Bangar Group'), findsWidgets);
 
     // Splash duration + auth bootstrap
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Meeting login'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
   });
 }

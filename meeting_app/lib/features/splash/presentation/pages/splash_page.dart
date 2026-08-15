@@ -96,6 +96,17 @@ class _SplashPageState extends ConsumerState<SplashPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    AppConstants.appLogoPath,
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  ),
+                ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: 36,
                   height: 36,
