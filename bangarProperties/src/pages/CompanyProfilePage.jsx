@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'
 
 const EMPTY_FORM = {
   companyLogo: '',
+  companyStamp: '',
+  authorizedSignature: '',
   companyName: '',
   workingHours: '9 AM - 6 PM',
   address: '',
@@ -30,6 +32,8 @@ const CompanyProfilePage = () => {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
   const fileInputRef = useRef(null)
+  const stampInputRef = useRef(null)
+  const signatureInputRef = useRef(null)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -39,6 +43,8 @@ const CompanyProfilePage = () => {
         const c = res.data || {}
         setForm({
           companyLogo: c.companyLogo ?? '',
+          companyStamp: c.companyStamp ?? '',
+          authorizedSignature: c.authorizedSignature ?? '',
           companyName: c.companyName ?? '',
           workingHours: c.workingHours ?? '9 AM - 6 PM',
           address: c.address ?? '',
@@ -112,6 +118,34 @@ const CompanyProfilePage = () => {
     }
   }
 
+  const handleStampFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setError(null)
+      setSuccess(null)
+      const uploaded = await uploadFile(file, { folder: 'stamps' })
+      setForm((f) => ({ ...f, companyStamp: uploaded.url }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload stamp')
+      e.target.value = ''
+    }
+  }
+
+  const handleSignatureFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setError(null)
+      setSuccess(null)
+      const uploaded = await uploadFile(file, { folder: 'signatures' })
+      setForm((f) => ({ ...f, authorizedSignature: uploaded.url }))
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Failed to upload signature')
+      e.target.value = ''
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -165,20 +199,83 @@ const CompanyProfilePage = () => {
             </div>
 
             <div className='p-5 space-y-5'>
-              <div>
-                <label className='block text-sm font-medium text-gray-700'>Company Logo</label>
-                <input type='file' ref={fileInputRef} accept='image/*' onChange={handleLogoFile} className='hidden' />
-                <div className='mt-2 flex items-center gap-4'>
-                  <button
-                    type='button'
-                    onClick={() => fileInputRef.current?.click()}
-                    className='border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'
-                  >
-                    Upload logo
-                  </button>
-                  {form.companyLogo && (
-                    <img src={form.companyLogo} alt='Company logo' className='h-16 w-16 object-contain border rounded-lg bg-white p-1' />
-                  )}
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-6 pb-4 border-b border-gray-100'>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700'>Company Logo</label>
+                  <input type='file' ref={fileInputRef} accept='image/*' onChange={handleLogoFile} className='hidden' />
+                  <div className='mt-2 flex items-center gap-4'>
+                    <button
+                      type='button'
+                      onClick={() => fileInputRef.current?.click()}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'
+                    >
+                      Upload logo
+                    </button>
+                    {form.companyLogo && (
+                      <div className='flex items-center gap-2'>
+                        <img src={form.companyLogo} alt='Company logo' className='h-14 w-14 object-contain border rounded-lg bg-white p-1' />
+                        <button
+                          type='button'
+                          onClick={() => setForm((f) => ({ ...f, companyLogo: '' }))}
+                          className='text-xs text-red-600 hover:underline'
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className='block text-sm font-medium text-gray-700'>Company Stamp</label>
+                  <input type='file' ref={stampInputRef} accept='image/*' onChange={handleStampFile} className='hidden' />
+                  <div className='mt-2 flex items-center gap-4'>
+                    <button
+                      type='button'
+                      onClick={() => stampInputRef.current?.click()}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'
+                    >
+                      Upload stamp
+                    </button>
+                    {form.companyStamp && (
+                      <div className='flex items-center gap-2'>
+                        <img src={form.companyStamp} alt='Company stamp' className='h-14 w-14 object-contain border rounded-lg bg-white p-1' />
+                        <button
+                          type='button'
+                          onClick={() => setForm((f) => ({ ...f, companyStamp: '' }))}
+                          className='text-xs text-red-600 hover:underline'
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className='block text-sm font-medium text-gray-700'>Authorized Signature</label>
+                  <input type='file' ref={signatureInputRef} accept='image/*' onChange={handleSignatureFile} className='hidden' />
+                  <div className='mt-2 flex items-center gap-4'>
+                    <button
+                      type='button'
+                      onClick={() => signatureInputRef.current?.click()}
+                      className='border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'
+                    >
+                      Upload signature
+                    </button>
+                    {form.authorizedSignature && (
+                      <div className='flex items-center gap-2'>
+                        <img src={form.authorizedSignature} alt='Authorized signature' className='h-14 w-14 object-contain border rounded-lg bg-white p-1' />
+                        <button
+                          type='button'
+                          onClick={() => setForm((f) => ({ ...f, authorizedSignature: '' }))}
+                          className='text-xs text-red-600 hover:underline'
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

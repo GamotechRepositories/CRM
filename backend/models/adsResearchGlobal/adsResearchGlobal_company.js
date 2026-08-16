@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 
 const companySchema = new mongoose.Schema({
   companyLogo: { type: String, default: '' },
+  companyStamp: { type: String, default: '' },
+  authorizedSignature: { type: String, default: '' },
   companyName: { type: String, default: '' },
   workingHours: { type: String, default: '9 AM - 6 PM' },
   address: { type: String, default: '' },

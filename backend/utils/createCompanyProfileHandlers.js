@@ -1,5 +1,7 @@
 const emptyProfile = () => ({
   companyLogo: '',
+  companyStamp: '',
+  authorizedSignature: '',
   companyName: '',
   workingHours: '9 AM - 6 PM',
   address: '',
