@@ -190,6 +190,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       type: 'group',
       children: [
         { id: 'my-profile', label: 'My Profile', path: '/my-profile' },
+        { id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips' },
         { id: 'my-tasks', label: 'My Tasks', path: '/my-tasks' },
         { id: 'my-calendar', label: 'My Calendar', path: '/calendar' },
         { id: 'my-leaves', label: 'My Leaves', path: '/leave' },

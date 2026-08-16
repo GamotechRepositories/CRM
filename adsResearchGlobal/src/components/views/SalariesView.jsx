@@ -110,6 +110,14 @@ const SalariesView = () => {
                         >
                           Mark {s.status === 'Paid' ? 'Unpaid' : 'Paid'}
                         </button>
+                        {s.status === 'Paid' && (
+                          <button
+                            onClick={() => navigate('/salary-slips')}
+                            className='px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 text-xs font-medium hover:bg-blue-100'
+                          >
+                            View Slip
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(s._id)}
                           className='p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors'
