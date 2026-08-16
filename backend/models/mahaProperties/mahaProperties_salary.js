@@ -10,6 +10,30 @@ const salarySchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  basicSalary: {
+    type: Number,
+    default: 0,
+  },
+  hra: {
+    type: Number,
+    default: 0,
+  },
+  allowances: {
+    type: Number,
+    default: 0,
+  },
+  deductions: {
+    type: Number,
+    default: 0,
+  },
+  bonus: {
+    type: Number,
+    default: 0,
+  },
+  netSalary: {
+    type: Number,
+    default: 0,
+  },
   month: {
     type: Number,
     required: true,
@@ -19,6 +43,13 @@ const salarySchema = new mongoose.Schema({
   year: {
     type: Number,
     required: true,
+  },
+  paymentDate: {
+    type: Date,
+  },
+  paymentMode: {
+    type: String,
+    default: 'Bank Transfer',
   },
   status: {
     type: String,
