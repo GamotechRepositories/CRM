@@ -26,11 +26,9 @@ const SalarySlipPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        // Fetch Company Profile
         const compRes = await api.get('/company-profile').catch(() => ({ data: {} }))
         setCompany(compRes.data || {})
 
-        // Fetch Salaries for logged in employee (or all if admin)
         const empId = user?._id || user?.id
         const endpoint = empId ? `/salaries?employee=${empId}` : '/salaries'
         const salRes = await api.get(endpoint).catch(() => ({ data: [] }))
@@ -44,7 +42,6 @@ const SalarySlipPage = () => {
         })
         
         setSalaries(sorted)
-        // Auto-select first paid salary if available
         const firstPaid = sorted.find((s) => s.status === 'Paid')
         if (firstPaid) setSelectedSalary(firstPaid)
         else if (sorted.length > 0) setSelectedSalary(sorted[0])
@@ -82,9 +79,9 @@ const SalarySlipPage = () => {
         re.lastIndex = 0
       }
     }
-    replaceParenFunc('oklch', 'rgb(128,128,128)')
-    replaceParenFunc('oklab', 'rgb(128,128,128)')
-    replaceParenFunc('color-mix', 'rgb(128,128,128)')
+    replaceParenFunc('oklch', 'transparent')
+    replaceParenFunc('oklab', 'transparent')
+    replaceParenFunc('color-mix', 'transparent')
     return out
   }
 
@@ -164,7 +161,6 @@ const SalarySlipPage = () => {
   const isPaid = selectedSalary?.status === 'Paid'
   const totalNet = Number(selectedSalary?.amount || selectedSalary?.netSalary || 0)
   
-  // Breakdown
   const basic = selectedSalary?.basicSalary || Math.round(totalNet * 0.50)
   const hra = selectedSalary?.hra || Math.round(totalNet * 0.30)
   const allowances = selectedSalary?.allowances || Math.round(totalNet * 0.20)
@@ -175,6 +171,33 @@ const SalarySlipPage = () => {
 
   return (
     <div className='p-4 md:p-8 bg-gray-50 min-h-full'>
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #salary-slip-printable, #salary-slip-printable * {
+            visibility: visible !important;
+          }
+          #salary-slip-printable {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 24px !important;
+            background-color: #ffffff !important;
+            border: 1px solid #e5e7eb !important;
+            box-shadow: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
+
       <div className='max-w-6xl mx-auto'>
         {/* Header */}
         <div className='mb-6 print:hidden'>
@@ -299,10 +322,15 @@ const SalarySlipPage = () => {
                 )}
 
                 {/* Printable Salary Slip Container */}
-                <div ref={printRef} className='bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden p-6 md:p-10 text-black'>
+                <div
+                  id='salary-slip-printable'
+                  ref={printRef}
+                  className='bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden p-6 md:p-10 text-black'
+                  style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                >
                   <div ref={slipRef} className='space-y-6'>
                     {/* Header: Company Info */}
-                    <div className='border-b border-gray-300 pb-6 flex flex-wrap items-center justify-between gap-4'>
+                    <div className='border-b pb-6 flex flex-wrap items-center justify-between gap-4' style={{ borderColor: '#d1d5db' }}>
                       <div>
                         {company?.companyLogo && (
                           <img
@@ -311,65 +339,68 @@ const SalarySlipPage = () => {
                             className='h-14 w-auto max-w-[180px] object-contain mb-2'
                           />
                         )}
-                        <h2 className='text-xl font-bold text-black uppercase tracking-wide'>
+                        <h2 className='text-xl font-bold uppercase tracking-wide' style={{ color: '#000000' }}>
                           {company?.companyName || 'Organization Name'}
                         </h2>
-                        {company?.address && <p className='text-xs text-gray-700 mt-1 max-w-sm'>{company.address}</p>}
-                        <div className='text-xs text-gray-600 mt-1 space-x-3'>
+                        {company?.address && <p className='text-xs mt-1 max-w-sm' style={{ color: '#374151' }}>{company.address}</p>}
+                        <div className='text-xs mt-1 space-x-3' style={{ color: '#4b5563' }}>
                           {company?.email && <span>Email: {company.email}</span>}
                           {company?.phone && <span>Phone: {company.phone}</span>}
                         </div>
-                        {company?.gstin && <p className='text-xs text-gray-600'>GSTIN: {company.gstin}</p>}
-                        {company?.pan && <p className='text-xs text-gray-600'>PAN: {company.pan}</p>}
+                        {company?.gstin && <p className='text-xs' style={{ color: '#4b5563' }}>GSTIN: {company.gstin}</p>}
+                        {company?.pan && <p className='text-xs' style={{ color: '#4b5563' }}>PAN: {company.pan}</p>}
                       </div>
-                      <div className='text-right border-l-2 border-blue-600 pl-4 py-1'>
-                        <span className='text-xs font-semibold text-blue-600 uppercase tracking-widest block'>Official Document</span>
-                        <h3 className='text-lg font-bold text-gray-900 mt-0.5'>PAYSLIP</h3>
-                        <p className='text-xs font-medium text-gray-600 mt-0.5'>
+                      <div className='text-right border-l-2 pl-4 py-1' style={{ borderColor: '#2563eb' }}>
+                        <span className='text-xs font-semibold uppercase tracking-widest block' style={{ color: '#2563eb' }}>Official Document</span>
+                        <h3 className='text-lg font-bold mt-0.5' style={{ color: '#111827' }}>PAYSLIP</h3>
+                        <p className='text-xs font-medium mt-0.5' style={{ color: '#4b5563' }}>
                           {MONTH_NAMES[selectedSalary.month]} {selectedSalary.year}
                         </p>
                       </div>
                     </div>
 
                     {/* Employee & Payment Meta Grid */}
-                    <div className='bg-gray-50/80 rounded-lg p-4 border border-gray-200 text-xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'>
+                    <div
+                      className='rounded-lg p-4 text-xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'
+                      style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                    >
                       <div>
-                        <span className='text-gray-500 font-medium block'>Employee Name</span>
-                        <span className='font-bold text-gray-900 text-sm'>{emp.name || user?.name || '—'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee Name</span>
+                        <span className='font-bold text-sm' style={{ color: '#111827' }}>{emp.name || user?.name || '—'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Employee Code / ID</span>
-                        <span className='font-semibold text-gray-800'>{emp.employeeCode || emp._id || emp.id || '—'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee Code / ID</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.employeeCode || emp._id || emp.id || '—'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Designation</span>
-                        <span className='font-semibold text-gray-800'>{emp.designation?.title || emp.designation || '—'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Designation</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.designation?.title || emp.designation || '—'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Department</span>
-                        <span className='font-semibold text-gray-800'>{emp.department || '—'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Department</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.department || '—'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Date of Joining</span>
-                        <span className='font-semibold text-gray-800'>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Date of Joining</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>
                           {emp.dateOfJoining ? new Date(emp.dateOfJoining).toLocaleDateString('en-IN') : '—'}
                         </span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Bank Account Details</span>
-                        <span className='font-semibold text-gray-800'>{emp.salaryPayroll?.bankAccountDetails || emp.bankAccountNumber || '—'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Bank Account Details</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.salaryPayroll?.bankAccountDetails || emp.bankAccountNumber || '—'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Payment Method</span>
-                        <span className='font-semibold text-gray-800'>{selectedSalary.paymentMode || 'Bank Transfer'}</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Method</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{selectedSalary.paymentMode || 'Bank Transfer'}</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Payment Status</span>
-                        <span className='font-bold text-green-700 uppercase'>PAID</span>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Status</span>
+                        <span className='font-bold uppercase' style={{ color: '#15803d' }}>PAID</span>
                       </div>
                       <div>
-                        <span className='text-gray-500 font-medium block'>Payment Date</span>
-                        <span className='font-semibold text-gray-800'>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Date</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>
                           {selectedSalary.paymentDate
                             ? new Date(selectedSalary.paymentDate).toLocaleDateString('en-IN')
                             : new Date(selectedSalary.updatedAt || Date.now()).toLocaleDateString('en-IN')}
@@ -379,47 +410,47 @@ const SalarySlipPage = () => {
 
                     {/* Earnings & Deductions Table */}
                     <div>
-                      <h4 className='text-xs font-bold text-gray-800 uppercase tracking-wider mb-2'>Salary Breakdown</h4>
-                      <table className='w-full text-xs border border-gray-300 rounded-lg overflow-hidden'>
+                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Salary Breakdown</h4>
+                      <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
                         <thead>
-                          <tr className='bg-gray-100 border-b border-gray-300 font-bold text-gray-800'>
-                            <th className='py-2.5 px-3 text-left w-1/2 border-r border-gray-300'>EARNINGS</th>
-                            <th className='py-2.5 px-3 text-right border-r border-gray-300'>AMOUNT</th>
-                            <th className='py-2.5 px-3 text-left w-1/3 border-r border-gray-300'>DEDUCTIONS</th>
+                          <tr className='font-bold' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
+                            <th className='py-2.5 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS</th>
+                            <th className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>AMOUNT</th>
+                            <th className='py-2.5 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTIONS</th>
                             <th className='py-2.5 px-3 text-right'>AMOUNT</th>
                           </tr>
                         </thead>
-                        <tbody className='divide-y divide-gray-200'>
-                          <tr>
-                            <td className='py-2 px-3 border-r border-gray-200'>Basic Salary (50%)</td>
-                            <td className='py-2 px-3 text-right border-r border-gray-200 font-medium'>{formatINR(basic)}</td>
-                            <td className='py-2 px-3 border-r border-gray-200'>Provident Fund (PF) / TDS</td>
+                        <tbody>
+                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Basic Salary (50%)</td>
+                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(basic)}</td>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Provident Fund (PF) / TDS</td>
                             <td className='py-2 px-3 text-right font-medium'>{formatINR(deductions)}</td>
                           </tr>
-                          <tr>
-                            <td className='py-2 px-3 border-r border-gray-200'>House Rent Allowance (HRA 30%)</td>
-                            <td className='py-2 px-3 text-right border-r border-gray-200 font-medium'>{formatINR(hra)}</td>
-                            <td className='py-2 px-3 border-r border-gray-200'>Other Deductions</td>
+                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>House Rent Allowance (HRA 30%)</td>
+                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(hra)}</td>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Other Deductions</td>
                             <td className='py-2 px-3 text-right font-medium'>₹0</td>
                           </tr>
-                          <tr>
-                            <td className='py-2 px-3 border-r border-gray-200'>Special / Other Allowances (20%)</td>
-                            <td className='py-2 px-3 text-right border-r border-gray-200 font-medium'>{formatINR(allowances)}</td>
-                            <td className='py-2 px-3 border-r border-gray-200'>—</td>
+                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Special / Other Allowances (20%)</td>
+                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(allowances)}</td>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>—</td>
                             <td className='py-2 px-3 text-right'>—</td>
                           </tr>
                           {bonus > 0 && (
-                            <tr>
-                              <td className='py-2 px-3 border-r border-gray-200'>Performance Bonus / Incentives</td>
-                              <td className='py-2 px-3 text-right border-r border-gray-200 font-medium'>{formatINR(bonus)}</td>
-                              <td className='py-2 px-3 border-r border-gray-200'>—</td>
+                            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                              <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Performance Bonus / Incentives</td>
+                              <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(bonus)}</td>
+                              <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>—</td>
                               <td className='py-2 px-3 text-right'>—</td>
                             </tr>
                           )}
-                          <tr className='bg-gray-50 font-bold border-t border-gray-300 text-gray-900'>
-                            <td className='py-2.5 px-3 border-r border-gray-300'>GROSS EARNINGS</td>
-                            <td className='py-2.5 px-3 text-right border-r border-gray-300'>{formatINR(totalEarnings)}</td>
-                            <td className='py-2.5 px-3 border-r border-gray-300'>TOTAL DEDUCTIONS</td>
+                          <tr className='font-bold' style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #d1d5db', color: '#111827' }}>
+                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS EARNINGS</td>
+                            <td className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(totalEarnings)}</td>
+                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>TOTAL DEDUCTIONS</td>
                             <td className='py-2.5 px-3 text-right'>{formatINR(deductions)}</td>
                           </tr>
                         </tbody>
@@ -427,18 +458,21 @@ const SalarySlipPage = () => {
                     </div>
 
                     {/* Net Pay Banner */}
-                    <div className='bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between'>
+                    <div
+                      className='rounded-lg p-4 flex items-center justify-between'
+                      style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
+                    >
                       <div>
-                        <span className='text-xs font-bold text-blue-900 uppercase tracking-wide block'>Net Salary Payable</span>
-                        <span className='text-xs text-blue-700'>Gross Earnings minus Total Deductions</span>
+                        <span className='text-xs font-bold uppercase tracking-wide block' style={{ color: '#1e3a8a' }}>Net Salary Payable</span>
+                        <span className='text-xs' style={{ color: '#1d4ed8' }}>Gross Earnings minus Total Deductions</span>
                       </div>
                       <div className='text-right'>
-                        <span className='text-xl font-extrabold text-blue-900'>{formatINR(netPayable)}</span>
+                        <span className='text-xl font-extrabold' style={{ color: '#1e3a8a' }}>{formatINR(netPayable)}</span>
                       </div>
                     </div>
 
                     {/* Footer: Stamp & Authorized Signature */}
-                    <div className='pt-6 border-t border-gray-200 flex items-end justify-between gap-6'>
+                    <div className='pt-6 flex items-end justify-between gap-6' style={{ borderTop: '1px solid #e5e7eb' }}>
                       {/* Stamp Column */}
                       <div className='text-center min-w-[140px]'>
                         {company?.companyStamp ? (
@@ -448,15 +482,15 @@ const SalarySlipPage = () => {
                             className='h-16 w-auto max-w-[140px] object-contain mx-auto'
                           />
                         ) : (
-                          <div className='h-16 flex items-center justify-center text-xs text-gray-400 border border-dashed rounded-lg px-2'>
+                          <div className='h-16 flex items-center justify-center text-xs border border-dashed rounded-lg px-2' style={{ color: '#9ca3af', borderColor: '#d1d5db' }}>
                             Company Stamp
                           </div>
                         )}
-                        <p className='text-xs font-semibold text-gray-700 mt-1'>Company Stamp</p>
+                        <p className='text-xs font-semibold mt-1' style={{ color: '#374151' }}>Company Stamp</p>
                       </div>
 
                       {/* Disclaimer Note */}
-                      <div className='text-center flex-1 text-[11px] text-gray-500 italic max-w-xs mx-auto'>
+                      <div className='text-center flex-1 text-[11px] italic max-w-xs mx-auto' style={{ color: '#6b7280' }}>
                         This is a computer-generated payslip issued by {company?.companyName || 'the organization'} and does not require a physical ink signature.
                       </div>
 
@@ -469,9 +503,9 @@ const SalarySlipPage = () => {
                             className='h-16 w-auto max-w-[140px] object-contain mx-auto'
                           />
                         ) : (
-                          <div className='border-t-2 border-gray-800 w-32 mt-12 mb-1 mx-auto' />
+                          <div className='border-t-2 w-32 mt-12 mb-1 mx-auto' style={{ borderColor: '#1f2937' }} />
                         )}
-                        <p className='text-xs font-semibold text-gray-800 mt-1'>Authorized Signature</p>
+                        <p className='text-xs font-semibold mt-1' style={{ color: '#1f2937' }}>Authorized Signature</p>
                       </div>
                     </div>
                   </div>
