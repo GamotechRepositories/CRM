@@ -120,12 +120,16 @@ final meetingRealtimeSyncProvider = Provider<void>((ref) {
 
   final lifecycle = _MeetingLifecycleReloader(
     onResume: () {
+      MeetingRealtimeService.instance.resumeFromBackground();
       final stale = lastReloadAt == null ||
           DateTime.now().difference(lastReloadAt!) >
               const Duration(seconds: 45);
       if (!MeetingRealtimeService.instance.isConnected || stale) {
         MeetingRealtimeService.instance.notifyChanged(source: 'app-resume');
       }
+    },
+    onPause: () {
+      MeetingRealtimeService.instance.pauseForBackground();
     },
   );
   WidgetsBinding.instance.addObserver(lifecycle);
@@ -142,14 +146,24 @@ final meetingRealtimeSyncProvider = Provider<void>((ref) {
 });
 
 class _MeetingLifecycleReloader with WidgetsBindingObserver {
-  _MeetingLifecycleReloader({required this.onResume});
+  _MeetingLifecycleReloader({
+    required this.onResume,
+    required this.onPause,
+  });
 
   final VoidCallback onResume;
+  final VoidCallback onPause;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      onResume();
+    switch (state) {
+      case AppLifecycleState.resumed:
+        onResume();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        onPause();
     }
   }
 }
