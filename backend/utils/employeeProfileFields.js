@@ -47,6 +47,7 @@ export const getEmployeeProfileFields = (employeeRef) => ({
     pfNumber: { type: String, default: '' },
     esicNumber: { type: String, default: '' },
     uanNumber: { type: String, default: '' },
+    panNumber: { type: String, default: '' },
     taxInformation: { type: String, default: '' },
     bankAccountDetails: { type: String, default: '' },
   },

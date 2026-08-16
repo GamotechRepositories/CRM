@@ -76,6 +76,7 @@ const emptyForm = {
   pfNumber: '',
   esicNumber: '',
   uanNumber: '',
+  panNumber: '',
   taxInformation: '',
   bankAccountDetails: '',
   skillsList: '',
@@ -149,6 +150,7 @@ const mapEmployeeToForm = (emp) => ({
   pfNumber: emp.salaryPayroll?.pfNumber ?? '',
   esicNumber: emp.salaryPayroll?.esicNumber ?? '',
   uanNumber: emp.salaryPayroll?.uanNumber ?? '',
+  panNumber: emp.salaryPayroll?.panNumber ?? emp.panNumber ?? '',
   taxInformation: emp.salaryPayroll?.taxInformation ?? '',
   bankAccountDetails: emp.salaryPayroll?.bankAccountDetails ?? '',
   skillsList: (emp.skills?.skills || []).join(', '),
@@ -632,6 +634,7 @@ const AddEmployee = () => {
           <Field label='PF Number'><input name='pfNumber' value={form.pfNumber} onChange={handleChange} className={inputClass} /></Field>
           <Field label='ESIC Number'><input name='esicNumber' value={form.esicNumber} onChange={handleChange} className={inputClass} /></Field>
           <Field label='UAN Number'><input name='uanNumber' value={form.uanNumber} onChange={handleChange} className={inputClass} /></Field>
+          <Field label='PAN Number'><input name='panNumber' value={form.panNumber} onChange={handleChange} className={inputClass} placeholder='e.g. ABCDE1234F' /></Field>
           <Field label='Tax Information'><input name='taxInformation' value={form.taxInformation} onChange={handleChange} className={inputClass} /></Field>
           <Field label='Bank Account Details' className='md:col-span-2'><textarea name='bankAccountDetails' value={form.bankAccountDetails} onChange={handleChange} rows={2} className={inputClass} /></Field>
         </Section>

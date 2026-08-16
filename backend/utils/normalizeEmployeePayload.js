@@ -77,6 +77,7 @@ export const normalizeEmployeePayload = (body = {}) => {
       pfNumber: rest.salaryPayroll?.pfNumber ?? rest.pfNumber ?? '',
       esicNumber: rest.salaryPayroll?.esicNumber ?? rest.esicNumber ?? '',
       uanNumber: rest.salaryPayroll?.uanNumber ?? rest.uanNumber ?? '',
+      panNumber: rest.salaryPayroll?.panNumber ?? rest.panNumber ?? '',
       taxInformation: rest.salaryPayroll?.taxInformation ?? rest.taxInformation ?? '',
       bankAccountDetails: rest.salaryPayroll?.bankAccountDetails ?? rest.bankAccountDetails ?? '',
     },

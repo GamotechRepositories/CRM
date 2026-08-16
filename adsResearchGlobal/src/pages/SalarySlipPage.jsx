@@ -16,6 +16,7 @@ const SalarySlipPage = () => {
 
   const [company, setCompany] = useState(null)
   const [salaries, setSalaries] = useState([])
+  const [designations, setDesignations] = useState([])
   const [selectedSalary, setSelectedSalary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -28,6 +29,12 @@ const SalarySlipPage = () => {
         setLoading(true)
         const compRes = await api.get('/company-profile').catch(() => ({ data: {} }))
         setCompany(compRes.data || {})
+
+        const desigRes = await api.get('/designations').catch(() => ({ data: [] }))
+        const desigList = Array.isArray(desigRes.data)
+          ? desigRes.data
+          : desigRes.data?.designations || desigRes.data?.data || []
+        setDesignations(desigList)
 
         const empId = user?._id || user?.id
         const endpoint = empId ? `/salaries?employee=${empId}` : '/salaries'
@@ -54,6 +61,22 @@ const SalarySlipPage = () => {
 
     fetchData()
   }, [user])
+
+  const getDesignationTitle = (desig) => {
+    if (!desig) return '—'
+    if (typeof desig === 'object') {
+      return desig.title || desig.designationName || desig.name || '—'
+    }
+    if (typeof desig === 'string') {
+      if (/^[0-9a-fA-F]{24}$/.test(desig)) {
+        const found = designations.find((d) => String(d._id) === desig || String(d.id) === desig)
+        if (found) return found.title || found.designationName || found.name || '—'
+        return '—'
+      }
+      return desig
+    }
+    return '—'
+  }
 
   const handlePrint = () => {
     window.print()
@@ -348,7 +371,7 @@ const SalarySlipPage = () => {
                           {company?.phone && <span>Phone: {company.phone}</span>}
                         </div>
                         {company?.gstin && <p className='text-xs' style={{ color: '#4b5563' }}>GSTIN: {company.gstin}</p>}
-                        {company?.pan && <p className='text-xs' style={{ color: '#4b5563' }}>PAN: {company.pan}</p>}
+                        {company?.pan && <p className='text-xs' style={{ color: '#4b5563' }}>Company PAN: {company.pan}</p>}
                       </div>
                       <div className='text-right border-l-2 pl-4 py-1' style={{ borderColor: '#2563eb' }}>
                         <span className='text-xs font-semibold uppercase tracking-widest block' style={{ color: '#2563eb' }}>Official Document</span>
@@ -374,7 +397,7 @@ const SalarySlipPage = () => {
                       </div>
                       <div>
                         <span className='font-medium block' style={{ color: '#6b7280' }}>Designation</span>
-                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.designation?.title || emp.designation || '—'}</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>{getDesignationTitle(emp.designation)}</span>
                       </div>
                       <div>
                         <span className='font-medium block' style={{ color: '#6b7280' }}>Department</span>
@@ -384,6 +407,12 @@ const SalarySlipPage = () => {
                         <span className='font-medium block' style={{ color: '#6b7280' }}>Date of Joining</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>
                           {emp.dateOfJoining ? new Date(emp.dateOfJoining).toLocaleDateString('en-IN') : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee PAN</span>
+                        <span className='font-semibold' style={{ color: '#1f2937' }}>
+                          {emp.salaryPayroll?.panNumber || emp.panNumber || emp.documents?.panCard || '—'}
                         </span>
                       </div>
                       <div>

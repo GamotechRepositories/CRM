@@ -1,5 +1,7 @@
 import Salary from '../../models/mahaProperties/mahaProperties_salary.js';
 
+const EMP_POPULATE = { path: 'employee', populate: { path: 'designation', select: 'title designationName name' } };
+
 // Create a new salary record
 export const createSalary = async (req, res) => {
   try {
@@ -22,7 +24,7 @@ export const createSalary = async (req, res) => {
     });
 
     await newSalary.save();
-    const populated = await Salary.findById(newSalary._id).populate('employee');
+    const populated = await Salary.findById(newSalary._id).populate(EMP_POPULATE);
     res.status(201).json({
       message: 'Salary record created successfully',
       salary: populated,
@@ -40,7 +42,7 @@ export const getSalaries = async (req, res) => {
     if (empId) filter.employee = empId;
     if (req.query.status) filter.status = req.query.status;
 
-    const salaries = await Salary.find(filter).populate('employee').sort({ year: -1, month: -1 });
+    const salaries = await Salary.find(filter).populate(EMP_POPULATE).sort({ year: -1, month: -1 });
     res.status(200).json(salaries);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching salaries', error });
@@ -50,7 +52,7 @@ export const getSalaries = async (req, res) => {
 // Get a single salary record by ID
 export const getSalaryById = async (req, res) => {
   try {
-    const salary = await Salary.findById(req.params.id).populate('employee');
+    const salary = await Salary.findById(req.params.id).populate(EMP_POPULATE);
     if (!salary) return res.status(404).json({ message: 'Salary record not found' });
     res.status(200).json(salary);
   } catch (error) {
@@ -67,7 +69,7 @@ export const updateSalary = async (req, res) => {
     }
     const updated = await Salary.findByIdAndUpdate(req.params.id, payload, {
       new: true,
-    }).populate('employee');
+    }).populate(EMP_POPULATE);
     if (!updated) return res.status(404).json({ message: 'Salary record not found' });
     res.status(200).json({ message: 'Salary updated', salary: updated });
   } catch (error) {
