@@ -1,7 +1,7 @@
 name: meeting_app
-description: "CEO Bangar — executive meeting management for Bangar."
+description: "Executive Meeting Management - enterprise-grade Flutter foundation."
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+1
 
 environment:
   sdk: ^3.11.1
@@ -36,6 +36,8 @@ dependencies:
   equatable: ^2.0.7
   intl: ^0.20.2
   flutter_dotenv: ^6.0.1
+  file_picker: ^11.0.2
+  open_filex: ^4.7.0
   url_launcher: ^6.3.2
   firebase_core: ^4.12.1
   firebase_messaging: ^16.4.3

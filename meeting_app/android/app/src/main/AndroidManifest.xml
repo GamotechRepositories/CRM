@@ -4,11 +4,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-<<<<<<< Updated upstream
         android:label="Bangar Group"
-=======
-        android:label="CEO Bangar"
->>>>>>> Stashed changes
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true"

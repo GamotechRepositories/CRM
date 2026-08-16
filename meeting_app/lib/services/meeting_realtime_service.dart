@@ -18,9 +18,7 @@ class MeetingRealtimeService {
   String? _connectedUserId;
   bool _suppressBossTeamAlerts = false;
   bool _wasEverConnected = false;
-  bool _pausedForBackground = false;
   DateTime? _lastNotifyAt;
-  DateTime? _lastErrorLogAt;
   final _changes = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get changes => _changes.stream;
@@ -53,48 +51,15 @@ class MeetingRealtimeService {
   }) {
     final trimmed = userId.trim();
     if (trimmed.isEmpty) return;
-
-    _pausedForBackground = false;
-    _suppressBossTeamAlerts = suppressBossTeamAlerts;
-
-    if (_connectedUserId == trimmed && isConnected) {
+    if (_connectedUserId == trimmed &&
+        isConnected &&
+        _suppressBossTeamAlerts == suppressBossTeamAlerts) {
       return;
     }
 
-    // Keep user id even while reconnecting after pause.
+    disconnect();
     _connectedUserId = trimmed;
-    _openSocket(trimmed);
-  }
-
-  /// Stop reconnect spam while Android backgrounds the app (DNS often fails).
-  void pauseForBackground() {
-    if (_pausedForBackground) return;
-    _pausedForBackground = true;
-    AppLogger.info('Meetings socket paused (app background)', tag: 'Socket');
-    try {
-      _socket?.disconnect();
-      _socket?.dispose();
-    } catch (_) {}
-    _socket = null;
-  }
-
-  /// Reconnect after returning to foreground.
-  void resumeFromBackground() {
-    if (!_pausedForBackground) return;
-    _pausedForBackground = false;
-    final userId = _connectedUserId;
-    if (userId == null || userId.isEmpty) return;
-    AppLogger.info('Meetings socket resume (app foreground)', tag: 'Socket');
-    if (isConnected) return;
-    _openSocket(userId);
-  }
-
-  void _openSocket(String userId) {
-    try {
-      _socket?.disconnect();
-      _socket?.dispose();
-    } catch (_) {}
-    _socket = null;
+    _suppressBossTeamAlerts = suppressBossTeamAlerts;
 
     final host = EnvConfig.apiHost.trim();
     AppLogger.info('Connecting meetings socket → $host', tag: 'Socket');
@@ -106,39 +71,36 @@ class MeetingRealtimeService {
           .setPath('/socket.io')
           .disableAutoConnect()
           .enableReconnection()
-          .setReconnectionAttempts(12)
-          .setReconnectionDelay(2000)
-          .setReconnectionDelayMax(15000)
-          .setAuth({'userId': userId})
-          .setQuery({'userId': userId})
+          .setReconnectionAttempts(50)
+          .setReconnectionDelay(1200)
+          .setAuth({'userId': trimmed})
+          .setQuery({'userId': trimmed})
           .enableForceNew()
           .build(),
     );
 
     socket.onConnect((_) {
-      if (_pausedForBackground) return;
       AppLogger.info('Meetings socket connected', tag: 'Socket');
+      // First connect: list already loaded by meetingsController — no API hit.
+      // Reconnect after drop: one catch-up reload (missed events while offline).
       if (_wasEverConnected) {
         notifyChanged(action: 'sync', source: 'socket-reconnect');
       } else {
         _wasEverConnected = true;
+        // Mark source so sync provider can ignore if needed.
         notifyChanged(action: 'sync', source: 'socket-connect');
       }
     });
     socket.onDisconnect((_) {
-      if (_pausedForBackground) return;
       AppLogger.warning('Meetings socket disconnected', tag: 'Socket');
     });
     socket.onConnectError((error) {
-      if (_pausedForBackground) return;
-      _logErrorThrottled('Meetings socket connect error: $error');
+      AppLogger.warning('Meetings socket connect error: $error', tag: 'Socket');
     });
     socket.onError((error) {
-      if (_pausedForBackground) return;
-      _logErrorThrottled('Meetings socket error: $error');
+      AppLogger.warning('Meetings socket error: $error', tag: 'Socket');
     });
     socket.on('meetings:changed', (payload) {
-      if (_pausedForBackground) return;
       AppLogger.info('meetings:changed received · $payload', tag: 'Socket');
       if (payload is Map) {
         final map = Map<String, dynamic>.from(
@@ -152,8 +114,8 @@ class MeetingRealtimeService {
       }
     });
 
+    // Local toast + backup list refresh (in case `meetings:changed` is missed).
     socket.on('notification', (payload) {
-      if (_pausedForBackground) return;
       AppLogger.info('notification received · $payload', tag: 'Socket');
       String? meetingId;
       if (payload is Map) {
@@ -177,16 +139,6 @@ class MeetingRealtimeService {
     socket.connect();
   }
 
-  void _logErrorThrottled(String message) {
-    final now = DateTime.now();
-    if (_lastErrorLogAt != null &&
-        now.difference(_lastErrorLogAt!) < const Duration(seconds: 8)) {
-      return;
-    }
-    _lastErrorLogAt = now;
-    AppLogger.warning(message, tag: 'Socket');
-  }
-
   Future<void> _showLocalFromSocket(dynamic payload) async {
     try {
       if (payload is! Map) return;
@@ -206,6 +158,7 @@ class MeetingRealtimeService {
       final kind = (data['type'] ?? extra['notificationKind'] ?? extra['type'])
           ?.toString();
 
+      // Boss should not see their own "Confirm for your team" alerts.
       if (_suppressBossTeamAlerts &&
           (kind == 'meeting_boss_response' ||
               title.toLowerCase().contains('boss will attend') ||
@@ -241,7 +194,6 @@ class MeetingRealtimeService {
   }
 
   void disconnect({bool resetSession = false}) {
-    _pausedForBackground = false;
     _connectedUserId = null;
     _suppressBossTeamAlerts = false;
     if (resetSession) {

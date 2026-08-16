@@ -1,13 +1,8 @@
 /// Application-wide constants.
 abstract final class AppConstants {
-<<<<<<< Updated upstream
   static const String appName = 'Bangar Group';
   static const String appTagline = 'Enterprise Meeting Management';
   static const String appLogoPath = 'assets/images/Logo(500 x 500 px).png';
-=======
-  static const String appName = 'CEO Bangar';
-  static const String appTagline = 'Executive meeting management';
->>>>>>> Stashed changes
 
   static const Duration splashDuration = Duration(seconds: 2);
   static const Duration animationDuration = Duration(milliseconds: 300);

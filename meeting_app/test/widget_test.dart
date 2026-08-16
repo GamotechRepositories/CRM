@@ -49,11 +49,7 @@ void main() {
     );
     await tester.pump();
 
-<<<<<<< Updated upstream
     expect(find.text('Bangar Group'), findsWidgets);
-=======
-    expect(find.text('CEO Bangar'), findsWidgets);
->>>>>>> Stashed changes
 
     // Splash duration + auth bootstrap
     await tester.pump(const Duration(seconds: 3));

@@ -795,10 +795,7 @@ class _NextMeetingHero extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                        Row(
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -817,6 +814,7 @@ class _NextMeetingHero extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -834,8 +832,11 @@ class _NextMeetingHero extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (showApproval)
+                            const Spacer(),
+                            if (showApproval) ...[
                               _UpNextApprovalTag(meeting: meeting),
+                              const SizedBox(width: 8),
+                            ],
                             if (meeting.priority == MeetingPriority.high ||
                                 meeting.priority == MeetingPriority.critical)
                               MeetingTag(

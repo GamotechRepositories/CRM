@@ -1,16 +1,11 @@
 {
-<<<<<<< Updated upstream
     "name": "Bangar Group",
     "short_name": "Bangar Group",
-=======
-    "name": "CEO Bangar",
-    "short_name": "CEO Bangar",
->>>>>>> Stashed changes
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "CEO Bangar — executive meeting management.",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
