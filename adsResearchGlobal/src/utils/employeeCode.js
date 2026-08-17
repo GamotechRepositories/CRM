@@ -1,4 +1,4 @@
-const EMPLOYEE_CODE_PREFIX = 'EMP'
+const EMPLOYEE_CODE_PREFIX = 'ARG'
 const EMPLOYEE_SEQUENCE_MIN_DIGITS = 3
 
 export const getEmployeeCodePrefix = () => EMPLOYEE_CODE_PREFIX
@@ -43,4 +43,5 @@ export const getEmployeeCodePlaceholder = () =>
   `Auto-assigned (e.g. ${buildEmployeeCode(1)}, ${buildEmployeeCode(2)}, ${buildEmployeeCode(3)})`
 
 export const getEmployeeCodeFormatHint = () =>
-  'Format: EMP001 or higher (minimum 3-digit sequence).'
+  'Format: ARG001 or higher (minimum 3-digit sequence).'
+

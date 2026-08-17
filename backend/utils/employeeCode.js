@@ -1,4 +1,11 @@
-/** Employee ID format: EMP + sequence (min 3 digits), e.g. EMP001, EMP002 */
+/** Company-wise Employee ID prefixes */
+export const COMPANY_PREFIXES = {
+  adsResearchGlobal: 'ARG',
+  bangarProperties: 'BGP',
+  salesTechReality: 'STR',
+  mahaProperties: 'MHP',
+};
+
 export const EMPLOYEE_CODE_PREFIX = 'EMP';
 const EMPLOYEE_SEQUENCE_MIN_DIGITS = 3;
 
@@ -9,53 +16,78 @@ export const COMPANY_KEYS = [
   'salesTechReality',
 ];
 
-export const buildEmployeeCode = (_companyKey, sequence) =>
-  `${EMPLOYEE_CODE_PREFIX}${String(sequence).padStart(EMPLOYEE_SEQUENCE_MIN_DIGITS, '0')}`;
+export function getCompanyPrefix(companyKey) {
+  if (!companyKey) return 'EMP';
+  return COMPANY_PREFIXES[companyKey] || 'EMP';
+}
 
-export const employeeCodePattern = () =>
-  new RegExp(`^${EMPLOYEE_CODE_PREFIX}\\d{${EMPLOYEE_SEQUENCE_MIN_DIGITS},}$`, 'i');
-
-export const isValidEmployeeCodeForCompany = (code) => {
-  if (!code || typeof code !== 'string') return false;
-  return employeeCodePattern().test(code.trim());
+export const buildEmployeeCode = (companyKey, sequence) => {
+  const prefix = getCompanyPrefix(companyKey);
+  return `${prefix}${String(sequence).padStart(EMPLOYEE_SEQUENCE_MIN_DIGITS, '0')}`;
 };
 
-export const parseEmployeeCodeSequence = (code) => {
+export const employeeCodePattern = (companyKey) => {
+  if (companyKey && COMPANY_PREFIXES[companyKey]) {
+    const prefix = COMPANY_PREFIXES[companyKey];
+    return new RegExp(`^${prefix}\\d{${EMPLOYEE_SEQUENCE_MIN_DIGITS},}$`, 'i');
+  }
+  const allPrefixes = Object.values(COMPANY_PREFIXES).concat('EMP').join('|');
+  return new RegExp(`^(?:${allPrefixes})\\d{${EMPLOYEE_SEQUENCE_MIN_DIGITS},}$`, 'i');
+};
+
+export const isValidEmployeeCodeForCompany = (code, companyKey) => {
+  if (!code || typeof code !== 'string') return false;
+  return employeeCodePattern(companyKey).test(code.trim());
+};
+
+export const parseEmployeeCodeSequence = (code, companyKey) => {
   if (!code) return null;
   const normalized = code.trim().toUpperCase();
-  if (
-    !normalized.startsWith(EMPLOYEE_CODE_PREFIX)
-    || normalized.length < EMPLOYEE_CODE_PREFIX.length + EMPLOYEE_SEQUENCE_MIN_DIGITS
-  ) return null;
-  const seq = parseInt(normalized.slice(EMPLOYEE_CODE_PREFIX.length), 10);
+  const prefixes = companyKey && COMPANY_PREFIXES[companyKey]
+    ? [COMPANY_PREFIXES[companyKey]]
+    : Object.values(COMPANY_PREFIXES).concat('EMP');
+
+  let matchedPrefix = null;
+  for (const p of prefixes) {
+    if (normalized.startsWith(p)) {
+      matchedPrefix = p;
+      break;
+    }
+  }
+
+  if (!matchedPrefix || normalized.length < matchedPrefix.length + EMPLOYEE_SEQUENCE_MIN_DIGITS) {
+    return null;
+  }
+  const seq = parseInt(normalized.slice(matchedPrefix.length), 10);
   return Number.isNaN(seq) ? null : seq;
 };
 
-export async function getMaxEmployeeCodeSequence(Employee) {
-  const pattern = employeeCodePattern();
+export async function getMaxEmployeeCodeSequence(Employee, companyKey) {
+  const pattern = employeeCodePattern(companyKey);
   const employees = await Employee.find({ employeeCode: pattern }).select('employeeCode').lean();
   let maxSeq = 0;
   for (const emp of employees) {
-    const seq = parseEmployeeCodeSequence(emp.employeeCode);
+    const seq = parseEmployeeCodeSequence(emp.employeeCode, companyKey);
     if (seq != null && seq > maxSeq) maxSeq = seq;
   }
   return maxSeq;
 }
 
 export async function generateNextEmployeeCode(Employee, companyKey) {
-  void companyKey;
-  const maxSeq = await getMaxEmployeeCodeSequence(Employee);
+  const maxSeq = await getMaxEmployeeCodeSequence(Employee, companyKey);
   return buildEmployeeCode(companyKey, maxSeq + 1);
 }
 
-const formatCodeError = () =>
-  'Employee ID must match format EMP001 or higher (e.g. EMP001, EMP002)';
+const formatCodeError = (companyKey) => {
+  const prefix = getCompanyPrefix(companyKey);
+  return `Employee ID must match format ${prefix}001 or higher (e.g. ${prefix}001, ${prefix}002)`;
+};
 
 export async function assignEmployeeCodeOnCreate(Employee, companyKey, payload) {
   const trimmed = (payload.employeeCode || '').trim().toUpperCase();
   if (trimmed) {
-    if (!isValidEmployeeCodeForCompany(trimmed)) {
-      const err = new Error(formatCodeError());
+    if (!isValidEmployeeCodeForCompany(trimmed, companyKey)) {
+      const err = new Error(formatCodeError(companyKey));
       err.status = 400;
       throw err;
     }
@@ -74,7 +106,6 @@ export async function assignEmployeeCodeOnCreate(Employee, companyKey, payload) 
 }
 
 export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employeeId, payload) {
-  void companyKey;
   const raw = payload.employeeCode;
   if (raw == null || String(raw).trim() === '') {
     delete payload.employeeCode;
@@ -82,8 +113,8 @@ export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employe
   }
 
   const trimmed = String(raw).trim().toUpperCase();
-  if (!isValidEmployeeCodeForCompany(trimmed)) {
-    const err = new Error(formatCodeError());
+  if (!isValidEmployeeCodeForCompany(trimmed, companyKey)) {
+    const err = new Error(formatCodeError(companyKey));
     err.status = 400;
     throw err;
   }
@@ -102,9 +133,8 @@ export async function validateEmployeeCodeOnUpdate(Employee, companyKey, employe
   return payload;
 }
 
-/** Renumber all employees to EMP001, EMP002, … (oldest first). */
+/** Renumber all employees company-wise to ARG001/BGP001/STR001/MHP001... (oldest first). */
 export async function backfillEmployeeCodes(Employee, companyKey) {
-  void companyKey;
   const employees = await Employee.find().sort({ createdAt: 1, _id: 1 });
   let updated = 0;
 
@@ -120,3 +150,4 @@ export async function backfillEmployeeCodes(Employee, companyKey) {
 
   return updated;
 }
+
