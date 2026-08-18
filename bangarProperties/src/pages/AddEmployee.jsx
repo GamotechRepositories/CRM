@@ -4,7 +4,7 @@ import { uploadFile } from '../utils/uploadFile'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
-import { getSalaryStructure } from '../utils/salaryCalculator'
+import { getSalaryStructure, salaryFormFromStructure, salaryInputFromForm } from '../utils/salaryCalculator'
 import {
   buildDepartmentOptions,
   CUSTOM_DEPARTMENTS_STORAGE_KEY,
@@ -71,7 +71,15 @@ const emptyForm = {
   bankPassbook: '',
   ctc: '',
   basicSalary: '',
+  da: '',
   hra: '',
+  conveyance: '',
+  specialAllowance: '',
+  medicalAllowance: '',
+  employerPf: '',
+  employeePf: '',
+  pt: '',
+  tds: '',
   allowances: '',
   bonus: '',
   pfNumber: '',
@@ -143,9 +151,18 @@ const mapEmployeeToForm = (emp) => ({
   passport: emp.documents?.passport ?? '',
   drivingLicense: emp.documents?.drivingLicense ?? '',
   bankPassbook: emp.documents?.bankPassbook ?? '',
-  ctc: emp.salaryPayroll?.ctc ?? emp.salary ?? '',
+  ctc: emp.salaryPayroll?.monthlyCTC ?? emp.salaryPayroll?.ctc ?? emp.salary ?? '',
+  salary: emp.salaryPayroll?.monthlyCTC ?? emp.salaryPayroll?.ctc ?? emp.salary ?? '',
   basicSalary: emp.salaryPayroll?.basicSalary ?? '',
+  da: emp.salaryPayroll?.da ?? '',
   hra: emp.salaryPayroll?.hra ?? '',
+  conveyance: emp.salaryPayroll?.conveyance ?? '',
+  specialAllowance: emp.salaryPayroll?.specialAllowance ?? '',
+  medicalAllowance: emp.salaryPayroll?.medicalAllowance ?? '',
+  employerPf: emp.salaryPayroll?.employerPf ?? emp.salaryPayroll?.employerContributions?.find((c) => c.code === 'PF')?.amount ?? '',
+  employeePf: emp.salaryPayroll?.employeePf ?? emp.salaryPayroll?.deductions?.find((d) => d.code === 'PF')?.amount ?? '',
+  pt: emp.salaryPayroll?.professionalTax ?? emp.salaryPayroll?.deductions?.find((d) => d.code === 'PT')?.amount ?? '',
+  tds: emp.salaryPayroll?.tds ?? emp.salaryPayroll?.deductions?.find((d) => d.code === 'TDS')?.amount ?? '',
   allowances: emp.salaryPayroll?.allowances ?? '',
   bonus: emp.salaryPayroll?.bonus ?? '',
   pfNumber: emp.salaryPayroll?.pfNumber ?? '',
@@ -325,7 +342,32 @@ const AddEmployee = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm((f) => ({ ...f, [name]: value }))
+    setForm((f) => {
+      if (name === 'ctc' || name === 'salary') {
+        const struct = getSalaryStructure({ monthlyCTC: Number(value || 0), tds: f.tds })
+        return {
+          ...f,
+          ...salaryFormFromStructure(struct),
+          ctc: value,
+          salary: value,
+          tds: f.tds,
+        }
+      }
+      const next = { ...f, [name]: value }
+      const earningKeys = ['basicSalary', 'da', 'hra', 'conveyance', 'medicalAllowance', 'employerPf']
+      if (earningKeys.includes(name)) {
+        const ctc = Number(next.ctc || next.salary || 0)
+        const used =
+          Number(next.basicSalary || 0) +
+          Number(next.da || 0) +
+          Number(next.hra || 0) +
+          Number(next.conveyance || 0) +
+          Number(next.medicalAllowance || 0) +
+          Number(next.employerPf || 0)
+        next.specialAllowance = Math.max(0, Math.round(ctc - used))
+      }
+      return next
+    })
   }
 
   const handleDesignationSelect = (d) => {
@@ -373,7 +415,7 @@ const AddEmployee = () => {
       const payload = {
         ...form,
         employeeCode: form.employeeCode?.trim() ? form.employeeCode.trim().toUpperCase() : '',
-        salary: form.salary === '' ? 0 : Number(form.salary),
+        salary: form.ctc === '' && form.salary === '' ? 0 : Number(form.ctc || form.salary),
         documents: {
           resume: form.resume,
           offerLetter: form.offerLetter,
@@ -388,7 +430,7 @@ const AddEmployee = () => {
           bankPassbook: form.bankPassbook,
         },
         salaryPayroll: (() => {
-          const struct = getSalaryStructure(Number(form.salary || 0))
+          const struct = getSalaryStructure(salaryInputFromForm(form))
           return {
             grossSalary: struct.grossSalary,
             netSalary: struct.netSalary,
@@ -400,6 +442,11 @@ const AddEmployee = () => {
             da: struct.components.find((c) => c.code === 'DA')?.amount || 0,
             conveyance: struct.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
             specialAllowance: struct.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+            medicalAllowance: struct.components.find((c) => c.code === 'MEDICAL')?.amount || 0,
+            employerPf: struct.employerContributions.find((c) => c.code === 'PF')?.amount || 0,
+            employeePf: struct.deductions.find((c) => c.code === 'PF')?.amount || 0,
+            professionalTax: struct.deductions.find((c) => c.code === 'PT')?.amount || 0,
+            tds: struct.deductions.find((c) => c.code === 'TDS')?.amount || 0,
             allowances: Number(form.allowances || 0),
             bonus: Number(form.bonus || 0),
             totalDeductions: struct.totalDeductions,
@@ -641,34 +688,45 @@ const AddEmployee = () => {
         </Section>
 
         <Section title='6. Salary & Payroll'>
-          <Field label='Gross Monthly Salary' className='md:col-span-2'>
-            <input name='salary' type='number' value={form.salary} onChange={handleChange} className={inputClass} placeholder='e.g. 20000' />
+          <Field label='Monthly CTC' className='md:col-span-2'>
+            <input name='ctc' type='number' min='0' value={form.ctc} onChange={handleChange} className={inputClass} placeholder='Enter monthly CTC, e.g. 45000' />
+            <p className='text-xs text-gray-500 mt-1'>Enter this employee&apos;s monthly CTC. The breakdown below is filled for this amount and can be edited for this employee.</p>
           </Field>
           {(() => {
-            const preview = getSalaryStructure(Number(form.salary || 20000))
+            const preview = getSalaryStructure(salaryInputFromForm(form))
+            const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
             return (
-              <div className='md:col-span-2 p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-3'>
-                <h3 className='font-bold text-gray-900 text-sm'>Calculated Salary Breakdown</h3>
-                <div className='grid grid-cols-2 md:grid-cols-3 gap-2'>
-                  {preview.components.map((c) => (
-                    <div key={c.code} className='p-2 bg-white rounded-lg border border-gray-100'>
-                      <span className='text-gray-500 block'>{c.name}</span>
-                      <span className='font-semibold text-gray-900'>₹{c.amount.toLocaleString('en-IN')}</span>
-                    </div>
-                  ))}
+              <div className='md:col-span-2 space-y-4'>
+                <div className='p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-4'>
+                  <h3 className='font-bold text-gray-900 text-sm'>Earnings</h3>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
+                    <Field label='Basic Salary'><input name='basicSalary' type='number' min='0' value={form.basicSalary} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Dearness Allowance'><input name='da' type='number' min='0' value={form.da} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='House Rent Allowance'><input name='hra' type='number' min='0' value={form.hra} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Conveyance Allowance'><input name='conveyance' type='number' min='0' value={form.conveyance} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Special Allowance'><input name='specialAllowance' type='number' min='0' value={form.specialAllowance} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Employer PF Contribution'><input name='employerPf' type='number' min='0' value={form.employerPf} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Medical Allowance'><input name='medicalAllowance' type='number' min='0' value={form.medicalAllowance} onChange={handleChange} className={inputClass} /></Field>
+                  </div>
+                  <h3 className='font-bold text-gray-900 text-sm pt-1'>Deductions</h3>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
+                    <Field label='Employee PF'><input name='employeePf' type='number' min='0' value={form.employeePf} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Professional Tax'><input name='pt' type='number' min='0' value={form.pt} onChange={handleChange} className={inputClass} /></Field>
+                    <Field label='Income Tax (TDS)'><input name='tds' type='number' min='0' value={form.tds} onChange={handleChange} className={inputClass} placeholder='Enter TDS for this employee' /></Field>
+                  </div>
                 </div>
-                <div className='grid grid-cols-3 gap-2 pt-1 border-t border-gray-200'>
+                <div className='grid grid-cols-3 gap-2'>
                   <div className='p-2 bg-green-50 rounded-lg border border-green-200'>
-                    <span className='text-green-700 block font-medium'>Net Salary</span>
-                    <span className='font-bold text-green-900 text-sm'>₹{preview.netSalary.toLocaleString('en-IN')}</span>
+                    <span className='text-green-700 block font-medium text-xs'>Net Salary</span>
+                    <span className='font-bold text-green-900 text-sm'>{money(preview.netSalary)}</span>
                   </div>
                   <div className='p-2 bg-blue-50 rounded-lg border border-blue-200'>
-                    <span className='text-blue-700 block font-medium'>Monthly CTC</span>
-                    <span className='font-bold text-blue-900 text-sm'>₹{preview.monthlyCTC.toLocaleString('en-IN')}</span>
+                    <span className='text-blue-700 block font-medium text-xs'>Gross Salary</span>
+                    <span className='font-bold text-blue-900 text-sm'>{money(preview.grossSalary)}</span>
                   </div>
                   <div className='p-2 bg-purple-50 rounded-lg border border-purple-200'>
-                    <span className='text-purple-700 block font-medium'>Annual CTC</span>
-                    <span className='font-bold text-purple-900 text-sm'>₹{preview.annualCTC.toLocaleString('en-IN')}</span>
+                    <span className='text-purple-700 block font-medium text-xs'>Annual CTC</span>
+                    <span className='font-bold text-purple-900 text-sm'>{money(preview.annualCTC)}</span>
                   </div>
                 </div>
               </div>

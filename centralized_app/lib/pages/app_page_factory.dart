@@ -38,6 +38,7 @@ import 'payroll_page.dart';
 import 'performance_page.dart';
 import 'placeholder_page.dart';
 import 'profile_page.dart';
+import 'salary_slips_page.dart';
 import 'quotations_page.dart';
 import 'reports_page.dart';
 import 'revenue_page.dart';
@@ -191,6 +192,7 @@ class AppPageFactory {
 
   static Widget _buildRaw(String path) {
     if (path == '/my-profile') return const ProfilePage();
+    if (path == '/salary-slips') return const SalarySlipsPage();
     if (path == '/settings') return const SettingsPage();
 
     switch (path) {

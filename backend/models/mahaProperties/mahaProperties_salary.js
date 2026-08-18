@@ -41,6 +41,10 @@ const salarySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  medicalAllowance: {
+    type: Number,
+    default: 0,
+  },
   attendanceIncentive: {
     type: Number,
     default: 0,

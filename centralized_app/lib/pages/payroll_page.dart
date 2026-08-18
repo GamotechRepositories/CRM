@@ -495,7 +495,7 @@ class _PayrollPageState extends State<PayrollPage> {
                     TextField(
                       controller: amountCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Salary Amount (₹) *', isDense: true),
+                      decoration: const InputDecoration(labelText: 'Monthly CTC (₹) *', isDense: true),
                     ),
                     const SizedBox(height: 8),
                     Row(

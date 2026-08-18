@@ -201,6 +201,14 @@ class CompanyApi {
   Future<void> deleteExpense(String id) =>
       client.deleteJson('/expenses/$id');
 
+  Future<Map<String, dynamic>> fetchCompanyProfile() async {
+    try {
+      return await client.getJson('/company-profile');
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchSalaries({Map<String, String>? query}) =>
       _list('/salaries', query: query, softFail: true);
 

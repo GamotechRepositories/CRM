@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate } from 'react-router-dom'
-import { getSalaryStructure } from '../utils/salaryCalculator'
+import { getSalaryStructure, salaryFormFromStructure, salaryInputFromForm } from '../utils/salaryCalculator'
 
 const MONTHS = [
   { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
@@ -14,6 +14,17 @@ const AddSalary = () => {
   const [form, setForm] = useState({
     employee: '',
     amount: '',
+    ctc: '',
+    basicSalary: '',
+    da: '',
+    hra: '',
+    conveyance: '',
+    specialAllowance: '',
+    medicalAllowance: '',
+    employerPf: '',
+    employeePf: '',
+    pt: '',
+    tds: '',
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
     status: 'Unpaid',
@@ -55,10 +66,17 @@ const AddSalary = () => {
   const selectedEmployee = employees.find((e) => e._id === form.employee)
 
   const handleEmployeeSelect = (emp) => {
+    const payroll = emp.salaryPayroll || {}
+    const struct = getSalaryStructure({
+      ...payroll,
+      monthlyCTC: payroll.monthlyCTC ?? payroll.ctc ?? emp.salary ?? 0,
+    })
+    const fields = salaryFormFromStructure(struct)
     setForm((f) => ({
       ...f,
       employee: emp._id,
-      amount: emp.salary ?? '',
+      amount: fields.ctc,
+      ...fields,
     }))
     setEmployeeSearch(emp.name || '')
     setEmployeeOpen(false)
@@ -66,10 +84,40 @@ const AddSalary = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm((f) => ({
-      ...f,
-      [name]: name === 'month' || name === 'year' ? Number(value) : value,
-    }))
+    setForm((f) => {
+      if (name === 'amount' || name === 'ctc') {
+        const struct = getSalaryStructure({ monthlyCTC: Number(value || 0), tds: f.tds })
+        const fields = salaryFormFromStructure(struct)
+        return {
+          ...f,
+          ...fields,
+          amount: value,
+          ctc: value,
+          tds: f.tds,
+          month: f.month,
+          year: f.year,
+          status: f.status,
+          employee: f.employee,
+        }
+      }
+      const next = {
+        ...f,
+        [name]: name === 'month' || name === 'year' ? Number(value) : value,
+      }
+      const earningKeys = ['basicSalary', 'da', 'hra', 'conveyance', 'medicalAllowance', 'employerPf']
+      if (earningKeys.includes(name)) {
+        const ctc = Number(next.ctc || next.amount || 0)
+        const used =
+          Number(next.basicSalary || 0) +
+          Number(next.da || 0) +
+          Number(next.hra || 0) +
+          Number(next.conveyance || 0) +
+          Number(next.medicalAllowance || 0) +
+          Number(next.employerPf || 0)
+        next.specialAllowance = Math.max(0, Math.round(ctc - used))
+      }
+      return next
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -82,8 +130,12 @@ const AddSalary = () => {
     setError(null)
     try {
       await api.post('/salaries', {
-        ...form,
-        amount: Number(form.amount),
+        employee: form.employee,
+        amount: Number(form.ctc || form.amount),
+        month: form.month,
+        year: form.year,
+        status: form.status,
+        ...salaryInputFromForm(form),
       })
       navigate('/salaries')
     } catch (err) {
@@ -111,7 +163,7 @@ const AddSalary = () => {
               onChange={(e) => {
                 setEmployeeSearch(e.target.value)
                 setEmployeeOpen(true)
-                if (!e.target.value) setForm((f) => ({ ...f, employee: '', amount: '' }))
+                if (!e.target.value) setForm((f) => ({ ...f, employee: '', amount: '', ctc: '' }))
               }}
               onFocus={() => setEmployeeOpen(true)}
               placeholder='Search employee...'
@@ -139,47 +191,69 @@ const AddSalary = () => {
         </div>
 
         <div className='w-full'>
-          <label className='block text-sm font-medium text-gray-700'>Gross Monthly Salary</label>
+          <label className='block text-sm font-medium text-gray-700'>Monthly CTC</label>
           <input
-            name='amount'
+            name='ctc'
             type='number'
-            value={form.amount}
+            min='0'
+            value={form.ctc}
             onChange={handleChange}
             required
-            placeholder='e.g. 20000'
+            placeholder='Enter monthly CTC'
             className={inputClass}
           />
           {selectedEmployee && (
-            <p className='text-xs text-gray-500 mt-1'>Populated from {selectedEmployee.name}&apos;s base salary</p>
+            <p className='text-xs text-gray-500 mt-1'>Filled from {selectedEmployee.name}&apos;s payroll. Edit CTC or any line for this month.</p>
           )}
         </div>
 
-        {/* Live Salary Structure Breakdown Preview */}
         {(() => {
-          const preview = getSalaryStructure(Number(form.amount || 20000))
+          const preview = getSalaryStructure(salaryInputFromForm(form))
+          const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
           return (
-            <div className='w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-3'>
-              <h3 className='font-bold text-gray-900 text-sm'>Calculated Salary Breakdown</h3>
-              <div className='grid grid-cols-2 md:grid-cols-3 gap-2'>
-                {preview.components.map((c) => (
-                  <div key={c.code} className='p-2 bg-white rounded-lg border border-gray-100'>
-                    <span className='text-gray-500 block'>{c.name}</span>
-                    <span className='font-semibold text-gray-900'>₹{c.amount.toLocaleString('en-IN')}</span>
+            <div className='w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-4'>
+              <h3 className='font-bold text-gray-900 text-sm'>Earnings</h3>
+              <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
+                {[
+                  ['basicSalary', 'Basic Salary'],
+                  ['da', 'Dearness Allowance'],
+                  ['hra', 'House Rent Allowance'],
+                  ['conveyance', 'Conveyance Allowance'],
+                  ['specialAllowance', 'Special Allowance'],
+                  ['employerPf', 'Employer PF Contribution'],
+                  ['medicalAllowance', 'Medical Allowance'],
+                ].map(([name, label]) => (
+                  <div key={name}>
+                    <label className='block text-xs font-medium text-gray-700 mb-1'>{label}</label>
+                    <input name={name} type='number' min='0' value={form[name]} onChange={handleChange} className={inputClass} />
+                  </div>
+                ))}
+              </div>
+              <h3 className='font-bold text-gray-900 text-sm'>Deductions</h3>
+              <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
+                {[
+                  ['employeePf', 'Employee PF'],
+                  ['pt', 'Professional Tax'],
+                  ['tds', 'Income Tax (TDS)'],
+                ].map(([name, label]) => (
+                  <div key={name}>
+                    <label className='block text-xs font-medium text-gray-700 mb-1'>{label}</label>
+                    <input name={name} type='number' min='0' value={form[name]} onChange={handleChange} className={inputClass} />
                   </div>
                 ))}
               </div>
               <div className='grid grid-cols-3 gap-2 pt-1 border-t border-gray-200'>
                 <div className='p-2 bg-green-50 rounded-lg border border-green-200'>
                   <span className='text-green-700 block font-medium'>Net Salary</span>
-                  <span className='font-bold text-green-900 text-sm'>₹{preview.netSalary.toLocaleString('en-IN')}</span>
+                  <span className='font-bold text-green-900 text-sm'>{money(preview.netSalary)}</span>
                 </div>
                 <div className='p-2 bg-blue-50 rounded-lg border border-blue-200'>
-                  <span className='text-blue-700 block font-medium'>Monthly CTC</span>
-                  <span className='font-bold text-blue-900 text-sm'>₹{preview.monthlyCTC.toLocaleString('en-IN')}</span>
+                  <span className='text-blue-700 block font-medium'>Gross Salary</span>
+                  <span className='font-bold text-blue-900 text-sm'>{money(preview.grossSalary)}</span>
                 </div>
                 <div className='p-2 bg-purple-50 rounded-lg border border-purple-200'>
                   <span className='text-purple-700 block font-medium'>Annual CTC</span>
-                  <span className='font-bold text-purple-900 text-sm'>₹{preview.annualCTC.toLocaleString('en-IN')}</span>
+                  <span className='font-bold text-purple-900 text-sm'>{money(preview.annualCTC)}</span>
                 </div>
               </div>
             </div>

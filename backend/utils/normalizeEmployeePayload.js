@@ -41,17 +41,18 @@ export const normalizeEmployeePayload = (body = {}) => {
     ...rest
   } = body;
 
-  const rawGross = toNumber(rest.salaryPayroll?.grossSalary ?? rest.grossSalary ?? rest.salary) ?? toNumber(rest.salaryPayroll?.ctc) ?? 20000;
+  const monthlyCtc =
+    toNumber(rest.salaryPayroll?.monthlyCTC ?? rest.salaryPayroll?.ctc ?? rest.ctc ?? rest.salary) ?? 0;
   const computedStructure = calculateSalaryStructure({
     ...rest.salaryPayroll,
     ...rest,
-    grossSalary: rawGross,
+    monthlyCTC: monthlyCtc,
   });
 
   const payload = {
     ...rest,
     department: typeof rest.department === 'string' ? rest.department.trim() : rest.department,
-    salary: computedStructure.grossSalary,
+    salary: computedStructure.monthlyCTC,
     dateOfJoining: toDate(rest.dateOfJoining),
     dateOfBirth: toDate(rest.dateOfBirth),
     probationEndDate: toDate(rest.probationEndDate),
@@ -85,7 +86,12 @@ export const normalizeEmployeePayload = (body = {}) => {
       da: computedStructure.components.find((c) => c.code === 'DA')?.amount || 0,
       conveyance: computedStructure.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
       specialAllowance: computedStructure.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+      medicalAllowance: computedStructure.components.find((c) => c.code === 'MEDICAL')?.amount || 0,
       attendanceIncentive: computedStructure.components.find((c) => c.code === 'ATTENDANCE_INCENTIVE')?.amount || 0,
+      employerPf: computedStructure.employerContributions.find((c) => c.code === 'PF')?.amount || 0,
+      employeePf: computedStructure.deductions.find((c) => c.code === 'PF')?.amount || 0,
+      professionalTax: computedStructure.deductions.find((c) => c.code === 'PT')?.amount || 0,
+      tds: computedStructure.deductions.find((c) => c.code === 'TDS')?.amount || 0,
       allowances: toNumber(rest.salaryPayroll?.allowances ?? rest.allowances) ?? 0,
       bonus: toNumber(rest.salaryPayroll?.bonus ?? rest.bonus) ?? 0,
       totalDeductions: computedStructure.totalDeductions,

@@ -461,10 +461,10 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
       </InfoCard>
 
       <InfoCard title='Salary Information' icon={<CardIcon><svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={1.5} d='M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' /></svg></CardIcon>} actionLabel='View More' onAction={() => goTab('Payroll')}>
-        <DetailRow label='CTC' value={money(payroll.ctc || e.salary)} />
+        <DetailRow label='Monthly CTC' value={money(payroll.monthlyCTC || payroll.ctc || e.salary)} />
         <DetailRow label='Basic Salary' value={money(payroll.basicSalary)} />
         <DetailRow label='HRA' value={money(payroll.hra)} />
-        <DetailRow label='Allowances' value={money(payroll.allowances)} />
+        <DetailRow label='Net Salary' value={money(payroll.netSalary)} />
         <DetailRow label='PF Number' value={val(payroll.pfNumber)} />
       </InfoCard>
 
@@ -541,7 +541,7 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
       <DocumentsPanel docs={docs} onPreview={setDocPreview} />
     ),
     Payroll: (() => {
-      const struct = getSalaryStructure(payroll.grossSalary || payroll.ctc || e.salary || 20000)
+      const struct = getSalaryStructure(payroll)
       return (
         <div className='space-y-6'>
           <InfoCard title='Salary Breakdown & CTC'>

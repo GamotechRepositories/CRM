@@ -1,27 +1,57 @@
-export const getSalaryStructure = (salaryRecordOrGross) => {
-  if (!salaryRecordOrGross) {
-    return getSalaryStructure(20000);
-  }
+const toNum = (value, fallback = 0) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
 
-  let data = typeof salaryRecordOrGross === 'object' ? salaryRecordOrGross : { grossSalary: Number(salaryRecordOrGross) };
+const roundRupee = (value) => Math.round(toNum(value, 0))
 
-  let gross = Number(
-    data.grossSalary ?? data.amount ?? data.salary ?? data.salaryPayroll?.ctc ?? 20000
-  );
-  if (isNaN(gross) || gross < 0) gross = 20000;
+const hasExplicit = (value) =>
+  value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value))
 
-  let components = Array.isArray(data.components) && data.components.length > 0
-    ? data.components.map((c) => ({ code: String(c.code), name: String(c.name), amount: Number(c.amount || 0) }))
-    : null;
+const mapLines = (raw) => {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  const lines = raw
+    .map((item) => ({
+      code: String(item?.code || ''),
+      name: String(item?.name || ''),
+      amount: toNum(item?.amount, 0),
+    }))
+    .filter((item) => item.code || item.name)
+  return lines.length ? lines : null
+}
+
+const pick = (lines, code) => (lines || []).find((item) => item.code === code)?.amount
+
+const sourceFrom = (data = {}) => {
+  const payroll = data.salaryPayroll && typeof data.salaryPayroll === 'object' ? data.salaryPayroll : {}
+  return { ...payroll, ...data }
+}
+
+export const calculateSalaryStructure = (data = {}) => {
+  const src = sourceFrom(data)
+  const monthlyCtcInput = roundRupee(
+    src.monthlyCTC ?? src.ctc ?? src.amount ?? src.salary ?? src.grossSalary ?? 0
+  )
+
+  let components = mapLines(src.components)
+  let employerContributions = mapLines(src.employerContributions)
+  let deductions = mapLines(src.deductions) || mapLines(src.deductionsList)
 
   if (!components) {
-    const basic = Number(data.basicSalary ?? Math.round(gross * 0.55));
-    const da = Number(data.da ?? Math.round(gross * 0.2035));
-    const hra = Number(data.hra ?? Math.round(gross * 0.055));
-    const conveyance = Number(data.conveyance ?? Math.round(gross * 0.07));
-    const attendanceIncentive = Number(data.attendanceIncentive ?? 0);
-    const allocated = basic + da + hra + conveyance + attendanceIncentive;
-    const special = Number(data.specialAllowance ?? Math.max(0, gross - allocated));
+    const ctc = Math.max(0, monthlyCtcInput)
+    const basic = hasExplicit(src.basicSalary) ? roundRupee(src.basicSalary) : roundRupee(ctc * 0.4)
+    const da = hasExplicit(src.da) ? roundRupee(src.da) : roundRupee(ctc * 0.1)
+    const hra = hasExplicit(src.hra) ? roundRupee(src.hra) : roundRupee(ctc * 0.2)
+    const conveyance = hasExplicit(src.conveyance) ? roundRupee(src.conveyance) : roundRupee(ctc * 0.05)
+    const medical = hasExplicit(src.medicalAllowance ?? src.medical)
+      ? roundRupee(src.medicalAllowance ?? src.medical)
+      : roundRupee(ctc * 0.05)
+    const employerPf = hasExplicit(src.employerPf ?? src.employerPfAmount)
+      ? roundRupee(src.employerPf ?? src.employerPfAmount)
+      : Math.min(1800, roundRupee(basic * 0.12))
+    const special = hasExplicit(src.specialAllowance)
+      ? roundRupee(src.specialAllowance)
+      : Math.max(0, ctc - basic - da - hra - conveyance - medical - employerPf)
 
     components = [
       { code: 'BASIC', name: 'Basic Salary', amount: basic },
@@ -29,54 +59,52 @@ export const getSalaryStructure = (salaryRecordOrGross) => {
       { code: 'HRA', name: 'House Rent Allowance', amount: hra },
       { code: 'CONVEYANCE', name: 'Conveyance Allowance', amount: conveyance },
       { code: 'SPECIAL', name: 'Special Allowance', amount: special },
-      { code: 'ATTENDANCE_INCENTIVE', name: 'Attendance Incentive', amount: attendanceIncentive },
-    ];
+      { code: 'MEDICAL', name: 'Medical Allowance', amount: medical },
+    ]
+
+    if (!employerContributions) {
+      employerContributions = [{ code: 'PF', name: 'Employer PF Contribution', amount: employerPf }]
+    }
   }
 
-  const calculatedGross = components.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
-  const grossSalary = calculatedGross > 0 ? calculatedGross : gross;
-
-  let deductions = Array.isArray(data.deductions) && data.deductions.length > 0
-    ? data.deductions.map((d) => ({ code: String(d.code), name: String(d.name), amount: Number(d.amount || 0) }))
-    : Array.isArray(data.deductionsList) && data.deductionsList.length > 0
-    ? data.deductionsList.map((d) => ({ code: String(d.code), name: String(d.name), amount: Number(d.amount || 0) }))
-    : null;
-
-  if (!deductions) {
-    const basicComp = components.find((c) => c.code === 'BASIC')?.amount || 0;
-    const pf = Number(data.pfAmount ?? data.pf ?? (grossSalary >= 20000 ? 1800 : Math.min(1800, Math.round(basicComp * 0.12))));
-    const esic = Number(data.esicAmount ?? data.esic ?? 0);
-    const pt = Number(data.ptAmount ?? data.pt ?? (grossSalary > 15000 ? 200 : 0));
-
-    deductions = [
-      { code: 'PF', name: 'Provident Fund', amount: pf },
-      { code: 'ESIC', name: 'ESIC', amount: esic },
-      { code: 'PT', name: 'Professional Tax', amount: pt },
-    ];
-  }
-
-  const totalDeductions = deductions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-  const netSalary = data.netSalary != null && !isNaN(data.netSalary) ? Number(data.netSalary) : Math.max(0, grossSalary - totalDeductions);
-
-  let employerContributions = Array.isArray(data.employerContributions) && data.employerContributions.length > 0
-    ? data.employerContributions.map((e) => ({ code: String(e.code), name: String(e.name), amount: Number(e.amount || 0) }))
-    : null;
+  const grossSalary = components.reduce((sum, line) => sum + toNum(line.amount), 0)
+  const basicComp = pick(components, 'BASIC') || 0
+  const employerPfAmt =
+    pick(employerContributions, 'PF') ??
+    (hasExplicit(src.employerPf ?? src.employerPfAmount)
+      ? roundRupee(src.employerPf ?? src.employerPfAmount)
+      : Math.min(1800, roundRupee(basicComp * 0.12)))
 
   if (!employerContributions) {
-    const pfDeduction = deductions.find((d) => d.code === 'PF')?.amount || 0;
-    const esicDeduction = deductions.find((d) => d.code === 'ESIC')?.amount || 0;
-    const empPf = Number(data.employerPfAmount ?? data.employerPf ?? pfDeduction);
-    const empEsic = Number(data.employerEsicAmount ?? data.employerEsic ?? esicDeduction);
-
-    employerContributions = [
-      { code: 'PF', name: 'Employer Provident Fund', amount: empPf },
-      { code: 'ESIC', name: 'Employer ESIC', amount: empEsic },
-    ];
+    employerContributions = [{ code: 'PF', name: 'Employer PF Contribution', amount: employerPfAmt }]
   }
 
-  const totalEmployerContrib = employerContributions.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const monthlyCTC = data.monthlyCTC != null && !isNaN(data.monthlyCTC) ? Number(data.monthlyCTC) : (grossSalary + totalEmployerContrib);
-  const annualCTC = data.annualCTC != null && !isNaN(data.annualCTC) ? Number(data.annualCTC) : (monthlyCTC * 12);
+  if (!deductions) {
+    const employeePf = hasExplicit(src.employeePf ?? src.pfAmount ?? src.pf)
+      ? roundRupee(src.employeePf ?? src.pfAmount ?? src.pf)
+      : employerPfAmt
+    const pt = hasExplicit(src.pt ?? src.ptAmount ?? src.professionalTax)
+      ? roundRupee(src.pt ?? src.ptAmount ?? src.professionalTax)
+      : grossSalary > 15000
+        ? 200
+        : 0
+    const tds = hasExplicit(src.tds ?? src.incomeTax) ? roundRupee(src.tds ?? src.incomeTax) : 0
+
+    deductions = [
+      { code: 'PF', name: 'Employee PF', amount: employeePf },
+      { code: 'PT', name: 'Professional Tax', amount: pt },
+      { code: 'TDS', name: 'Income Tax (TDS)', amount: tds },
+    ]
+  }
+
+  const totalDeductions = deductions.reduce((sum, line) => sum + toNum(line.amount), 0)
+  const netSalary =
+    hasExplicit(src.netSalary) ? roundRupee(src.netSalary) : Math.max(0, grossSalary - totalDeductions)
+  const totalEmployerContrib = employerContributions.reduce((sum, line) => sum + toNum(line.amount), 0)
+  const monthlyCTC = hasExplicit(src.monthlyCTC ?? src.ctc)
+    ? roundRupee(src.monthlyCTC ?? src.ctc)
+    : grossSalary + totalEmployerContrib
+  const annualCTC = hasExplicit(src.annualCTC) ? roundRupee(src.annualCTC) : monthlyCTC * 12
 
   return {
     components,
@@ -87,5 +115,47 @@ export const getSalaryStructure = (salaryRecordOrGross) => {
     employerContributions,
     monthlyCTC,
     annualCTC,
-  };
-};
+  }
+}
+
+export const salaryFormFromStructure = (struct) => {
+  const pickAmt = (lines, code) => pick(lines, code) ?? 0
+  return {
+    basicSalary: pickAmt(struct.components, 'BASIC'),
+    da: pickAmt(struct.components, 'DA'),
+    hra: pickAmt(struct.components, 'HRA'),
+    conveyance: pickAmt(struct.components, 'CONVEYANCE'),
+    specialAllowance: pickAmt(struct.components, 'SPECIAL'),
+    medicalAllowance: pickAmt(struct.components, 'MEDICAL'),
+    employerPf: pickAmt(struct.employerContributions, 'PF'),
+    employeePf: pickAmt(struct.deductions, 'PF'),
+    pt: pickAmt(struct.deductions, 'PT'),
+    tds: pickAmt(struct.deductions, 'TDS'),
+    ctc: struct.monthlyCTC,
+    salary: struct.monthlyCTC,
+  }
+}
+
+export const salaryInputFromForm = (form = {}) => ({
+  monthlyCTC: form.ctc ?? form.salary ?? form.monthlyCTC ?? 0,
+  basicSalary: form.basicSalary,
+  da: form.da,
+  hra: form.hra,
+  conveyance: form.conveyance,
+  specialAllowance: form.specialAllowance,
+  medicalAllowance: form.medicalAllowance,
+  employerPf: form.employerPf,
+  employeePf: form.employeePf,
+  pt: form.pt,
+  tds: form.tds,
+})
+
+export const getSalaryStructure = (salaryRecordOrCtc) => {
+  if (salaryRecordOrCtc == null || salaryRecordOrCtc === '') {
+    return calculateSalaryStructure({ monthlyCTC: 0 })
+  }
+  if (typeof salaryRecordOrCtc === 'object') {
+    return calculateSalaryStructure(salaryRecordOrCtc)
+  }
+  return calculateSalaryStructure({ monthlyCTC: Number(salaryRecordOrCtc) })
+}

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../utils/salary_calculator.dart';
 
 /// `/my-profile` — fetches `GET /employees/:id/profile` for the logged-in user.
 class ProfilePage extends StatefulWidget {
@@ -314,10 +315,10 @@ class _OverviewTab extends StatelessWidget {
         _InfoCard(
           title: 'Salary Snapshot',
           rows: [
-            _Row('CTC', formatMoney(payroll['ctc'] ?? employee['salary'])),
+            _Row('Monthly CTC', formatMoney(payroll['monthlyCTC'] ?? payroll['ctc'] ?? employee['salary'])),
             _Row('Basic Salary', formatMoney(payroll['basicSalary'])),
             _Row('HRA', formatMoney(payroll['hra'])),
-            _Row('Allowances', formatMoney(payroll['allowances'])),
+            _Row('Net Salary', formatMoney(payroll['netSalary'])),
           ],
         ),
         const SizedBox(height: 8),
@@ -435,53 +436,35 @@ class _PayrollTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final payroll = (employee['salaryPayroll'] as Map?)?.cast<String, dynamic>() ?? {};
     final salaries = profile['salaries'] is List ? profile['salaries'] as List : [];
-    final gross = ((payroll['grossSalary'] ?? payroll['ctc'] ?? employee['salary'] ?? 20000) as num).toDouble();
-
-    // Standard component percentages/fixed values based on ₹20,000 gross
-    final basic = (gross * 0.55).roundToDouble();
-    final da = (gross * 0.2035).roundToDouble();
-    final hra = (gross * 0.055).roundToDouble();
-    final conveyance = (gross * 0.07).roundToDouble();
-    final special = (gross - basic - da - hra - conveyance).clamp(0.0, double.infinity);
-    
-    double pf = 0.0;
-    if (gross > 0) {
-      if (basic >= 15000) {
-        pf = 1800.0;
-      } else {
-        pf = (basic * 0.12).clamp(0.0, 1800.0).roundToDouble();
-        if (pf < 1800 && gross >= 20000) pf = 1800.0;
-      }
-    }
-    final pt = gross >= 15000 ? 200.0 : 0.0;
-    final totalDeductions = pf + pt;
-    final netSalary = gross - totalDeductions;
-    final employerPf = pf;
-    final monthlyCtc = gross + employerPf;
-    final annualCtc = monthlyCtc * 12;
+    final structure = getSalaryStructure({
+      ...payroll,
+      'monthlyCTC': payroll['monthlyCTC'] ?? payroll['ctc'] ?? employee['salary'] ?? 0,
+    });
 
     return Column(
       children: [
         _InfoCard(
           title: 'Salary & CTC Summary',
           rows: [
-            _Row('Gross Salary', formatMoney(gross)),
-            _Row('Net Salary', formatMoney(netSalary)),
-            _Row('Monthly CTC', formatMoney(monthlyCtc)),
-            _Row('Annual CTC', formatMoney(annualCtc)),
+            _Row('Gross Salary', formatMoney(structure.grossSalary)),
+            _Row('Net Salary', formatMoney(structure.netSalary)),
+            _Row('Monthly CTC', formatMoney(structure.monthlyCTC)),
+            _Row('Annual CTC', formatMoney(structure.annualCTC)),
           ],
         ),
         const SizedBox(height: 8),
         _InfoCard(
-          title: 'Earnings & Deductions',
+          title: 'Earnings',
           rows: [
-            _Row('Basic Salary', formatMoney(basic)),
-            _Row('Dearness Allowance (DA)', formatMoney(da)),
-            _Row('House Rent Allowance (HRA)', formatMoney(hra)),
-            _Row('Conveyance Allowance', formatMoney(conveyance)),
-            _Row('Special Allowance', formatMoney(special)),
-            _Row('Provident Fund (PF)', formatMoney(pf)),
-            _Row('Professional Tax (PT)', formatMoney(pt)),
+            for (final line in structure.components) _Row(line.name, formatMoney(line.amount)),
+            for (final line in structure.employerContributions) _Row(line.name, formatMoney(line.amount)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _InfoCard(
+          title: 'Deductions',
+          rows: [
+            for (final line in structure.deductions) _Row(line.name, formatMoney(line.amount)),
             _Row('PAN Number', profileVal(payroll['panNumber'])),
             _Row('PF Number', profileVal(payroll['pfNumber'])),
             _Row('Bank Details', profileVal(payroll['bankAccountDetails'])),
