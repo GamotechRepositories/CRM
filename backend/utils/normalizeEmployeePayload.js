@@ -41,7 +41,7 @@ export const normalizeEmployeePayload = (body = {}) => {
     ...rest
   } = body;
 
-  const rawGross = toNumber(rest.salaryPayroll?.grossSalary ?? rest.grossSalary ?? rest.salaryPayroll?.ctc ?? rest.salary) ?? 20000;
+  const rawGross = toNumber(rest.salaryPayroll?.grossSalary ?? rest.grossSalary ?? rest.salary) ?? toNumber(rest.salaryPayroll?.ctc) ?? 20000;
   const computedStructure = calculateSalaryStructure({
     ...rest.salaryPayroll,
     ...rest,

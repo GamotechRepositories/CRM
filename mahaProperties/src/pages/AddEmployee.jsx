@@ -4,6 +4,7 @@ import { uploadFile } from '../utils/uploadFile'
 import { useNavigate, useParams } from 'react-router-dom'
 import { DEFAULT_SIDEBAR_SECTIONS, SIDEBAR_PARENT_SECTIONS, isAlwaysOnSidebarSection } from '../config/sidebarParentSections'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
+import { getSalaryStructure } from '../utils/salaryCalculator'
 import {
   buildDepartmentOptions,
   CUSTOM_DEPARTMENTS_STORAGE_KEY,
@@ -386,18 +387,33 @@ const AddEmployee = () => {
           drivingLicense: form.drivingLicense,
           bankPassbook: form.bankPassbook,
         },
-        salaryPayroll: {
-          ctc: form.ctc,
-          basicSalary: form.basicSalary,
-          hra: form.hra,
-          allowances: form.allowances,
-          bonus: form.bonus,
-          pfNumber: form.pfNumber,
-          esicNumber: form.esicNumber,
-          uanNumber: form.uanNumber,
-          taxInformation: form.taxInformation,
-          bankAccountDetails: form.bankAccountDetails,
-        },
+        salaryPayroll: (() => {
+          const struct = getSalaryStructure(Number(form.salary || 0))
+          return {
+            grossSalary: struct.grossSalary,
+            netSalary: struct.netSalary,
+            monthlyCTC: struct.monthlyCTC,
+            annualCTC: struct.annualCTC,
+            ctc: struct.monthlyCTC,
+            basicSalary: struct.components.find((c) => c.code === 'BASIC')?.amount || 0,
+            hra: struct.components.find((c) => c.code === 'HRA')?.amount || 0,
+            da: struct.components.find((c) => c.code === 'DA')?.amount || 0,
+            conveyance: struct.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
+            specialAllowance: struct.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+            allowances: Number(form.allowances || 0),
+            bonus: Number(form.bonus || 0),
+            totalDeductions: struct.totalDeductions,
+            components: struct.components,
+            deductions: struct.deductions,
+            employerContributions: struct.employerContributions,
+            pfNumber: form.pfNumber,
+            esicNumber: form.esicNumber,
+            uanNumber: form.uanNumber,
+            panNumber: form.panNumber,
+            taxInformation: form.taxInformation,
+            bankAccountDetails: form.bankAccountDetails,
+          }
+        })(),
         assets: {
           laptop: form.laptop,
           desktop: form.desktop,
@@ -625,12 +641,39 @@ const AddEmployee = () => {
         </Section>
 
         <Section title='6. Salary & Payroll'>
-          <Field label='Monthly Salary'><input name='salary' type='number' value={form.salary} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='CTC'><input name='ctc' type='number' value={form.ctc} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Basic Salary'><input name='basicSalary' type='number' value={form.basicSalary} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='HRA'><input name='hra' type='number' value={form.hra} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Allowances'><input name='allowances' type='number' value={form.allowances} onChange={handleChange} className={inputClass} /></Field>
-          <Field label='Bonus'><input name='bonus' type='number' value={form.bonus} onChange={handleChange} className={inputClass} /></Field>
+          <Field label='Gross Monthly Salary' className='md:col-span-2'>
+            <input name='salary' type='number' value={form.salary} onChange={handleChange} className={inputClass} placeholder='e.g. 20000' />
+          </Field>
+          {(() => {
+            const preview = getSalaryStructure(Number(form.salary || 20000))
+            return (
+              <div className='md:col-span-2 p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-3'>
+                <h3 className='font-bold text-gray-900 text-sm'>Calculated Salary Breakdown</h3>
+                <div className='grid grid-cols-2 md:grid-cols-3 gap-2'>
+                  {preview.components.map((c) => (
+                    <div key={c.code} className='p-2 bg-white rounded-lg border border-gray-100'>
+                      <span className='text-gray-500 block'>{c.name}</span>
+                      <span className='font-semibold text-gray-900'>₹{c.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className='grid grid-cols-3 gap-2 pt-1 border-t border-gray-200'>
+                  <div className='p-2 bg-green-50 rounded-lg border border-green-200'>
+                    <span className='text-green-700 block font-medium'>Net Salary</span>
+                    <span className='font-bold text-green-900 text-sm'>₹{preview.netSalary.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className='p-2 bg-blue-50 rounded-lg border border-blue-200'>
+                    <span className='text-blue-700 block font-medium'>Monthly CTC</span>
+                    <span className='font-bold text-blue-900 text-sm'>₹{preview.monthlyCTC.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className='p-2 bg-purple-50 rounded-lg border border-purple-200'>
+                    <span className='text-purple-700 block font-medium'>Annual CTC</span>
+                    <span className='font-bold text-purple-900 text-sm'>₹{preview.annualCTC.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
           <Field label='PF Number'><input name='pfNumber' value={form.pfNumber} onChange={handleChange} className={inputClass} /></Field>
           <Field label='ESIC Number'><input name='esicNumber' value={form.esicNumber} onChange={handleChange} className={inputClass} /></Field>
           <Field label='UAN Number'><input name='uanNumber' value={form.uanNumber} onChange={handleChange} className={inputClass} /></Field>
