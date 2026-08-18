@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useNavigate } from 'react-router-dom'
+import { getSalaryStructure } from '../utils/salaryCalculator'
 
 const MONTHS = [
   { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
@@ -138,20 +139,52 @@ const AddSalary = () => {
         </div>
 
         <div className='w-full'>
-          <label className='block text-sm font-medium text-gray-700'>Monthly Salary</label>
+          <label className='block text-sm font-medium text-gray-700'>Gross Monthly Salary</label>
           <input
             name='amount'
             type='number'
             value={form.amount}
             onChange={handleChange}
             required
-            placeholder='Auto-filled from employee'
+            placeholder='e.g. 20000'
             className={inputClass}
           />
           {selectedEmployee && (
-            <p className='text-xs text-gray-500 mt-1'>Populated from {selectedEmployee.name}&apos;s salary</p>
+            <p className='text-xs text-gray-500 mt-1'>Populated from {selectedEmployee.name}&apos;s base salary</p>
           )}
         </div>
+
+        {/* Live Salary Structure Breakdown Preview */}
+        {(() => {
+          const preview = getSalaryStructure(Number(form.amount || 20000))
+          return (
+            <div className='w-full p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs space-y-3'>
+              <h3 className='font-bold text-gray-900 text-sm'>Calculated Salary Breakdown</h3>
+              <div className='grid grid-cols-2 md:grid-cols-3 gap-2'>
+                {preview.components.map((c) => (
+                  <div key={c.code} className='p-2 bg-white rounded-lg border border-gray-100'>
+                    <span className='text-gray-500 block'>{c.name}</span>
+                    <span className='font-semibold text-gray-900'>₹{c.amount.toLocaleString('en-IN')}</span>
+                  </div>
+                ))}
+              </div>
+              <div className='grid grid-cols-3 gap-2 pt-1 border-t border-gray-200'>
+                <div className='p-2 bg-green-50 rounded-lg border border-green-200'>
+                  <span className='text-green-700 block font-medium'>Net Salary</span>
+                  <span className='font-bold text-green-900 text-sm'>₹{preview.netSalary.toLocaleString('en-IN')}</span>
+                </div>
+                <div className='p-2 bg-blue-50 rounded-lg border border-blue-200'>
+                  <span className='text-blue-700 block font-medium'>Monthly CTC</span>
+                  <span className='font-bold text-blue-900 text-sm'>₹{preview.monthlyCTC.toLocaleString('en-IN')}</span>
+                </div>
+                <div className='p-2 bg-purple-50 rounded-lg border border-purple-200'>
+                  <span className='text-purple-700 block font-medium'>Annual CTC</span>
+                  <span className='font-bold text-purple-900 text-sm'>₹{preview.annualCTC.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         <div className='w-full grid grid-cols-2 gap-4'>
           <div>

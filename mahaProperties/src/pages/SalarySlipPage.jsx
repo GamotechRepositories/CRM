@@ -3,6 +3,7 @@ import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { getSalaryStructure } from '../utils/salaryCalculator'
 
 const MONTH_NAMES = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -182,15 +183,7 @@ const SalarySlipPage = () => {
 
   const emp = selectedSalary?.employee || user || {}
   const isPaid = selectedSalary?.status === 'Paid'
-  const totalNet = Number(selectedSalary?.amount || selectedSalary?.netSalary || 0)
-  
-  const basic = selectedSalary?.basicSalary || Math.round(totalNet * 0.50)
-  const hra = selectedSalary?.hra || Math.round(totalNet * 0.30)
-  const allowances = selectedSalary?.allowances || Math.round(totalNet * 0.20)
-  const bonus = selectedSalary?.bonus || 0
-  const totalEarnings = basic + hra + allowances + bonus
-  const deductions = selectedSalary?.deductions || 0
-  const netPayable = selectedSalary?.netSalary || (totalEarnings - deductions)
+  const structure = getSalaryStructure(selectedSalary)
 
   return (
     <div className='p-4 md:p-8 bg-gray-50 min-h-full'>
@@ -271,7 +264,7 @@ const SalarySlipPage = () => {
                             {s.employee?.name || user?.name || 'Employee'}
                           </p>
                           <p className='text-sm font-bold text-gray-800 mt-1'>
-                            {formatINR(s.amount)}
+                            {formatINR(s.grossSalary || s.amount)}
                           </p>
                         </div>
                         <div className='text-right'>
@@ -437,66 +430,92 @@ const SalarySlipPage = () => {
                       </div>
                     </div>
 
-                    {/* Earnings & Deductions Table */}
+                    {/* Salary Breakdown Table */}
                     <div>
-                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Salary Breakdown</h4>
+                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Earnings & Employee Deductions</h4>
                       <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
                         <thead>
                           <tr className='font-bold' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
-                            <th className='py-2.5 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS</th>
+                            <th className='py-2.5 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS COMPONENT</th>
                             <th className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>AMOUNT</th>
-                            <th className='py-2.5 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTIONS</th>
+                            <th className='py-2.5 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTION COMPONENT</th>
                             <th className='py-2.5 px-3 text-right'>AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Basic Salary (50%)</td>
-                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(basic)}</td>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Provident Fund (PF) / TDS</td>
-                            <td className='py-2 px-3 text-right font-medium'>{formatINR(deductions)}</td>
-                          </tr>
-                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>House Rent Allowance (HRA 30%)</td>
-                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(hra)}</td>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Other Deductions</td>
-                            <td className='py-2 px-3 text-right font-medium'>₹0</td>
-                          </tr>
-                          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Special / Other Allowances (20%)</td>
-                            <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(allowances)}</td>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>—</td>
-                            <td className='py-2 px-3 text-right'>—</td>
-                          </tr>
-                          {bonus > 0 && (
-                            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                              <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>Performance Bonus / Incentives</td>
-                              <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>{formatINR(bonus)}</td>
-                              <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>—</td>
-                              <td className='py-2 px-3 text-right'>—</td>
-                            </tr>
-                          )}
+                          {Array.from({ length: Math.max(structure.components.length, structure.deductions.length) }).map((_, idx) => {
+                            const comp = structure.components[idx]
+                            const ded = structure.deductions[idx]
+                            return (
+                              <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                  {comp ? comp.name : '—'}
+                                </td>
+                                <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                  {comp ? formatINR(comp.amount) : '—'}
+                                </td>
+                                <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                  {ded ? ded.name : '—'}
+                                </td>
+                                <td className='py-2 px-3 text-right font-medium'>
+                                  {ded ? formatINR(ded.amount) : '—'}
+                                </td>
+                              </tr>
+                            )
+                          })}
                           <tr className='font-bold' style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #d1d5db', color: '#111827' }}>
-                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS EARNINGS</td>
-                            <td className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(totalEarnings)}</td>
+                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS SALARY (TOTAL EARNINGS)</td>
+                            <td className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(structure.grossSalary)}</td>
                             <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>TOTAL DEDUCTIONS</td>
-                            <td className='py-2.5 px-3 text-right'>{formatINR(deductions)}</td>
+                            <td className='py-2.5 px-3 text-right'>{formatINR(structure.totalDeductions)}</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
 
-                    {/* Net Pay Banner */}
-                    <div
-                      className='rounded-lg p-4 flex items-center justify-between'
-                      style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
-                    >
-                      <div>
-                        <span className='text-xs font-bold uppercase tracking-wide block' style={{ color: '#1e3a8a' }}>Net Salary Payable</span>
-                        <span className='text-xs' style={{ color: '#1d4ed8' }}>Gross Earnings minus Total Deductions</span>
+                    {/* Employer Contributions & CTC Details */}
+                    <div>
+                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Employer Contributions</h4>
+                      <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
+                        <thead>
+                          <tr className='font-bold' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
+                            <th className='py-2 px-3 text-left'>CONTRIBUTION TYPE</th>
+                            <th className='py-2 px-3 text-right'>AMOUNT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {structure.employerContributions.map((empContrib, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                              <td className='py-2 px-3'>{empContrib.name}</td>
+                              <td className='py-2 px-3 text-right font-medium'>{formatINR(empContrib.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Net Pay & CTC Summary Cards */}
+                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                      <div
+                        className='rounded-lg p-3 text-center'
+                        style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}
+                      >
+                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#166534' }}>Net Salary</span>
+                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#15803d' }}>{formatINR(structure.netSalary)}</span>
                       </div>
-                      <div className='text-right'>
-                        <span className='text-xl font-extrabold' style={{ color: '#1e3a8a' }}>{formatINR(netPayable)}</span>
+                      <div
+                        className='rounded-lg p-3 text-center'
+                        style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
+                      >
+                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#1e40af' }}>Monthly CTC</span>
+                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#1d4ed8' }}>{formatINR(structure.monthlyCTC)}</span>
+                      </div>
+                      <div
+                        className='rounded-lg p-3 text-center'
+                        style={{ backgroundColor: '#faf5ff', border: '1px solid #e9d5ff' }}
+                      >
+                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#6b21a8' }}>Annual CTC</span>
+                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#7e22ce' }}>{formatINR(structure.annualCTC)}</span>
                       </div>
                     </div>
 

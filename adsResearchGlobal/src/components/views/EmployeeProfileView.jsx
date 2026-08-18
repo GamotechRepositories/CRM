@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import { uploadFile } from '../../utils/uploadFile'
+import { getSalaryStructure } from '../../utils/salaryCalculator'
 
 const TABS = [
   'Overview',
@@ -539,34 +540,82 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
     Documents: (
       <DocumentsPanel docs={docs} onPreview={setDocPreview} />
     ),
-    Payroll: (
-      <InfoCard title='Salary & Payroll'>
-        <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8'>
-          <DetailRow label='CTC' value={money(payroll.ctc || e.salary)} />
-          <DetailRow label='Basic Salary' value={money(payroll.basicSalary)} />
-          <DetailRow label='HRA' value={money(payroll.hra)} />
-          <DetailRow label='Allowances' value={money(payroll.allowances)} />
-          <DetailRow label='Bonus' value={money(payroll.bonus)} />
-          <DetailRow label='PF Number' value={val(payroll.pfNumber)} />
-          <DetailRow label='ESIC Number' value={val(payroll.esicNumber)} />
-          <DetailRow label='UAN Number' value={val(payroll.uanNumber)} />
-          <DetailRow label='Tax Information' value={val(payroll.taxInformation)} />
-          <DetailRow label='Bank Account Details' value={val(payroll.bankAccountDetails)} />
+    Payroll: (() => {
+      const struct = getSalaryStructure(payroll.grossSalary || payroll.ctc || e.salary || 20000)
+      return (
+        <div className='space-y-6'>
+          <InfoCard title='Salary Breakdown & CTC'>
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-6'>
+              <div className='p-3.5 bg-green-50 rounded-xl border border-green-200 text-center'>
+                <span className='text-xs font-semibold text-green-700 uppercase tracking-wide block'>Net Salary</span>
+                <span className='text-xl font-bold text-green-900 mt-1 block'>{money(struct.netSalary)}</span>
+              </div>
+              <div className='p-3.5 bg-blue-50 rounded-xl border border-blue-200 text-center'>
+                <span className='text-xs font-semibold text-blue-700 uppercase tracking-wide block'>Monthly CTC</span>
+                <span className='text-xl font-bold text-blue-900 mt-1 block'>{money(struct.monthlyCTC)}</span>
+              </div>
+              <div className='p-3.5 bg-purple-50 rounded-xl border border-purple-200 text-center'>
+                <span className='text-xs font-semibold text-purple-700 uppercase tracking-wide block'>Annual CTC</span>
+                <span className='text-xl font-bold text-purple-900 mt-1 block'>{money(struct.annualCTC)}</span>
+              </div>
+            </div>
+
+            <h4 className='text-xs font-bold text-gray-700 uppercase tracking-wider mb-2'>Earnings Components</h4>
+            <div className='grid grid-cols-2 md:grid-cols-3 gap-3 mb-5'>
+              {struct.components.map((c) => (
+                <div key={c.code} className='p-2.5 bg-gray-50 rounded-lg border border-gray-100'>
+                  <span className='text-xs text-gray-500 block'>{c.name}</span>
+                  <span className='text-sm font-semibold text-gray-900'>{money(c.amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <h4 className='text-xs font-bold text-gray-700 uppercase tracking-wider mb-2'>Employee Deductions</h4>
+            <div className='grid grid-cols-3 gap-3 mb-5'>
+              {struct.deductions.map((d) => (
+                <div key={d.code} className='p-2.5 bg-red-50/50 rounded-lg border border-red-100'>
+                  <span className='text-xs text-red-600 block'>{d.name}</span>
+                  <span className='text-sm font-semibold text-red-900'>{money(d.amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <h4 className='text-xs font-bold text-gray-700 uppercase tracking-wider mb-2'>Employer Contributions</h4>
+            <div className='grid grid-cols-2 gap-3 mb-5'>
+              {struct.employerContributions.map((ec) => (
+                <div key={ec.code} className='p-2.5 bg-blue-50/50 rounded-lg border border-blue-100'>
+                  <span className='text-xs text-blue-600 block'>{ec.name}</span>
+                  <span className='text-sm font-semibold text-blue-900'>{money(ec.amount)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8 pt-4 border-t border-gray-100'>
+              <DetailRow label='PAN Number' value={val(payroll.panNumber)} />
+              <DetailRow label='PF Number' value={val(payroll.pfNumber)} />
+              <DetailRow label='ESIC Number' value={val(payroll.esicNumber)} />
+              <DetailRow label='UAN Number' value={val(payroll.uanNumber)} />
+              <DetailRow label='Tax Information' value={val(payroll.taxInformation)} />
+              <DetailRow label='Bank Account Details' value={val(payroll.bankAccountDetails)} />
+            </div>
+
+            {profile.salaries?.length > 0 && (
+              <div className='mt-6 overflow-x-auto'>
+                <h4 className='text-xs font-bold text-gray-700 uppercase tracking-wider mb-2'>Payment History</h4>
+                <table className='w-full text-sm'>
+                  <thead><tr className='border-b text-gray-500'><th className='py-2 text-left'>Month/Year</th><th className='py-2 text-left'>Gross Amount</th><th className='py-2 text-left'>Status</th></tr></thead>
+                  <tbody>
+                    {profile.salaries.map((s) => (
+                      <tr key={s._id} className='border-b'><td className='py-2'>{s.month}/{s.year}</td><td className='py-2'>{money(s.grossSalary || s.amount)}</td><td className='py-2'>{s.status}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </InfoCard>
         </div>
-        {profile.salaries?.length > 0 && (
-          <div className='mt-6 overflow-x-auto'>
-            <table className='w-full text-sm'>
-              <thead><tr className='border-b text-gray-500'><th className='py-2 text-left'>Month/Year</th><th className='py-2 text-left'>Amount</th><th className='py-2 text-left'>Status</th></tr></thead>
-              <tbody>
-                {profile.salaries.map((s) => (
-                  <tr key={s._id} className='border-b'><td className='py-2'>{s.month}/{s.year}</td><td className='py-2'>{money(s.amount)}</td><td className='py-2'>{s.status}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </InfoCard>
-    ),
+      )
+    })(),
     'Attendance & Leave': (
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-5'>
         <InfoCard title='Attendance Summary'>

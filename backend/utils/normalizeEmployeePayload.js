@@ -1,3 +1,5 @@
+import { calculateSalaryStructure } from './salaryCalculator.js';
+
 const toNumber = (value) => {
   if (value === '' || value === null || value === undefined) return undefined;
   const num = Number(value);
@@ -39,10 +41,17 @@ export const normalizeEmployeePayload = (body = {}) => {
     ...rest
   } = body;
 
+  const rawGross = toNumber(rest.salaryPayroll?.grossSalary ?? rest.grossSalary ?? rest.salaryPayroll?.ctc ?? rest.salary) ?? 20000;
+  const computedStructure = calculateSalaryStructure({
+    ...rest.salaryPayroll,
+    ...rest,
+    grossSalary: rawGross,
+  });
+
   const payload = {
     ...rest,
     department: typeof rest.department === 'string' ? rest.department.trim() : rest.department,
-    salary: toNumber(rest.salary) ?? rest.salary ?? 0,
+    salary: computedStructure.grossSalary,
     dateOfJoining: toDate(rest.dateOfJoining),
     dateOfBirth: toDate(rest.dateOfBirth),
     probationEndDate: toDate(rest.probationEndDate),
@@ -69,11 +78,23 @@ export const normalizeEmployeePayload = (body = {}) => {
       bankPassbook: rest.documents?.bankPassbook ?? rest.bankPassbook ?? '',
     },
     salaryPayroll: {
-      ctc: toNumber(rest.salaryPayroll?.ctc ?? rest.ctc) ?? 0,
-      basicSalary: toNumber(rest.salaryPayroll?.basicSalary ?? rest.basicSalary) ?? 0,
-      hra: toNumber(rest.salaryPayroll?.hra ?? rest.hra) ?? 0,
+      ctc: computedStructure.monthlyCTC,
+      grossSalary: computedStructure.grossSalary,
+      basicSalary: computedStructure.components.find((c) => c.code === 'BASIC')?.amount || 0,
+      hra: computedStructure.components.find((c) => c.code === 'HRA')?.amount || 0,
+      da: computedStructure.components.find((c) => c.code === 'DA')?.amount || 0,
+      conveyance: computedStructure.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
+      specialAllowance: computedStructure.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+      attendanceIncentive: computedStructure.components.find((c) => c.code === 'ATTENDANCE_INCENTIVE')?.amount || 0,
       allowances: toNumber(rest.salaryPayroll?.allowances ?? rest.allowances) ?? 0,
       bonus: toNumber(rest.salaryPayroll?.bonus ?? rest.bonus) ?? 0,
+      totalDeductions: computedStructure.totalDeductions,
+      netSalary: computedStructure.netSalary,
+      monthlyCTC: computedStructure.monthlyCTC,
+      annualCTC: computedStructure.annualCTC,
+      components: computedStructure.components,
+      deductions: computedStructure.deductions,
+      employerContributions: computedStructure.employerContributions,
       pfNumber: rest.salaryPayroll?.pfNumber ?? rest.pfNumber ?? '',
       esicNumber: rest.salaryPayroll?.esicNumber ?? rest.esicNumber ?? '',
       uanNumber: rest.salaryPayroll?.uanNumber ?? rest.uanNumber ?? '',

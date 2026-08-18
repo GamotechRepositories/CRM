@@ -644,8 +644,9 @@ const EmployeesPage = () => {
                     <thead className='text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-100'>
                       <tr>
                         <th className='pb-3 pr-3'>Period</th>
-                        <th className='pb-3 pr-3'>Gross</th>
-                        <th className='pb-3 pr-3'>Net</th>
+                        <th className='pb-3 pr-3'>Gross Salary</th>
+                        <th className='pb-3 pr-3'>Net Salary</th>
+                        <th className='pb-3 pr-3'>Monthly CTC</th>
                         <th className='pb-3'>Status</th>
                       </tr>
                     </thead>
@@ -655,8 +656,9 @@ const EmployeesPage = () => {
                           <td className='py-3 pr-3 font-medium text-gray-900'>
                             {s.month}/{s.year}
                           </td>
-                          <td className='py-3 pr-3'>{formatINR(s.grossSalary ?? s.basicSalary ?? s.amount)}</td>
-                          <td className='py-3 pr-3'>{formatINR(s.netSalary ?? s.takeHome ?? s.amount)}</td>
+                          <td className='py-3 pr-3 font-semibold'>{formatINR(s.grossSalary ?? s.basicSalary ?? s.amount)}</td>
+                          <td className='py-3 pr-3 text-green-700 font-medium'>{formatINR(s.netSalary ?? (s.amount ? s.amount - 2000 : 0))}</td>
+                          <td className='py-3 pr-3 text-blue-700 font-medium'>{formatINR(s.monthlyCTC ?? (s.amount ? s.amount + 1800 : 0))}</td>
                           <td className='py-3'>
                             <span className={`inline-flex px-2 py-0.5 rounded-md text-xs ${statusClass(s.status || s.paymentStatus)}`}>
                               {val(s.status || s.paymentStatus || 'Recorded')}

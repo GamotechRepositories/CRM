@@ -435,20 +435,55 @@ class _PayrollTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final payroll = (employee['salaryPayroll'] as Map?)?.cast<String, dynamic>() ?? {};
     final salaries = profile['salaries'] is List ? profile['salaries'] as List : [];
+    final gross = ((payroll['grossSalary'] ?? payroll['ctc'] ?? employee['salary'] ?? 20000) as num).toDouble();
+
+    // Standard component percentages/fixed values based on ₹20,000 gross
+    final basic = (gross * 0.55).roundToDouble();
+    final da = (gross * 0.2035).roundToDouble();
+    final hra = (gross * 0.055).roundToDouble();
+    final conveyance = (gross * 0.07).roundToDouble();
+    final special = (gross - basic - da - hra - conveyance).clamp(0.0, double.infinity);
+    
+    double pf = 0.0;
+    if (gross > 0) {
+      if (basic >= 15000) {
+        pf = 1800.0;
+      } else {
+        pf = (basic * 0.12).clamp(0.0, 1800.0).roundToDouble();
+        if (pf < 1800 && gross >= 20000) pf = 1800.0;
+      }
+    }
+    final pt = gross >= 15000 ? 200.0 : 0.0;
+    final totalDeductions = pf + pt;
+    final netSalary = gross - totalDeductions;
+    final employerPf = pf;
+    final monthlyCtc = gross + employerPf;
+    final annualCtc = monthlyCtc * 12;
 
     return Column(
       children: [
         _InfoCard(
-          title: 'Salary & Payroll',
+          title: 'Salary & CTC Summary',
           rows: [
-            _Row('CTC', formatMoney(payroll['ctc'] ?? employee['salary'])),
-            _Row('Basic Salary', formatMoney(payroll['basicSalary'])),
-            _Row('HRA', formatMoney(payroll['hra'])),
-            _Row('Allowances', formatMoney(payroll['allowances'])),
-            _Row('Bonus', formatMoney(payroll['bonus'])),
+            _Row('Gross Salary', formatMoney(gross)),
+            _Row('Net Salary', formatMoney(netSalary)),
+            _Row('Monthly CTC', formatMoney(monthlyCtc)),
+            _Row('Annual CTC', formatMoney(annualCtc)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _InfoCard(
+          title: 'Earnings & Deductions',
+          rows: [
+            _Row('Basic Salary', formatMoney(basic)),
+            _Row('Dearness Allowance (DA)', formatMoney(da)),
+            _Row('House Rent Allowance (HRA)', formatMoney(hra)),
+            _Row('Conveyance Allowance', formatMoney(conveyance)),
+            _Row('Special Allowance', formatMoney(special)),
+            _Row('Provident Fund (PF)', formatMoney(pf)),
+            _Row('Professional Tax (PT)', formatMoney(pt)),
+            _Row('PAN Number', profileVal(payroll['panNumber'])),
             _Row('PF Number', profileVal(payroll['pfNumber'])),
-            _Row('ESIC Number', profileVal(payroll['esicNumber'])),
-            _Row('UAN Number', profileVal(payroll['uanNumber'])),
             _Row('Bank Details', profileVal(payroll['bankAccountDetails'])),
           ],
         ),
@@ -466,7 +501,7 @@ class _PayrollTab extends StatelessWidget {
                       Expanded(
                         child: Text('${m['month']}/${m['year']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
                       ),
-                      Text(formatMoney(m['amount']), style: const TextStyle(fontSize: 10, color: Color(0xFF334155))),
+                      Text(formatMoney(m['grossSalary'] ?? m['amount']), style: const TextStyle(fontSize: 10, color: Color(0xFF334155))),
                       const SizedBox(width: 8),
                       Text('${m['status'] ?? '—'}', style: const TextStyle(fontSize: 9, color: Color(0xFF64748B))),
                     ],

@@ -74,7 +74,9 @@ const SalariesView = () => {
             <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
               <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Employee</th>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Amount</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Gross Salary</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Net Salary</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Monthly CTC</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Month</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Year</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Status</th>
@@ -84,7 +86,7 @@ const SalariesView = () => {
             <tbody>
               {salaries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className='px-4 py-12 text-center text-gray-500'>
+                  <td colSpan={8} className='px-4 py-12 text-center text-gray-500'>
                     No salary records yet
                   </td>
                 </tr>
@@ -92,7 +94,9 @@ const SalariesView = () => {
                 salaries.map((s) => (
                   <tr key={s._id} className='border-b hover:bg-gray-50'>
                     <td className='px-4 py-3 font-medium'>{s.employee?.name || '—'}</td>
-                    <td className='px-4 py-3 font-semibold'>{s.amount != null ? `₹${Number(s.amount).toLocaleString('en-IN')}` : '—'}</td>
+                    <td className='px-4 py-3 font-semibold'>₹{Number(s.grossSalary || s.amount || 0).toLocaleString('en-IN')}</td>
+                    <td className='px-4 py-3 text-green-700 font-medium'>₹{Number(s.netSalary || (s.amount ? s.amount - 2000 : 0)).toLocaleString('en-IN')}</td>
+                    <td className='px-4 py-3 text-blue-700 font-medium'>₹{Number(s.monthlyCTC || (s.amount ? s.amount + 1800 : 0)).toLocaleString('en-IN')}</td>
                     <td className='px-4 py-3'>{s.month ? MONTH_NAMES[s.month] : '—'}</td>
                     <td className='px-4 py-3'>{s.year ?? '—'}</td>
                     <td className='px-4 py-3'>

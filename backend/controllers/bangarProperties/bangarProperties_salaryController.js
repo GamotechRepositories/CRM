@@ -1,24 +1,36 @@
 import Salary from '../../models/bangarProperties/bangarProperties_salary.js';
+import { calculateSalaryStructure } from '../../utils/salaryCalculator.js';
 
 const EMP_POPULATE = { path: 'employee', populate: { path: 'designation', select: 'title designationName name' } };
 
 // Create a new salary record
 export const createSalary = async (req, res) => {
   try {
-    const { employee, amount, month, year, status, basicSalary, hra, allowances, deductions, bonus, netSalary, paymentDate, paymentMode } = req.body;
+    const { employee, month, year, status, bonus, paymentDate, paymentMode } = req.body;
 
+    const calculated = calculateSalaryStructure(req.body);
     const newSalary = new Salary({
       employee,
-      amount,
+      amount: calculated.grossSalary,
+      grossSalary: calculated.grossSalary,
+      components: calculated.components,
+      basicSalary: calculated.components.find((c) => c.code === 'BASIC')?.amount || 0,
+      da: calculated.components.find((c) => c.code === 'DA')?.amount || 0,
+      hra: calculated.components.find((c) => c.code === 'HRA')?.amount || 0,
+      conveyance: calculated.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
+      specialAllowance: calculated.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+      attendanceIncentive: calculated.components.find((c) => c.code === 'ATTENDANCE_INCENTIVE')?.amount || 0,
+      deductionsList: calculated.deductions,
+      deductions: calculated.totalDeductions,
+      totalDeductions: calculated.totalDeductions,
+      netSalary: calculated.netSalary,
+      employerContributions: calculated.employerContributions,
+      monthlyCTC: calculated.monthlyCTC,
+      annualCTC: calculated.annualCTC,
       month,
       year,
       status: status || 'Unpaid',
-      basicSalary: basicSalary || 0,
-      hra: hra || 0,
-      allowances: allowances || 0,
-      deductions: deductions || 0,
       bonus: bonus || 0,
-      netSalary: netSalary || amount || 0,
       paymentDate: paymentDate || (status === 'Paid' ? new Date() : undefined),
       paymentMode: paymentMode || 'Bank Transfer',
     });
@@ -63,7 +75,20 @@ export const getSalaryById = async (req, res) => {
 // Update a salary record by ID
 export const updateSalary = async (req, res) => {
   try {
-    const payload = { ...req.body };
+    const calculated = calculateSalaryStructure(req.body);
+    const payload = {
+      ...req.body,
+      ...calculated,
+      amount: calculated.grossSalary,
+      basicSalary: calculated.components.find((c) => c.code === 'BASIC')?.amount || 0,
+      da: calculated.components.find((c) => c.code === 'DA')?.amount || 0,
+      hra: calculated.components.find((c) => c.code === 'HRA')?.amount || 0,
+      conveyance: calculated.components.find((c) => c.code === 'CONVEYANCE')?.amount || 0,
+      specialAllowance: calculated.components.find((c) => c.code === 'SPECIAL')?.amount || 0,
+      attendanceIncentive: calculated.components.find((c) => c.code === 'ATTENDANCE_INCENTIVE')?.amount || 0,
+      deductionsList: calculated.deductions,
+      deductions: calculated.totalDeductions,
+    };
     if (payload.status === 'Paid' && !payload.paymentDate) {
       payload.paymentDate = new Date();
     }
