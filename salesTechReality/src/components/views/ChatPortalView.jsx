@@ -586,7 +586,11 @@ const ChatPortalView = () => {
       const msg = res.data?.message
       if (msg) {
         stickToBottomRef.current = true
-        setMessages((prev) => [...prev, msg])
+        // Add optimistically with dedup guard — the socket event may also arrive for the sender
+        setMessages((prev) => {
+          if (prev.some((m) => String(m._id) === String(msg._id))) return prev
+          return [...prev, msg]
+        })
         setDraft('')
         setPendingMentions([])
         setMentionOpen(false)
@@ -708,7 +712,10 @@ const ChatPortalView = () => {
       const msg = res.data?.message
       if (msg) {
         stickToBottomRef.current = true
-        setMessages((prev) => [...prev, msg])
+        setMessages((prev) => {
+          if (prev.some((m) => String(m._id) === String(msg._id))) return prev
+          return [...prev, msg]
+        })
         resetPollModal()
         loadConversations()
       }
