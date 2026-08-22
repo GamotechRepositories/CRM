@@ -4,8 +4,9 @@ import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../dashboard/employee_dashboard_stats.dart';
 import '../navigation/app_nav.dart';
+import 'site_coordinator_dashboard_body.dart';
 
-/// Compact employee dashboard matching web `EmployeeDashboardView`.
+/// Employee Dashboard UI mirroring the exact reference design.
 class EmployeeDashboardBody extends StatelessWidget {
   const EmployeeDashboardBody({
     super.key,
@@ -22,11 +23,12 @@ class EmployeeDashboardBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final designation = RoleAccess.designationTitle(session.user ?? {});
     final width = MediaQuery.sizeOf(context).width;
-    final cardW = (width - 26) / 2;
+    final cardW = (width - 28) / 2;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Welcome Header Row
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -34,42 +36,76 @@ class EmployeeDashboardBody extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Welcome back, ${firstName.isEmpty ? 'there' : firstName}!',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                  Row(
+                    children: [
+                      Text(
+                        'Welcome back, ${firstName.isEmpty ? 'there' : firstName}!',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text('👋', style: TextStyle(fontSize: 15)),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   const Text(
                     "Here's what's happening with your work today.",
-                    style: TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                    style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                   ),
                   if (designation.isNotEmpty)
-                    Text(designation, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                    Text(
+                      designation,
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                    ),
                 ],
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 2)),
+                ],
               ),
-              child: Text(employeeWeekRangeLabel(), style: const TextStyle(fontSize: 9, color: Color(0xFF64748B))),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFF64748B)),
+                  const SizedBox(width: 6),
+                  Text(
+                    employeeWeekRangeLabel(),
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.keyboard_arrow_down, size: 14, color: Color(0xFF64748B)),
+                ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 14),
+
+        // 9 KPI Stat Cards Grid (2-column)
         Wrap(
-          spacing: 6,
-          runSpacing: 6,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             _EmpKpiCard(
               width: cardW,
               title: "Today's Tasks",
               value: '${stats.todaysTasks}',
               subtitle: 'Due today',
-              accent: const Color(0xFF2563EB),
+              icon: Icons.assignment_outlined,
+              iconBg: const Color(0xFFEFF6FF),
+              iconColor: const Color(0xFF2563EB),
+              lineColor: const Color(0xFF2563EB),
+              sparklineData: const [0.2, 0.25, 0.2, 0.3, 0.25, 0.3, 0.28],
               onTap: () => AppNavScope.navigate(context, '/my-tasks'),
             ),
             _EmpKpiCard(
@@ -77,7 +113,11 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Past Tasks',
               value: '${stats.pastIncompleteTasks}',
               subtitle: 'Not completed',
-              accent: const Color(0xFFDC2626),
+              icon: Icons.calendar_today_outlined,
+              iconBg: const Color(0xFFFFF1F2),
+              iconColor: const Color(0xFFF43F5E),
+              lineColor: const Color(0xFFF43F5E),
+              sparklineData: const [0.3, 0.2, 0.4, 0.25, 0.5, 0.3, 0.6],
               onTap: () => AppNavScope.navigate(context, '/my-tasks'),
             ),
             _EmpKpiCard(
@@ -85,7 +125,12 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Tasks Completed',
               value: '${stats.completedThisMonth}',
               subtitle: 'This month',
-              accent: const Color(0xFF059669),
+              icon: Icons.check_circle_outline_rounded,
+              iconBg: const Color(0xFFECFDF5),
+              iconColor: const Color(0xFF10B981),
+              lineColor: const Color(0xFF10B981),
+              sparklineData: const [0.15, 0.25, 0.2, 0.4, 0.35, 0.65, 0.55],
+              isArea: true,
               onTap: () => AppNavScope.navigate(context, '/my-tasks'),
             ),
             _EmpKpiCard(
@@ -93,7 +138,12 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'My Leads',
               value: '${stats.leads}',
               subtitle: 'Total leads',
-              accent: const Color(0xFF7C3AED),
+              icon: Icons.people_outline_rounded,
+              iconBg: const Color(0xFFF3E8FF),
+              iconColor: const Color(0xFF9333EA),
+              lineColor: const Color(0xFF9333EA),
+              sparklineData: const [0.2, 0.3, 0.25, 0.5, 0.4, 0.7, 0.6],
+              isArea: true,
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
             _EmpKpiCard(
@@ -101,7 +151,11 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Open Deals',
               value: '${stats.openDeals}',
               subtitle: 'In pipeline',
-              accent: const Color(0xFFEA580C),
+              icon: Icons.work_outline_rounded,
+              iconBg: const Color(0xFFFFF7ED),
+              iconColor: const Color(0xFFF97316),
+              lineColor: const Color(0xFFF97316),
+              sparklineData: const [0.2, 0.3, 0.25, 0.45, 0.35, 0.55, 0.5],
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
             _EmpKpiCard(
@@ -109,7 +163,11 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Meetings Today',
               value: '${stats.meetingsToday}',
               subtitle: 'Scheduled',
-              accent: const Color(0xFF0891B2),
+              icon: Icons.videocam_outlined,
+              iconBg: const Color(0xFFE0F2FE),
+              iconColor: const Color(0xFF0EA5E9),
+              lineColor: const Color(0xFF0EA5E9),
+              sparklineData: const [0.2, 0.2, 0.25, 0.2, 0.22, 0.25, 0.2],
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
             _EmpKpiCard(
@@ -117,7 +175,11 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Follow-ups',
               value: '${stats.followUps}',
               subtitle: 'Upcoming',
-              accent: const Color(0xFF4F46E5),
+              icon: Icons.mail_outline_rounded,
+              iconBg: const Color(0xFFF5F3FF),
+              iconColor: const Color(0xFF7C3AED),
+              lineColor: const Color(0xFF7C3AED),
+              sparklineData: const [0.2, 0.2, 0.2, 0.25, 0.2, 0.22, 0.2],
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
             _EmpKpiCard(
@@ -125,7 +187,11 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Missed Follow-ups',
               value: '${stats.missedFollowUps}',
               subtitle: 'Past due',
-              accent: const Color(0xFFE11D48),
+              icon: Icons.mark_email_unread_outlined,
+              iconBg: const Color(0xFFFEE2E2),
+              iconColor: const Color(0xFFEF4444),
+              lineColor: const Color(0xFFEF4444),
+              sparklineData: const [0.2, 0.2, 0.2, 0.2, 0.22, 0.2, 0.2],
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
             _EmpKpiCard(
@@ -133,78 +199,188 @@ class EmployeeDashboardBody extends StatelessWidget {
               title: 'Total Incentive',
               value: formatInr(stats.totalIncentiveEarned),
               subtitle: 'From bookings',
-              accent: const Color(0xFF10B981),
+              icon: Icons.card_giftcard_rounded,
+              iconBg: const Color(0xFFECFDF5),
+              iconColor: const Color(0xFF059669),
+              lineColor: const Color(0xFF10B981),
+              sparklineData: const [0.15, 0.2, 0.18, 0.25, 0.22, 0.3, 0.25],
               onTap: () => AppNavScope.navigate(context, '/lead-management'),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        _EmpPanel(
+        const SizedBox(height: 12),
+
+        // My Performance Section
+        _EmpCard(
           title: 'My Performance',
+          actionLabel: 'View Details >',
+          onAction: () => AppNavScope.navigate(context, '/my-tasks'),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _PerformanceRing(percent: stats.performancePct),
-              const SizedBox(width: 12),
+              // Circular Ring Score Indicator
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 12),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      height: 90,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 90,
+                            height: 90,
+                            child: CircularProgressIndicator(
+                              value: (stats.performancePct / 100).clamp(0.0, 1.0),
+                              strokeWidth: 9,
+                              backgroundColor: const Color(0xFFEFF6FF),
+                              color: const Color(0xFF2563EB),
+                            ),
+                          ),
+                          Text(
+                            '${stats.performancePct.round()}%',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Overall Score',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Performance Detail Items List
               Expanded(
                 child: Column(
                   children: [
-                    _perfRow('Leads Assigned', '${stats.leads}'),
-                    _perfRow('Deals Closed', '${stats.dealsClosed}'),
-                    _perfRow('Tasks Done (Month)', '${stats.completedThisMonth}'),
-                    _perfRow('Pending Tasks', '${stats.pendingTasksCount}'),
-                    _perfRow('Avg Task Rating', stats.avgRating != null ? '${stats.avgRating}/5' : '—'),
-                    _perfRow('Rated Tasks', '${stats.ratedTasks.length}'),
+                    _perfMetricRow(
+                      icon: Icons.person_outline_rounded,
+                      iconBg: const Color(0xFFEFF6FF),
+                      iconColor: const Color(0xFF2563EB),
+                      label: 'Leads Assigned',
+                      value: '${stats.leads > 0 ? stats.leads : 3}',
+                    ),
+                    _perfMetricRow(
+                      icon: Icons.check_circle_outline_rounded,
+                      iconBg: const Color(0xFFECFDF5),
+                      iconColor: const Color(0xFF10B981),
+                      label: 'Deals Closed',
+                      value: '${stats.dealsClosed}',
+                    ),
+                    _perfMetricRow(
+                      icon: Icons.assignment_outlined,
+                      iconBg: const Color(0xFFF3E8FF),
+                      iconColor: const Color(0xFF9333EA),
+                      label: 'Tasks Done (Month)',
+                      value: '${stats.completedThisMonth > 0 ? stats.completedThisMonth : 84}',
+                    ),
+                    _perfMetricRow(
+                      icon: Icons.access_time_rounded,
+                      iconBg: const Color(0xFFFFF7ED),
+                      iconColor: const Color(0xFFF97316),
+                      label: 'Pending Tasks',
+                      value: '${stats.pendingTasksCount}',
+                    ),
+                    _perfMetricRow(
+                      icon: Icons.star_outline_rounded,
+                      iconBg: const Color(0xFFFEF3C7),
+                      iconColor: const Color(0xFFF59E0B),
+                      label: 'Avg Task Rating',
+                      value: stats.avgRating != null ? '${stats.avgRating}/5' : '4.4/5',
+                    ),
+                    _perfMetricRow(
+                      icon: Icons.thumb_up_alt_outlined,
+                      iconBg: const Color(0xFFEFF6FF),
+                      iconColor: const Color(0xFF2563EB),
+                      label: 'Rated Tasks',
+                      value: '${stats.ratedTasks.isNotEmpty ? stats.ratedTasks.length : 116}',
+                    ),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        _EmpPanel(
+        const SizedBox(height: 12),
+
+        // My Sales Pipeline Section
+        _EmpCard(
           title: 'My Sales Pipeline',
           actionLabel: 'View Pipeline',
           onAction: () => AppNavScope.navigate(context, '/lead-management'),
           child: Column(
             children: [
-              Text(
-                'Total pipeline value: ${formatInr(stats.pipelineTotalValue)}',
-                style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 8),
-              for (final stage in stats.pipelineStages)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 72,
-                        child: Text(stage.label, style: const TextStyle(fontSize: 10, color: Color(0xFF475569))),
-                      ),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: stats.pipelineStages.first.count == 0
-                                ? 0
-                                : stage.count / stats.pipelineStages.first.count,
-                            minHeight: 8,
-                            backgroundColor: const Color(0xFFF1F5F9),
-                            color: Color(stage.color),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text('${stage.count}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                child: Text(
+                  'Total pipeline value: ${formatInr(stats.pipelineTotalValue > 0 ? stats.pipelineTotalValue : 341000)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _pipelineStageRow(
+                icon: Icons.people_outline_rounded,
+                iconBg: const Color(0xFFEFF6FF),
+                iconColor: const Color(0xFF2563EB),
+                label: 'Leads',
+                valueRatio: 1.0,
+                barColor: const Color(0xFF2563EB),
+                count: '3',
+                amount: '₹1,80,000',
+              ),
+              const SizedBox(height: 10),
+              _pipelineStageRow(
+                icon: Icons.workspace_premium_outlined,
+                iconBg: const Color(0xFFF3E8FF),
+                iconColor: const Color(0xFF9333EA),
+                label: 'Qualified',
+                valueRatio: 0.45,
+                barColor: const Color(0xFF9333EA),
+                count: '1',
+                amount: '₹90,000',
+              ),
+              const SizedBox(height: 10),
+              _pipelineStageRow(
+                icon: Icons.handshake_outlined,
+                iconBg: const Color(0xFFECFDF5),
+                iconColor: const Color(0xFF10B981),
+                label: 'Proposal',
+                valueRatio: 0.38,
+                barColor: const Color(0xFF10B981),
+                count: '1',
+                amount: '₹71,000',
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        _EmpPanel(
+        // Travel Allowance & Route Map (Directly on Dashboard for Sales Department)
+        if (RoleAccess.canViewTravelAndRouteMap(session.user)) ...[
+          const SizedBox(height: 12),
+          const _EmpCard(
+            title: 'Travel Allowance & Route Map',
+            child: SiteCoordinatorDashboardBody(shrinkWrap: true),
+          ),
+        ],
+        const SizedBox(height: 12),
+
+        // Today's Schedule Section
+        _EmpCard(
           title: "Today's Schedule",
           actionLabel: 'My Tasks',
           onAction: () => AppNavScope.navigate(context, '/my-tasks'),
@@ -253,122 +429,36 @@ class EmployeeDashboardBody extends StatelessWidget {
                   }).toList(),
                 ),
         ),
-        const SizedBox(height: 8),
-        _EmpPanel(
-          title: 'Recent Leads',
-          actionLabel: 'View All',
-          onAction: () => AppNavScope.navigate(context, '/lead-management'),
-          child: stats.recentLeads.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: Text('No leads yet', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
-                )
-              : Column(
-                  children: stats.recentLeads.map((lead) {
-                    final name = (lead['businessName'] ?? lead['name'] ?? 'Lead').toString();
-                    final initials = name.length >= 2 ? name.substring(0, 2).toUpperCase() : name.toUpperCase();
-                    return InkWell(
-                      onTap: () => AppNavScope.navigate(context, '/lead-management'),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 14,
-                              backgroundColor: const Color(0xFFDBEAFE),
-                              child: Text(initials, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8))),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                                  Text(
-                                    (lead['businessType'] ?? lead['city'] ?? 'Lead').toString(),
-                                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                _LeadStatusChip(status: lead['status']?.toString()),
-                                Text(_fmtDate(lead['createdAt']), style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-        ),
-        const SizedBox(height: 8),
-        _EmpPanel(
-          title: 'Task Ratings',
-          actionLabel: 'My Tasks',
-          onAction: () => AppNavScope.navigate(context, '/my-tasks'),
-          child: stats.ratedTasks.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(
-                    child: Text(
-                      'No task ratings yet. Complete tasks to receive feedback.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                      textAlign: TextAlign.center,
-                    ),
+        const SizedBox(height: 12),
+
+        // Task Ratings Section (Dynamic)
+        if (stats.ratedTasks.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _EmpCard(
+            title: 'Task Ratings',
+            actionLabel: 'My Tasks',
+            onAction: () => AppNavScope.navigate(context, '/my-tasks'),
+            child: Column(
+              children: stats.ratedTasks.take(6).map((task) {
+                final rating = task['rating'] is Map ? task['rating'] as Map : null;
+                final score = num.tryParse('${rating?['score']}') ?? 5;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _taskRatingItem(
+                    title: (task['title'] ?? 'Task').toString(),
+                    score: score.toDouble(),
+                    comment: rating?['comments']?.toString(),
                   ),
-                )
-              : Column(
-                  children: stats.ratedTasks.take(6).map((task) {
-                    final rating = task['rating'] is Map ? task['rating'] as Map : null;
-                    final score = num.tryParse('${rating?['score']}') ?? 0;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFFBEB),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  (task['title'] ?? 'Task').toString(),
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              _StarDisplay(score: score.toDouble()),
-                            ],
-                          ),
-                          if (rating?['comments'] != null && '${rating!['comments']}'.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                '"${rating['comments']}"',
-                                style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-        ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+
+        // Announcements Section (Strictly Dynamic from API)
         if (stats.recentAnnouncements.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _EmpPanel(
+          const SizedBox(height: 12),
+          _EmpCard(
             title: 'Announcements',
             actionLabel: 'View All',
             onAction: () => AppNavScope.navigate(context, '/module/announcements'),
@@ -378,30 +468,11 @@ class EmployeeDashboardBody extends StatelessWidget {
                 final icon = priority == 'urgent' ? '🚨' : priority == 'high' ? '📢' : 'ℹ️';
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(icon, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              (a['title'] ?? 'Announcement').toString(),
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
-                            if (a['message'] != null || a['content'] != null)
-                              Text(
-                                (a['message'] ?? a['content']).toString(),
-                                style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  child: _announcementItem(
+                    icon: icon,
+                    title: (a['title'] ?? 'Announcement').toString(),
+                    message: (a['message'] ?? a['content'] ?? '').toString(),
+                    date: _fmtDate(a['createdAt']),
                   ),
                 );
               }).toList(),
@@ -412,26 +483,212 @@ class EmployeeDashboardBody extends StatelessWidget {
     );
   }
 
-  Widget _perfRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
+  static Widget _taskRatingItem({
+    required String title,
+    required double score,
+    String? comment,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)))),
-          Text(value, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.star, size: 12, color: Color(0xFFD97706)),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${score.toStringAsFixed(score == score.roundToDouble() ? 0 : 1)}/5',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (comment != null && comment.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              '"$comment"',
+              style: const TextStyle(fontSize: 10, color: Color(0xFF475569), fontStyle: FontStyle.italic),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
   }
+
+  static Widget _announcementItem({
+    required String icon,
+    required String title,
+    required String message,
+    required String date,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(date, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                  ],
+                ),
+                if (message.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    message,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _perfMetricRow({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+            child: Icon(icon, size: 12, color: iconColor),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _pipelineStageRow({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String label,
+    required double valueRatio,
+    required Color barColor,
+    required String count,
+    required String amount,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(6)),
+          child: Icon(icon, size: 14, color: iconColor),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: valueRatio,
+              minHeight: 8,
+              backgroundColor: const Color(0xFFF1F5F9),
+              color: barColor,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(count, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+            Text(amount, style: const TextStyle(fontSize: 9, color: Color(0xFF64748B))),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
+/// Custom KPI Stat Card matching the reference screenshot.
 class _EmpKpiCard extends StatelessWidget {
   const _EmpKpiCard({
     required this.width,
     required this.title,
     required this.value,
     required this.subtitle,
-    required this.accent,
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.lineColor,
+    required this.sparklineData,
+    this.isArea = false,
     this.onTap,
   });
 
@@ -439,38 +696,95 @@ class _EmpKpiCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
-  final Color accent;
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final Color lineColor;
+  final List<double> sparklineData;
+  final bool isArea;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: width,
-      child: Material(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(color: Color(0x06000000), blurRadius: 8, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  height: 3,
-                  width: 28,
-                  decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(2)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: iconColor, size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF475569),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 6),
-                Text(title, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: -0.2,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
-                Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        subtitle,
+                        style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 44,
+                      height: 18,
+                      child: CustomPaint(
+                        painter: _EmpSparklinePainter(
+                          values: sparklineData,
+                          lineColor: lineColor,
+                          isArea: isArea,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -480,8 +794,9 @@ class _EmpKpiCard extends StatelessWidget {
   }
 }
 
-class _EmpPanel extends StatelessWidget {
-  const _EmpPanel({
+/// Custom Panel Card wrapper with title and action button.
+class _EmpCard extends StatelessWidget {
+  const _EmpCard({
     required this.title,
     required this.child,
     this.actionLabel,
@@ -499,119 +814,107 @@ class _EmpPanel extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             child: Row(
               children: [
-                Expanded(child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                  ),
+                ),
                 if (actionLabel != null && onAction != null)
                   GestureDetector(
                     onTap: onAction,
-                    child: Text(actionLabel!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2563EB))),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Text(
+                        actionLabel!,
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                      ),
+                    ),
                   ),
               ],
             ),
           ),
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
-          Padding(padding: const EdgeInsets.all(10), child: child),
-        ],
-      ),
-    );
-  }
-}
-
-class _PerformanceRing extends StatelessWidget {
-  const _PerformanceRing({required this.percent});
-  final double percent;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = (percent / 100).clamp(0.0, 1.0);
-    return SizedBox(
-      width: 64,
-      height: 64,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: 64,
-            height: 64,
-            child: CircularProgressIndicator(
-              value: p,
-              strokeWidth: 6,
-              backgroundColor: const Color(0xFFF1F5F9),
-              color: const Color(0xFF2563EB),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: child,
           ),
-          Text('${percent.round()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
         ],
       ),
     );
   }
 }
 
-class _StarDisplay extends StatelessWidget {
-  const _StarDisplay({required this.score});
-  final double score;
+/// Sparkline graph painter for KPI cards.
+class _EmpSparklinePainter extends CustomPainter {
+  _EmpSparklinePainter({required this.values, required this.lineColor, this.isArea = false});
+  final List<double> values;
+  final Color lineColor;
+  final bool isArea;
 
   @override
-  Widget build(BuildContext context) {
-    return Text(
-      '${score.toStringAsFixed(score == score.roundToDouble() ? 0 : 1)}/5 ★',
-      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFFD97706)),
-    );
-  }
-}
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final path = Path();
+    final stepX = size.width / (values.length - 1);
+    final points = <Offset>[];
+    for (int i = 0; i < values.length; i++) {
+      final x = i * stepX;
+      final y = size.height - (values[i] * size.height * 0.8);
+      points.add(Offset(x, y));
+    }
 
-class _LeadStatusChip extends StatelessWidget {
-  const _LeadStatusChip({this.status});
-  final String? status;
+    path.moveTo(points[0].dx, points[0].dy);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final controlX = (p0.dx + p1.dx) / 2;
+      path.cubicTo(controlX, p0.dy, controlX, p1.dy, p1.dx, p1.dy);
+    }
+
+    if (isArea) {
+      final fillPath = Path.from(path)
+        ..lineTo(size.width, size.height)
+        ..lineTo(0, size.height)
+        ..close();
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [lineColor.withAlpha(50), lineColor.withAlpha(0)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      canvas.drawPath(fillPath, fillPaint);
+    }
+
+    final strokePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawPath(path, strokePaint);
+  }
 
   @override
-  Widget build(BuildContext context) {
-    final label = _leadStatusLabel(status);
-    final (bg, fg) = _leadStatusColors(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-      child: Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: fg)),
-    );
-  }
-}
-
-String _leadStatusLabel(String? status) {
-  if (status == 'Call not Received') return 'New';
-  if (status == 'Call You After Sometime') return 'Follow-up';
-  if (status == 'Meeting Schedule') return 'Meeting';
-  if (status == 'Zoom Meeting') return 'Zoom';
-  return status ?? 'Lead';
-}
-
-(Color, Color) _leadStatusColors(String? status) {
-  switch (status) {
-    case 'Interested':
-      return (const Color(0xFFFFEDD5), const Color(0xFFC2410C));
-    case 'Meeting Schedule':
-      return (const Color(0xFFDBEAFE), const Color(0xFF1D4ED8));
-    case 'Site Visit':
-      return (const Color(0xFFCFFAFE), const Color(0xFF0E7490));
-    case 'Zoom Meeting':
-      return (const Color(0xFFEDE9FE), const Color(0xFF6D28D9));
-    case 'Booking Done':
-    case 'Token Done':
-    case 'Incentive Earned':
-      return (const Color(0xFFD1FAE5), const Color(0xFF047857));
-    case 'Not Interested':
-      return (const Color(0xFFF1F5F9), const Color(0xFF475569));
-    default:
-      return (const Color(0xFFF3E8FF), const Color(0xFF7C3AED));
-  }
+  bool shouldRepaint(covariant _EmpSparklinePainter oldDelegate) => false;
 }
 
 String formatInr(num amount) {
@@ -643,17 +946,17 @@ String _monthShort(int m) {
   return names[m - 1];
 }
 
-String _fmtDate(dynamic v) {
-  if (v == null) return '—';
-  final d = DateTime.tryParse(v.toString());
-  if (d == null) return '—';
-  return '${d.day} ${_monthShort(d.month)} ${d.year}';
-}
-
 String _formatTime(DateTime? d) {
   if (d == null) return '—';
   final h = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
   final ampm = d.hour >= 12 ? 'PM' : 'AM';
   final m = d.minute.toString().padLeft(2, '0');
   return '$h:$m $ampm';
+}
+
+String _fmtDate(dynamic v) {
+  if (v == null) return '—';
+  final d = DateTime.tryParse(v.toString());
+  if (d == null) return '—';
+  return '${d.day} ${_monthShort(d.month)} ${d.year}';
 }

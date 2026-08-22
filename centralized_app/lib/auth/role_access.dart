@@ -243,4 +243,21 @@ class RoleAccess {
     if (['admin', 'manager', 'team_leader'].contains(role) && inSales) return true;
     return false;
   }
+
+  /// Checks if employee belongs to the Sales department.
+  static bool isSalesDepartment(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    final dept = (user['department'] ?? user['designation']?['department'] ?? '').toString().toLowerCase();
+    final title = designationTitle(user).toLowerCase();
+    final role = accessRole(user).toLowerCase();
+    if (dept.contains('sales') || title.contains('sales') || role.contains('sales')) return true;
+    return false;
+  }
+
+  /// Available for Sales employees, Team Leaders, Site Coordinators & Admins.
+  static bool canViewTravelAndRouteMap(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    if (isAdminUser(user) || isSiteCoordinatorUser(user) || isTeamLeader(user)) return true;
+    return isSalesDepartment(user);
+  }
 }

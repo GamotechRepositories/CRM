@@ -52,6 +52,7 @@ class SidebarNavContext {
     required this.fullAccess,
     required this.canViewProjects,
     required this.isTeamLeader,
+    this.canViewTravelAndRouteMap = false,
     required this.dashboardPath,
     required this.includeProperties,
     this.allowedSections,
@@ -60,6 +61,7 @@ class SidebarNavContext {
   final bool fullAccess;
   final bool canViewProjects;
   final bool isTeamLeader;
+  final bool canViewTravelAndRouteMap;
   final String dashboardPath;
   final bool includeProperties;
   final List<String>? allowedSections;

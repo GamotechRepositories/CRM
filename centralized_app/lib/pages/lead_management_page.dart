@@ -292,44 +292,50 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
         ),
         const SizedBox(height: 12),
         if (canManage)
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              ElevatedButton.icon(
-                onPressed: () => _showAddLeadModal(context),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Lead'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showAddLeadModal(context),
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text('Add Lead', overflow: TextOverflow.ellipsis),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () => _showDistributeModal(context),
-                icon: const Icon(Icons.hub_outlined, size: 16),
-                label: const Text('Distribute Leads'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD97706),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showDistributeModal(context),
+                  icon: const Icon(Icons.hub_outlined, size: 14),
+                  label: const Text('Distribute', overflow: TextOverflow.ellipsis),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () => _showCsvImportModal(context),
-                icon: const Icon(Icons.upload_file, size: 16),
-                label: const Text('Upload CSV'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF4F46E5),
-                  side: const BorderSide(color: Color(0xFF6366F1)),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _showCsvImportModal(context),
+                  icon: const Icon(Icons.upload_file, size: 14),
+                  label: const Text('Upload', overflow: TextOverflow.ellipsis),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
               ),
             ],
@@ -744,70 +750,72 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: const [
-          BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2)),
+          BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           onTap: () => _showLeadDetailsModal(lead),
           child: Padding(
-            padding: const EdgeInsets.all(14.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Top Row: Lead Name & Status Badge
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Text(
                         name,
                         style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4F46E5),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2563EB),
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _buildStatusChip(status),
                   ],
                 ),
                 if (businessName.isNotEmpty) ...[
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     businessName,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                       color: Color(0xFF334155),
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
 
                 // Contact & Quick Call Row
                 if (contactNumber.isNotEmpty)
                   Row(
                     children: [
-                      const Icon(Icons.phone_outlined, size: 14, color: Color(0xFF64748B)),
-                      const SizedBox(width: 4),
+                      const Icon(Icons.phone_outlined, size: 12, color: Color(0xFF64748B)),
+                      const SizedBox(width: 3),
                       Text(
                         contactNumber,
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(width: 6),
                       InkWell(
                         onTap: () => _makeCall(contactNumber),
                         borderRadius: BorderRadius.circular(4),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEFF6FF),
                             borderRadius: BorderRadius.circular(4),
@@ -815,21 +823,21 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                           ),
                           child: Row(
                             children: const [
-                              Icon(Icons.call, size: 10, color: Color(0xFF2563EB)),
+                              Icon(Icons.call, size: 9, color: Color(0xFF2563EB)),
                               SizedBox(width: 2),
-                              Text('Call', style: TextStyle(fontSize: 10, color: Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                              Text('Call', style: TextStyle(fontSize: 9, color: Color(0xFF2563EB), fontWeight: FontWeight.w700)),
                             ],
                           ),
                         ),
                       ),
                     ],
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
 
                 // Chips Row: Source, Business Type, City
                 Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
+                  spacing: 4,
+                  runSpacing: 2,
                   children: [
                     if (leadSource.isNotEmpty)
                       _buildInfoChip(Icons.source, leadSource, const Color(0xFFF1F5F9), const Color(0xFF475569)),
@@ -839,9 +847,7 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                       _buildInfoChip(Icons.location_on_outlined, city, const Color(0xFFF1F5F9), const Color(0xFF475569)),
                   ],
                 ),
-                const SizedBox(height: 10),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
                 // Footer Row: Assignment & Actions
                 Row(
@@ -854,15 +860,17 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                           Text(
                             'Assigned: ${assignedName.isNotEmpty ? assignedName : 'Unassigned'}',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 9.5,
                               color: assignedName.isNotEmpty ? const Color(0xFF059669) : const Color(0xFF94A3B8),
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           if (siteCoordName.isNotEmpty)
                             Text(
                               'Site Coord: $siteCoordName',
-                              style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                              style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                              overflow: TextOverflow.ellipsis,
                             ),
                         ],
                       ),
@@ -871,16 +879,16 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                       children: [
                         IconButton(
                           constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(6),
-                          icon: const Icon(Icons.visibility_outlined, size: 18, color: Color(0xFF4F46E5)),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.visibility_outlined, size: 16, color: Color(0xFF4F46E5)),
                           onPressed: () => _showLeadDetailsModal(lead),
                           tooltip: 'View details',
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 2),
                         IconButton(
                           constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(6),
-                          icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF2563EB)),
+                          padding: const EdgeInsets.all(4),
+                          icon: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF2563EB)),
                           onPressed: () => _showEditLeadModal(lead),
                           tooltip: 'Edit lead',
                         ),
@@ -918,10 +926,10 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         status,

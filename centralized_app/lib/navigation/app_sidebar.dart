@@ -286,6 +286,7 @@ SidebarNavContext sidebarContextForSession(AuthSession session) {
     fullAccess: RoleAccess.hasFullAccess(user),
     canViewProjects: RoleAccess.canViewProjects(user),
     isTeamLeader: RoleAccess.isTeamLeader(user),
+    canViewTravelAndRouteMap: RoleAccess.canViewTravelAndRouteMap(user),
     dashboardPath: RoleAccess.dashboardPath(user),
     includeProperties: company?.id != CompanyId.adsResearchGlobal,
     allowedSections: RoleAccess.sidebarSections(user),

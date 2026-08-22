@@ -3,7 +3,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
-import '../navigation/app_nav.dart';
 import '../utils/attendance_helpers.dart';
 import '../utils/geocode_helpers.dart';
 import '../utils/ist_time.dart';
@@ -11,7 +10,12 @@ import '../widgets/travel_route_map.dart';
 
 /// Travel dashboard for site coordinators (mirrors web `SiteCoordinatorDashboardView.jsx`).
 class SiteCoordinatorDashboardBody extends StatefulWidget {
-  const SiteCoordinatorDashboardBody({super.key});
+  const SiteCoordinatorDashboardBody({
+    super.key,
+    this.shrinkWrap = false,
+  });
+
+  final bool shrinkWrap;
 
   @override
   State<SiteCoordinatorDashboardBody> createState() => _SiteCoordinatorDashboardBodyState();
@@ -244,173 +248,162 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
     final timeline = _timelineData?['timeline'] is List
         ? (_timelineData!['timeline'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
         : <Map<String, dynamic>>[];
-    final totalKm = _timelineData?['totalDistanceKm'] ?? 0;
-    final estimatedExpense = _timelineData?['estimatedExpense'] ?? 0;
-    final ratePerKm = _timelineData?['ratePerKm'] ?? 12;
-    final routeUrl = _timelineData?['routeUrl']?.toString();
+      final totalKm = _timelineData?['totalDistanceKm'] ?? 0;
+      final estimatedExpense = _timelineData?['estimatedExpense'] ?? 0;
+      final ratePerKm = _timelineData?['ratePerKm'] ?? 12;
+      final routeUrl = _timelineData?['routeUrl']?.toString();
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
-        children: [
-          const Text(
-            'Start your journey, then check in at each site. Route distance is calculated after the journey starts.',
-            style: TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _loading ? null : _pickDate,
-                  icon: const Icon(Icons.calendar_today, size: 14),
-                  label: Text(_dateKey, style: const TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
-                ),
+      final children = <Widget>[
+        const Text(
+          'Start your journey, then check in at each site. Route distance is calculated after the journey starts.',
+          style: TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _loading ? null : _pickDate,
+                icon: const Icon(Icons.calendar_today, size: 14),
+                label: Text(_dateKey, style: const TextStyle(fontSize: 11)),
+                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
               ),
-              const SizedBox(width: 8),
-              IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh, size: 18)),
-            ],
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            _Banner(text: _error!, color: const Color(0xFFFEF2F2), textColor: const Color(0xFFB91C1C)),
+            ),
+            const SizedBox(width: 8),
+            IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh, size: 18)),
           ],
-          if (_success != null) ...[
-            const SizedBox(height: 8),
-            _Banner(text: _success!, color: const Color(0xFFECFDF5), textColor: const Color(0xFF047857)),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          _Banner(text: _error!, color: const Color(0xFFFEF2F2), textColor: const Color(0xFFB91C1C)),
+        ],
+        if (_success != null) ...[
+          const SizedBox(height: 8),
+          _Banner(text: _success!, color: const Color(0xFFECFDF5), textColor: const Color(0xFF047857)),
+        ],
+        const SizedBox(height: 8),
+        _JourneyPanel(
+          loading: _loading,
+          journeyStarted: journeyStarted,
+          journeyActive: journeyActive,
+          journeyEnded: journeyEnded,
+          startedAt: journeyMap?['startedAt'],
+          startAddress: journeyMap?['startAddress']?.toString(),
+          endedAt: journeyMap?['endedAt'],
+          journeyBusy: _journeyBusy,
+          onStart: () => _startOrEndJourney('start'),
+          onEnd: () => _startOrEndJourney('end'),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _StatCard(title: 'Distance travelled', value: '$totalKm km', subtitle: 'Calculated route distance', icon: Icons.map_outlined),
+            _StatCard(title: 'Estimated expense', value: _scFormatInr(estimatedExpense), subtitle: '₹$ratePerKm / km rate', icon: Icons.attach_money),
           ],
-          const SizedBox(height: 8),
-          _JourneyPanel(
-            loading: _loading,
-            journeyStarted: journeyStarted,
-            journeyActive: journeyActive,
-            journeyEnded: journeyEnded,
-            startedAt: journeyMap?['startedAt'],
-            startAddress: journeyMap?['startAddress']?.toString(),
-            endedAt: journeyMap?['endedAt'],
-            journeyBusy: _journeyBusy,
-            onStart: () => _startOrEndJourney('start'),
-            onEnd: () => _startOrEndJourney('end'),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _StatCard(
-                title: 'Journey',
-                value: _loading
-                    ? '—'
-                    : journeyActive
-                        ? 'Active'
-                        : journeyEnded
-                            ? 'Ended'
-                            : 'Not started',
-                subtitle: journeyStarted ? _scFormatTime(journeyMap?['startedAt']) : 'Start to track km',
-              ),
-              _StatCard(
-                title: 'Distance',
-                value: _loading ? '—' : journeyStarted ? '$totalKm km' : '0 km',
-                subtitle: journeyStarted ? '@ ₹$ratePerKm/km' : 'After start',
-              ),
-              _StatCard(
-                title: 'Expense',
-                value: _loading ? '—' : journeyStarted ? _scFormatInr(estimatedExpense) : _scFormatInr(0),
-                subtitle: 'Estimated',
-              ),
-              _StatCard(
-                title: 'Visits',
-                value: _loading ? '—' : '${_visits.length}',
-                subtitle: 'Scheduled today',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              if (routeUrl != null && routeUrl.isNotEmpty && journeyStarted)
-                ActionChip(
-                  label: const Text('Open Google Maps', style: TextStyle(fontSize: 10)),
-                  avatar: const Icon(Icons.open_in_new, size: 14),
-                  onPressed: () => TravelRouteMap.openDirections(context, routeUrl: routeUrl, points: timeline),
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          title: 'Travel expense allocation',
+          subtitle: 'Claim travel reimbursement for completed journey',
+          action: _allocating
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : FilledButton(
+                  onPressed: _loading || !journeyStarted ? null : _allocateExpense,
+                  child: const Text('Allocate expense', style: TextStyle(fontSize: 11)),
                 ),
-              ActionChip(
-                label: Text(_allocating ? 'Allocating…' : 'Allocate expense', style: const TextStyle(fontSize: 10)),
-                avatar: const Icon(Icons.payments_outlined, size: 14),
-                onPressed: (_allocating || _loading || !journeyStarted || (totalKm is num && totalKm <= 0))
-                    ? null
-                    : _allocateExpense,
-              ),
-              ActionChip(
-                label: const Text('All site visits', style: TextStyle(fontSize: 10)),
-                avatar: const Icon(Icons.list_alt, size: 14),
-                onPressed: () => AppNavScope.navigate(context, '/site-visits'),
-              ),
-            ],
+          child: Text(
+            journeyEnded
+                ? 'Journey completed. You can allocate your travel expense.'
+                : journeyStarted
+                    ? 'End your journey to finalize travel expense.'
+                    : 'Start journey to compute distance.',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
           ),
-          const SizedBox(height: 8),
-          _Panel(
-            title: 'Route map',
-            subtitle: journeyStarted
-                ? 'Live path from journey start through check-ins'
-                : 'Start journey and check in to see the route on the map',
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          title: 'Route map',
+          subtitle: 'Interactive map and driving directions',
+          action: (routeUrl != null && routeUrl.isNotEmpty)
+              ? InkWell(
+                  onTap: () => TravelRouteMap.openDirections(context, routeUrl: routeUrl, points: timeline),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Open Maps ', style: TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                      Icon(Icons.open_in_new, size: 12, color: Color(0xFF2563EB)),
+                    ],
+                  ),
+                )
+              : null,
+          child: SizedBox(
+            height: 220,
             child: TravelRouteMap(
               points: timeline,
               routeUrl: journeyStarted ? routeUrl : null,
-              height: 280,
-              emptyMessage: journeyStarted
-                  ? 'Waiting for GPS points… check in at a site to plot the route.'
-                  : 'Start your journey to display the route map.',
+              height: 220,
             ),
           ),
-          const SizedBox(height: 8),
-          _Panel(
-            title: 'Travel timeline',
-            subtitle: journeyStarted ? 'Journey start → check-ins' : 'Start journey to begin timeline',
-            child: _loading
-                ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                : !journeyStarted
-                    ? const Text('No active journey. Tap Start journey above.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
-                    : timeline.isEmpty
-                        ? const Text('Journey started. Check in at a visit to add stops.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
-                        : Column(
-                            children: timeline.asMap().entries.map((entry) {
-                              final point = entry.value;
-                              final idx = entry.key;
-                              return _TimelineTile(point: point, index: idx, isLast: idx == timeline.length - 1);
-                            }).toList(),
-                          ),
-          ),
-          const SizedBox(height: 8),
-          _Panel(
-            title: "Today's assigned visits",
-            subtitle: journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey to track distance',
-            child: _loading
-                ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                : _visits.isEmpty
-                    ? const Text('No site visits assigned for this date.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
-                    : Column(
-                        children: _visits.map((visit) {
-                          return _VisitTile(
-                            visit: visit,
-                            busyKey: _busyKey,
-                            journeyStarted: journeyStarted,
-                            onCheckIn: () => _visitAction('${visit['_id']}', 'check-in'),
-                            onCheckOut: () => _visitAction('${visit['_id']}', 'check-out'),
-                          );
-                        }).toList(),
-                      ),
-          ),
-        ],
-      ),
-    );
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          title: 'Travel timeline',
+          subtitle: journeyStarted ? 'Journey start → check-ins' : 'Start journey to begin timeline',
+          child: _loading
+              ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              : !journeyStarted
+                  ? const Text('No active journey. Tap Start journey above.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
+                  : timeline.isEmpty
+                      ? const Text('Journey started. Check in at a visit to add stops.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
+                      : Column(
+                          children: timeline.asMap().entries.map((entry) {
+                            final point = entry.value;
+                            final idx = entry.key;
+                            return _TimelineTile(point: point, index: idx, isLast: idx == timeline.length - 1);
+                          }).toList(),
+                        ),
+        ),
+        const SizedBox(height: 8),
+        _Panel(
+          title: "Today's assigned visits",
+          subtitle: journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey to track distance',
+          child: _loading
+              ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              : _visits.isEmpty
+                  ? const Text('No site visits assigned for this date.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))
+                  : Column(
+                      children: _visits.map((visit) {
+                        return _VisitTile(
+                          visit: visit,
+                          busyKey: _busyKey,
+                          journeyStarted: journeyStarted,
+                          onCheckIn: () => _visitAction('${visit['_id']}', 'check-in'),
+                          onCheckOut: () => _visitAction('${visit['_id']}', 'check-out'),
+                        );
+                      }).toList(),
+                    ),
+        ),
+      ];
+
+      if (widget.shrinkWrap) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        );
+      }
+
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+          children: children,
+        ),
+      );
+    }
   }
-}
 
 String _scFormatInr(dynamic amount) {
   final v = num.tryParse('$amount') ?? 0;
@@ -524,14 +517,15 @@ class _JourneyPanel extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.title, required this.value, required this.subtitle});
+  const _StatCard({required this.title, required this.value, required this.subtitle, this.icon});
   final String title;
   final String value;
   final String subtitle;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    final w = (MediaQuery.sizeOf(context).width - 26) / 2;
+    final w = (MediaQuery.sizeOf(context).width - 28) / 2;
     return SizedBox(
       width: w,
       child: Container(
@@ -544,7 +538,22 @@ class _StatCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 12, color: const Color(0xFF64748B)),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
             Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
           ],
@@ -555,10 +564,11 @@ class _StatCard extends StatelessWidget {
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.title, required this.subtitle, required this.child});
+  const _Panel({required this.title, required this.subtitle, required this.child, this.action});
   final String title;
   final String subtitle;
   final Widget child;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -574,11 +584,18 @@ class _Panel extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                    ],
+                  ),
+                ),
+                if (action != null) action!,
               ],
             ),
           ),

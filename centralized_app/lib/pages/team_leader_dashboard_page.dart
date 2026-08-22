@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
+import 'site_coordinator_dashboard_body.dart';
 
 class TeamLeaderDashboardPage extends StatefulWidget {
   const TeamLeaderDashboardPage({super.key});
@@ -234,13 +235,13 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                    colors: [Color(0xFF0F172A), Color(0xFF2563EB)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: const [
-                    BoxShadow(color: Color(0x1A4F46E5), blurRadius: 8, offset: Offset(0, 4)),
+                    BoxShadow(color: Color(0x1A2563EB), blurRadius: 8, offset: Offset(0, 4)),
                   ],
                 ),
                 child: Row(
@@ -346,6 +347,34 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
                       ],
                     );
                   },
+                ),
+                const SizedBox(height: 14),
+
+                // Travel Allowance & Route Map Section (For Team Leaders)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.directions_car_rounded, size: 16, color: Color(0xFF2563EB)),
+                          SizedBox(width: 6),
+                          Text('Travel Allowance & Route Map', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        ],
+                      ),
+                      SizedBox(height: 10),
+                      SiteCoordinatorDashboardBody(shrinkWrap: true),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
 

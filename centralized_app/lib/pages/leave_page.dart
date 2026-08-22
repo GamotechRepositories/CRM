@@ -233,6 +233,8 @@ class _LeavePageState extends State<LeavePage> {
             bottom: 12,
             child: FloatingActionButton.extended(
               onPressed: _openApplyForm,
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Apply Leave', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,

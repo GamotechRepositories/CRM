@@ -123,68 +123,190 @@ class _ProfileHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = profileVal(employee['name']);
     final designation = _designationLabel(employee['designation']);
+    final department = profileVal(employee['department']);
     final status = profileVal(employee['employmentStatus'] ?? employee['status'], fallback: 'Active');
     final photo = employee['profilePhoto']?.toString();
+    final email = profileVal(employee['email'] ?? employee['officialEmail'] ?? employee['personalEmail']);
+    final phone = profileVal(employee['officialMobile'] ?? employee['personalMobile']);
+    final empCode = profileVal(employee['employeeCode']);
+
     final attendance = (profile['attendance'] as Map?)?.cast<String, dynamic>() ?? {};
     final summary = (attendance['summary'] as Map?)?.cast<String, dynamic>() ?? {};
     final taskRating = (profile['taskRatingPerformance'] as Map?)?.cast<String, dynamic>() ?? {};
     final projects = profile['assignedProjects'] is List ? (profile['assignedProjects'] as List).length : 0;
 
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x08000000), blurRadius: 12, offset: Offset(0, 4)),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('My Workspace › My Profile', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Avatar(name: name, photoUrl: photo),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                        ),
-                        _StatusChip(status: status),
-                      ],
-                    ),
-                    Text(designation, style: const TextStyle(fontSize: 11, color: Color(0xFF2563EB), fontWeight: FontWeight.w600)),
-                    Text(profileVal(employee['department']), style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                    const SizedBox(height: 6),
-                    Text(profileVal(employee['email']), style: const TextStyle(fontSize: 10, color: Color(0xFF475569))),
-                    Text(
-                      profileVal(employee['officialMobile'] ?? employee['personalMobile']),
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
-                    ),
-                  ],
+          // Top Gradient Cover Banner
+          Container(
+            height: 80,
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF2563EB)],
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -20,
+                  right: -20,
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: const Color.fromARGB(20, 255, 255, 255),
+                  ),
                 ),
-              ),
-            ],
+                Positioned(
+                  top: 10,
+                  left: 14,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(64, 0, 0, 0),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'MY PROFILE',
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _MiniStat(label: 'Present', value: '${summary['presentDays'] ?? 0}'),
-              _MiniStat(label: 'Absent', value: '${summary['absentDays'] ?? 0}'),
-              _MiniStat(label: 'Projects', value: '$projects'),
-              _MiniStat(
-                label: 'Task rating',
-                value: taskRating['averageRating'] != null ? '${taskRating['averageRating']}/5' : '—',
-              ),
-            ],
+          // Profile Content Card
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              children: [
+                Transform.translate(
+                  offset: const Offset(0, -32),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      _Avatar(name: name, photoUrl: photo, radius: 34),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 36),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF0F172A),
+                                        letterSpacing: -0.3,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  _StatusChip(status: status),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                designation,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF2563EB),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                department,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Transform.translate(
+                  offset: const Offset(0, -16),
+                  child: Column(
+                    children: [
+                      // Quick info badges
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          if (empCode != '—')
+                            _QuickInfoBadge(icon: Icons.badge_outlined, label: empCode),
+                          if (email != '—')
+                            _QuickInfoBadge(icon: Icons.email_outlined, label: email),
+                          if (phone != '—')
+                            _QuickInfoBadge(icon: Icons.phone_outlined, label: phone),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      // 4 Mini Stat Cards Grid
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniStatCard(
+                              label: 'Present',
+                              value: '${summary['presentDays'] ?? 0}',
+                              icon: Icons.check_circle_outline_rounded,
+                              accentColor: const Color(0xFF10B981),
+                              bgColor: const Color(0xFFECFDF5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MiniStatCard(
+                              label: 'Absent',
+                              value: '${summary['absentDays'] ?? 0}',
+                              icon: Icons.highlight_off_rounded,
+                              accentColor: const Color(0xFFEF4444),
+                              bgColor: const Color(0xFFFEF2F2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MiniStatCard(
+                              label: 'Projects',
+                              value: '$projects',
+                              icon: Icons.folder_outlined,
+                              accentColor: const Color(0xFF2563EB),
+                              bgColor: const Color(0xFFEFF6FF),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MiniStatCard(
+                              label: 'Rating',
+                              value: taskRating['averageRating'] != null ? '${taskRating['averageRating']}★' : '—',
+                              icon: Icons.star_outline_rounded,
+                              accentColor: const Color(0xFFF59E0B),
+                              bgColor: const Color(0xFFFEF3C7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -200,32 +322,47 @@ class _TabStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
+        ],
+      ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: tabs.length,
-        separatorBuilder: (context, _) => const SizedBox(width: 6),
+        separatorBuilder: (context, _) => const SizedBox(width: 4),
         itemBuilder: (context, i) {
           final selected = i == index;
-          return Material(
-            color: selected ? const Color(0xFF2563EB) : Colors.white,
-            borderRadius: BorderRadius.circular(999),
-            child: InkWell(
-              onTap: () => onChanged(i),
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: selected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0)),
-                ),
-                child: Text(
-                  tabs[i],
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : const Color(0xFF475569),
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            child: Material(
+              color: selected ? const Color(0xFF2563EB) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                onTap: () => onChanged(i),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: selected
+                        ? const [BoxShadow(color: Color(0x3D2563EB), blurRadius: 6, offset: Offset(0, 2))]
+                        : null,
+                  ),
+                  child: Text(
+                    tabs[i],
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                      color: selected ? Colors.white : const Color(0xFF64748B),
+                    ),
                   ),
                 ),
               ),
@@ -873,6 +1010,78 @@ class _ActivityTab extends StatelessWidget {
   }
 }
 
+class _QuickInfoBadge extends StatelessWidget {
+  const _QuickInfoBadge({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: const Color(0xFF64748B)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  const _MiniStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+    required this.bgColor,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accentColor;
+  final Color bgColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accentColor.withAlpha(38)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 16, color: accentColor),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: accentColor),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoCard extends StatelessWidget {
   const _InfoCard({required this.title, this.rows = const [], this.child});
   final String title;
@@ -883,17 +1092,36 @@ class _InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           if (child != null) child!,
           for (final row in rows) row,
         ],
@@ -910,15 +1138,23 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 96,
-            child: Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+            ),
           ),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 11, color: Color(0xFF334155)))),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
@@ -926,20 +1162,47 @@ class _Row extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, this.photoUrl});
+  const _Avatar({required this.name, this.photoUrl, this.radius = 28});
   final String name;
   final String? photoUrl;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-    return CircleAvatar(
-      radius: 28,
-      backgroundColor: const Color(0xFFDBEAFE),
-      backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
-      child: (photoUrl == null || photoUrl!.isEmpty)
-          ? Text(initial, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)))
-          : null,
+    return Stack(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
+            boxShadow: const [
+              BoxShadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 3)),
+            ],
+          ),
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: const Color(0xFFDBEAFE),
+            backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
+            child: (photoUrl == null || photoUrl!.isEmpty)
+                ? Text(initial, style: TextStyle(fontSize: radius * 0.65, fontWeight: FontWeight.w800, color: const Color(0xFF2563EB)))
+                : null,
+          ),
+        ),
+        Positioned(
+          right: 2,
+          bottom: 2,
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: const Color(0xFF10B981),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -952,15 +1215,16 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = status.toLowerCase() == 'active';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: active ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: active ? const Color(0xFFA7F3D0) : const Color(0xFFCBD5E1)),
       ),
       child: Text(
         status,
         style: TextStyle(
-          fontSize: 9,
+          fontSize: 9.5,
           fontWeight: FontWeight.w700,
           color: active ? const Color(0xFF047857) : const Color(0xFF64748B),
         ),

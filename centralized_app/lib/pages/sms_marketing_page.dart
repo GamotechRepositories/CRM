@@ -46,7 +46,7 @@ class _SmsMarketingPageState extends State<SmsMarketingPage> {
               icon: const Icon(Icons.sms, size: 16),
               label: const Text('Send SMS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF059669),
+                backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -70,7 +70,7 @@ class _SmsMarketingPageState extends State<SmsMarketingPage> {
                     subtitle: 'DLT Compliant',
                     icon: Icons.textsms,
                     iconBg: const Color(0xFFECFDF5),
-                    iconColor: const Color(0xFF059669),
+                    iconColor: const Color(0xFF2563EB),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -226,7 +226,7 @@ class _SmsMarketingPageState extends State<SmsMarketingPage> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SMS Blast Sent!')));
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
                 child: const Text('Dispatch SMS'),
               ),
             ),

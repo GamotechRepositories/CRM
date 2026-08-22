@@ -28,6 +28,7 @@ import 'invoices_page.dart';
 import 'manager_dashboard_page.dart';
 import 'sms_marketing_page.dart';
 import 'social_media_page.dart';
+import 'site_coordinator_dashboard_body.dart';
 import 'team_leader_dashboard_page.dart';
 import 'whatsapp_marketing_page.dart';
 
@@ -295,6 +296,17 @@ class AppPageFactory {
       case '/dashboard/team_leader':
       case '/team-leader':
         return const TeamLeaderDashboardPage();
+      case '/travel-allowance':
+      case '/route-map':
+      case '/travel-route-map':
+      case '/site-coordinator-dashboard':
+      case '/dashboard/site_coordinator':
+        return Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(14),
+            child: const SiteCoordinatorDashboardBody(),
+          ),
+        );
 
 
 

@@ -146,7 +146,7 @@ class _SocialMediaPageState extends State<SocialMediaPage> {
               icon: const Icon(Icons.add_photo_alternate, size: 16),
               label: const Text('New Post', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEC4899),
+                backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -439,7 +439,7 @@ class _SocialMediaPageState extends State<SocialMediaPage> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Social post scheduled!')));
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEC4899), foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
                 child: const Text('Schedule Post'),
               ),
             ),

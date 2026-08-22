@@ -139,37 +139,70 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
                 style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
+              Column(
                 children: [
-                  _StatCard(
-                    title: 'Total',
-                    value: '${stats.total}',
-                    subtitle: stats.growth >= 0 ? '+${stats.growth}% this month' : '${stats.growth}% this month',
-                    accent: const Color(0xFF2563EB),
-                    onTap: () => setState(() => _filterStatus = 'All'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _KpiCard(
+                          title: 'Total Projects',
+                          value: '${stats.total}',
+                          subtitle: stats.growth >= 0 ? '+${stats.growth}% this month' : '${stats.growth}% this month',
+                          icon: Icons.folder_outlined,
+                          iconBg: const Color(0xFFF3E8FF),
+                          iconColor: const Color(0xFF8B5CF6),
+                          lineColor: const Color(0xFF10B981),
+                          sparklineData: _sparklineForCount(stats.total, stats.total > 0 ? stats.total : 1),
+                          onTap: () => setState(() => _filterStatus = 'All'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _KpiCard(
+                          title: 'In Progress',
+                          value: '${stats.inProgress}',
+                          subtitle: '${stats.pct(stats.inProgress)}% of total',
+                          icon: Icons.show_chart_rounded,
+                          iconBg: const Color(0xFFE8F0FE),
+                          iconColor: const Color(0xFF2563EB),
+                          lineColor: const Color(0xFF2563EB),
+                          sparklineData: _sparklineForCount(stats.inProgress, stats.total > 0 ? stats.total : 1),
+                          onTap: () => setState(() => _filterStatus = 'In Progress'),
+                        ),
+                      ),
+                    ],
                   ),
-                  _StatCard(
-                    title: 'In Progress',
-                    value: '${stats.inProgress}',
-                    subtitle: '${stats.pct(stats.inProgress)}% of total',
-                    accent: const Color(0xFFEA580C),
-                    onTap: () => setState(() => _filterStatus = 'In Progress'),
-                  ),
-                  _StatCard(
-                    title: 'Completed',
-                    value: '${stats.completed}',
-                    subtitle: '${stats.pct(stats.completed)}% of total',
-                    accent: const Color(0xFF059669),
-                    onTap: () => setState(() => _filterStatus = 'Completed'),
-                  ),
-                  _StatCard(
-                    title: 'On Hold',
-                    value: '${stats.onHold}',
-                    subtitle: '${stats.pct(stats.onHold)}% of total',
-                    accent: const Color(0xFFD97706),
-                    onTap: () => setState(() => _filterStatus = 'On Hold'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _KpiCard(
+                          title: 'Completed',
+                          value: '${stats.completed}',
+                          subtitle: '${stats.pct(stats.completed)}% of total',
+                          icon: Icons.check_circle_outline_rounded,
+                          iconBg: const Color(0xFFE6F4EA),
+                          iconColor: const Color(0xFF10B981),
+                          lineColor: const Color(0xFF10B981),
+                          sparklineData: _sparklineForCount(stats.completed, stats.total > 0 ? stats.total : 1),
+                          onTap: () => setState(() => _filterStatus = 'Completed'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _KpiCard(
+                          title: 'On Hold',
+                          value: '${stats.onHold}',
+                          subtitle: '${stats.pct(stats.onHold)}% of total',
+                          icon: Icons.pause_circle_outline_rounded,
+                          iconBg: const Color(0xFFFEF3C7),
+                          iconColor: const Color(0xFFF59E0B),
+                          lineColor: const Color(0xFFF59E0B),
+                          sparklineData: _sparklineForCount(stats.onHold, stats.total > 0 ? stats.total : 1, isIncreasing: false),
+                          onTap: () => setState(() => _filterStatus = 'On Hold'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -230,6 +263,8 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
             bottom: 12,
             child: FloatingActionButton.extended(
               onPressed: () => AppNavScope.navigate(context, '/assign-task-self'),
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
               icon: const Icon(Icons.assignment_add, size: 18),
               label: const Text('Assign Task', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -250,53 +285,108 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
+class _KpiCard extends StatelessWidget {
+  const _KpiCard({
     required this.title,
     required this.value,
     required this.subtitle,
-    this.accent,
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.lineColor,
+    required this.sparklineData,
     this.onTap,
   });
 
   final String title;
   final String value;
   final String subtitle;
-  final Color? accent;
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final Color lineColor;
+  final List<double> sparklineData;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final w = (MediaQuery.sizeOf(context).width - 26) / 2;
-    return SizedBox(
-      width: w,
-      child: Material(
+    return Container(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x06000000), blurRadius: 10, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(height: 2, color: accent ?? const Color(0xFF6366F1)),
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
-                      const SizedBox(height: 2),
-                      Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                      Text(subtitle, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-                    ],
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, color: iconColor, size: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A),
                   ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: Color(0xFF94A3B8),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 48,
+                      height: 18,
+                      child: CustomPaint(
+                        painter: _MiniSparklinePainter(
+                          values: sparklineData,
+                          lineColor: lineColor,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -305,6 +395,72 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+List<double> _sparklineForCount(int count, int total, {bool isIncreasing = true}) {
+  if (total == 0 || count == 0) {
+    return const [0.2, 0.2, 0.25, 0.2, 0.3, 0.25, 0.2];
+  }
+  final ratio = (count / total).clamp(0.1, 1.0);
+  if (isIncreasing) {
+    return [
+      0.2,
+      0.25 + (ratio * 0.1),
+      0.2 + (ratio * 0.2),
+      0.35 + (ratio * 0.15),
+      0.3 + (ratio * 0.25),
+      0.5 + (ratio * 0.2),
+      0.4 + (ratio * 0.45),
+    ];
+  } else {
+    return [
+      0.7,
+      0.6 - (ratio * 0.1),
+      0.5 - (ratio * 0.15),
+      0.4 - (ratio * 0.1),
+      0.35 - (ratio * 0.15),
+      0.25 - (ratio * 0.1),
+      0.2,
+    ];
+  }
+}
+
+class _MiniSparklinePainter extends CustomPainter {
+  _MiniSparklinePainter({required this.values, required this.lineColor});
+  final List<double> values;
+  final Color lineColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final path = Path();
+    final stepX = size.width / (values.length - 1);
+    final points = <Offset>[];
+    for (int i = 0; i < values.length; i++) {
+      final x = i * stepX;
+      final y = size.height - (values[i] * size.height * 0.85);
+      points.add(Offset(x, y));
+    }
+
+    path.moveTo(points[0].dx, points[0].dy);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final controlX = (p0.dx + p1.dx) / 2;
+      path.cubicTo(controlX, p0.dy, controlX, p1.dy, p1.dx, p1.dy);
+    }
+
+    final strokePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniSparklinePainter oldDelegate) => false;
 }
 
 class _FiltersBar extends StatelessWidget {

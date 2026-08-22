@@ -46,7 +46,7 @@ class _WhatsappMarketingPageState extends State<WhatsappMarketingPage> {
               icon: const Icon(Icons.send, size: 16),
               label: const Text('Send Broadcast', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF16A34A),
+                backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -70,7 +70,7 @@ class _WhatsappMarketingPageState extends State<WhatsappMarketingPage> {
                     subtitle: 'Verified Business API',
                     icon: Icons.chat_bubble,
                     iconBg: const Color(0xFFDCFCE7),
-                    iconColor: const Color(0xFF16A34A),
+                    iconColor: const Color(0xFF2563EB),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -229,7 +229,7 @@ class _WhatsappMarketingPageState extends State<WhatsappMarketingPage> {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('WhatsApp Broadcast Sent!')));
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A), foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
                 child: const Text('Dispatch WhatsApp Broadcast'),
               ),
             ),

@@ -181,6 +181,18 @@ class _AttendancePageState extends State<AttendancePage> {
     };
   }
 
+  List<({String key, String label})> _availableMonthOptions() {
+    final list = <({String key, String label})>[];
+    final now = DateTime.now();
+    for (int i = 0; i < 12; i++) {
+      final d = DateTime(now.year, now.month - i, 1);
+      final key = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+      final label = AttendanceHelpers.formatMonthLabel(key);
+      list.add((key: key, label: label));
+    }
+    return list;
+  }
+
   Map<String, Map<String, dynamic>> get _monthAttendanceByDate => AttendanceHelpers.indexByDate(_monthAttendances);
 
   Map<String, dynamic>? get _myDayAttendance {
@@ -590,38 +602,91 @@ class _AttendancePageState extends State<AttendancePage> {
               apiBaseUrl: session.company?.apiBaseUrl,
             ),
             const SizedBox(height: 8),
-            if (_canViewTeam)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedEmployeeId.isEmpty ? session.userId : _selectedEmployeeId,
-                  isDense: true,
-                  decoration: InputDecoration(
-                    labelText: 'Employee',
-                    labelStyle: const TextStyle(fontSize: 11),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  if (_canViewTeam) ...[
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _selectedEmployeeId.isEmpty ? session.userId : _selectedEmployeeId,
+                        isDense: true,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: 'Select Employee',
+                          labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                        ),
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w500),
+                        items: _employees
+                            .map((e) => DropdownMenuItem(
+                                  value: '${e['_id']}',
+                                  child: Text(
+                                    '${e['name']}${e['employeeCode'] != null ? ' · ${e['employeeCode']}' : ''}',
+                                    style: const TextStyle(fontSize: 11),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (v) async {
+                          if (v == null) return;
+                          setState(() => _selectedEmployeeId = v);
+                          await _loadMonthAttendance();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _selectedMonth,
+                      isDense: true,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Select Month',
+                        labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w500),
+                      items: _availableMonthOptions()
+                          .map((m) => DropdownMenuItem(
+                                value: m.key,
+                                child: Text(
+                                  m.label,
+                                  style: const TextStyle(fontSize: 11),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (v) async {
+                        if (v == null) return;
+                        setState(() => _selectedMonth = v);
+                        await _loadMonthAttendance();
+                      },
+                    ),
                   ),
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A)),
-                  items: _employees
-                      .map((e) => DropdownMenuItem(
-                            value: '${e['_id']}',
-                            child: Text('${e['name']}${e['employeeCode'] != null ? ' · ${e['employeeCode']}' : ''}', style: const TextStyle(fontSize: 11)),
-                          ))
-                      .toList(),
-                  onChanged: (v) async {
-                    if (v == null) return;
-                    setState(() => _selectedEmployeeId = v);
-                    await _loadMonthAttendance();
-                  },
-                ),
+                ],
               ),
-            _MonthNavigator(
-              month: _selectedMonth,
-              onChanged: (m) async {
-                setState(() => _selectedMonth = m);
-                await _loadMonthAttendance();
-              },
             ),
             const SizedBox(height: 8),
             if (_monthLoading)
@@ -821,16 +886,32 @@ class _CheckInPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: FilledButton(
+                child: ElevatedButton(
                   onPressed: actionLoading || !canCheckIn ? null : onCheckIn,
-                  child: const Text('Check In', style: TextStyle(fontSize: 11)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF93C5FD),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Check In', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton(
+                child: ElevatedButton(
                   onPressed: actionLoading || !canCheckOut ? null : onCheckOut,
-                  child: const Text('Check Out', style: TextStyle(fontSize: 11)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF93C5FD),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text('Check Out', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -839,18 +920,32 @@ class _CheckInPanel extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: ElevatedButton(
                   onPressed: actionLoading || !isSessionActive ? null : onToggleBreak,
-                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFB45309)),
-                  child: Text(isBreakActive ? 'End Break' : 'Start Break', style: const TextStyle(fontSize: 10)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isBreakActive ? const Color(0xFFD97706) : const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF93C5FD),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: Text(isBreakActive ? 'End Break' : 'Start Break', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: OutlinedButton(
+                child: ElevatedButton(
                   onPressed: actionLoading || !isSessionActive ? null : onToggleMeeting,
-                  style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF6D28D9)),
-                  child: Text(isMeetingActive ? 'End Meeting' : 'Start Meeting', style: const TextStyle(fontSize: 10)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isMeetingActive ? const Color(0xFF7C3AED) : const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF93C5FD),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: Text(isMeetingActive ? 'End Meeting' : 'Start Meeting', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -946,47 +1041,7 @@ class _DatePickerRow extends StatelessWidget {
   }
 }
 
-class _MonthNavigator extends StatelessWidget {
-  const _MonthNavigator({required this.month, required this.onChanged});
-  final String month;
-  final ValueChanged<String> onChanged;
 
-  @override
-  Widget build(BuildContext context) {
-    final canNext = AttendanceHelpers.canGoToNextMonth(month);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => onChanged(AttendanceHelpers.shiftMonthKey(month, -1)),
-            icon: const Icon(Icons.chevron_left, size: 20),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          Expanded(
-            child: Text(
-              AttendanceHelpers.formatMonthLabel(month),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ),
-          IconButton(
-            onPressed: canNext ? () => onChanged(AttendanceHelpers.shiftMonthKey(month, 1)) : null,
-            icon: Icon(Icons.chevron_right, size: 20, color: canNext ? null : const Color(0xFFCBD5E1)),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _MonthlyEmployeeHeader extends StatelessWidget {
   const _MonthlyEmployeeHeader({this.employee, this.apiBaseUrl});
@@ -1333,9 +1388,11 @@ class _EmployeeAvatarState extends State<_EmployeeAvatar> {
       radius: widget.radius,
       backgroundColor: const Color(0xFFDBEAFE),
       backgroundImage: showPhoto ? NetworkImage(photo) : null,
-      onBackgroundImageError: (_, __) {
-        if (mounted) setState(() => _imgError = true);
-      },
+      onBackgroundImageError: showPhoto
+          ? (exception, stackTrace) {
+              if (mounted) setState(() => _imgError = true);
+            }
+          : null,
       child: showPhoto
           ? null
           : Text(
