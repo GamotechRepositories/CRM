@@ -4,7 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class AppEnv {
   static String get appName => dotenv.env['APP_NAME']?.trim().isNotEmpty == true
       ? dotenv.env['APP_NAME']!.trim()
-      : 'MultiCRM';
+      : 'Satish Bangar Group';
 
   static String get apiHost =>
       dotenv.env['API_HOST']?.trim() ?? 'http://localhost:5011';

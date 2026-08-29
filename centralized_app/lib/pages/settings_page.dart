@@ -26,7 +26,7 @@ class SettingsPage extends StatelessWidget {
             children: [
               const Text('App settings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
-              _row('App', 'MultiCRM Centralized'),
+              _row('App', 'Satish Bangar Group'),
               _row('Company', company?.displayName ?? '—'),
               _row('Tenant key', company?.key ?? '—'),
               _row('API', company?.apiBaseUrl ?? '—'),

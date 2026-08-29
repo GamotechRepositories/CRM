@@ -1,5 +1,5 @@
 name: centralized_app
-description: MultiCRM centralized employee app — select company, then use that tenant's APIs.
+description: Satish Bangar Group employee app — select company, then use that tenant's APIs.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -30,6 +30,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/app_logo.png
     - assets/ads.jpg
     - assets/bangar.jpg
     - assets/mahaProperties.png

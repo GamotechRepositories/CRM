@@ -121,9 +121,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       _AppLogo(company: _company),
                       const SizedBox(height: 16),
-                      _BrandTitle(appName: _company?.displayName ?? AppEnv.appName),
+                      _BrandTitle(appName: AppEnv.appName),
                       if (_company != null) ...[
                         const SizedBox(height: 4),
+                        Text(
+                          _company!.displayName,
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF475569), fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
                         Text(
                           _company!.tagline,
                           style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
@@ -204,23 +209,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       session.selectCompany(value);
                                     },
                             ),
-                            if (_company != null) ...[
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  const Icon(Icons.link_rounded, size: 12, color: _primaryBlue),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      _company!.apiBaseUrl,
-                                      style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
                             const SizedBox(height: 16),
 
                             const Text('Email', style: _labelStyle),
@@ -453,65 +441,36 @@ class _AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (company != null) {
-      return CompanyLogoWidget(company: company!, size: 72);
-    }
     return Container(
-      width: 120,
-      height: 120,
+      width: 88,
+      height: 88,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF42A5F5), Color(0xFF1E88E5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x401E88E5),
+            color: Color(0x33000000),
             blurRadius: 16,
             offset: Offset(0, 6),
           ),
         ],
       ),
-      child: CustomPaint(
-        painter: _LogoIconPainter(),
-        size: Size(72, 72),
+      clipBehavior: Clip.antiAlias,
+      child: Image.asset(
+        'assets/app_logo.png',
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          if (company != null) {
+            return CompanyLogoWidget(company: company!, size: 88);
+          }
+          return const ColoredBox(
+            color: Colors.black,
+            child: Icon(Icons.business_rounded, color: Colors.white, size: 40),
+          );
+        },
       ),
     );
   }
-}
-
-class _LogoIconPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stroke = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-
-    final fill = Paint()..color = Colors.white;
-
-    canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.28), 5, fill);
-    canvas.drawCircle(Offset(size.width * 0.28, size.height * 0.62), 4.5, fill);
-    canvas.drawCircle(Offset(size.width * 0.72, size.height * 0.62), 4.5, fill);
-
-    canvas.drawLine(Offset(size.width * 0.5, size.height * 0.33), Offset(size.width * 0.32, size.height * 0.57), stroke);
-    canvas.drawLine(Offset(size.width * 0.5, size.height * 0.33), Offset(size.width * 0.68, size.height * 0.57), stroke);
-    canvas.drawLine(Offset(size.width * 0.34, size.height * 0.62), Offset(size.width * 0.66, size.height * 0.62), stroke);
-
-    final doc = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(size.width * 0.5, size.height * 0.78), width: 18, height: 14),
-      const Radius.circular(2),
-    );
-    canvas.drawRRect(doc, stroke);
-    canvas.drawLine(Offset(size.width * 0.44, size.height * 0.76), Offset(size.width * 0.56, size.height * 0.76), stroke);
-    canvas.drawLine(Offset(size.width * 0.44, size.height * 0.80), Offset(size.width * 0.52, size.height * 0.80), stroke);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _BrandTitle extends StatelessWidget {
@@ -522,20 +481,17 @@ class _BrandTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = appName.trim();
-    final splitAt = name.toLowerCase().endsWith('crm') ? name.length - 3 : name.length;
-    final prefix = name.substring(0, splitAt);
-    final suffix = name.substring(splitAt);
 
     return Column(
       children: [
-        RichText(
-          text: TextSpan(
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-            children: [
-              TextSpan(text: prefix, style: const TextStyle(color: Color(0xFF0F172A))),
-              if (suffix.isNotEmpty)
-                TextSpan(text: suffix, style: const TextStyle(color: Color(0xFF1E88E5))),
-            ],
+        Text(
+          name,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+            color: Color(0xFF0F172A),
           ),
         ),
         const SizedBox(height: 10),

@@ -67,7 +67,7 @@ class _AppSidebarState extends State<AppSidebar> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              company?.displayName ?? 'MultiCRM',
+                              company?.displayName ?? 'Satish Bangar Group',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
