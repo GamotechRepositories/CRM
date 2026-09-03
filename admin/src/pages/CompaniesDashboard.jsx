@@ -107,6 +107,13 @@ const CompaniesDashboard = () => {
           <div className='flex items-center gap-2'>
             <button
               type='button'
+              onClick={() => navigate('/team-members')}
+              className='px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50'
+            >
+              Team Members
+            </button>
+            <button
+              type='button'
               onClick={() => navigate('/create-team')}
               className='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700'
             >

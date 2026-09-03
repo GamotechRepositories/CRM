@@ -7,6 +7,7 @@ import CompanyDashboard from './pages/CompanyDashboard'
 import EmployeesPage from './pages/EmployeesPage'
 import ModulePage from './pages/ModulePage'
 import CreateTeamPage from './pages/CreateTeamPage'
+import TeamMembersPage from './pages/TeamMembersPage'
 import ClientOverviewPage from './pages/ClientOverviewPage'
 import ProjectOverviewPage from './pages/ProjectOverviewPage'
 import TaskOverviewPage from './pages/TaskOverviewPage'
@@ -22,6 +23,7 @@ function App() {
           <Route path='/login' element={<Login />} />
           <Route path='/' element={withAuth(<CompaniesDashboard />)} />
           <Route path='/create-team' element={withAuth(<CreateTeamPage />)} />
+          <Route path='/team-members' element={withAuth(<TeamMembersPage />)} />
           <Route path='/company/:tenantId' element={withAuth(<CompanyDashboard />)} />
           <Route path='/company/:tenantId/employees' element={withAuth(<EmployeesPage />)} />
           <Route path='/company/:tenantId/employees/:employeeId' element={withAuth(<EmployeesPage />)} />

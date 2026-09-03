@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+UPLOAD_KEY_BACKUP.txt
+
+UPLOAD_KEY_BACKUP.txt

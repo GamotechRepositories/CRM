@@ -57,6 +57,33 @@ export function buildAdminPaths() {
       },
     },
 
+    '/api/v1/admin/ceo-team/{id}': {
+      put: {
+        tags: ['Admin · Team'],
+        summary: 'Update central admin team member',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/GenericResource' } } } },
+        responses: {
+          200: { description: 'Updated' },
+          400: ref('ValidationError'),
+          403: ref('Unauthorized'),
+          404: ref('NotFound'),
+          500: ref('ServerError'),
+        },
+      },
+      delete: {
+        tags: ['Admin · Team'],
+        summary: 'Delete central admin team member',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Deleted' },
+          403: ref('Unauthorized'),
+          404: ref('NotFound'),
+          500: ref('ServerError'),
+        },
+      },
+    },
+
     '/api/v1/admin/companies': {
       get: { tags: ['Admin · Tenants'], summary: 'List all companies', responses: { 200: { description: 'Companies' } } },
     },

@@ -3,6 +3,8 @@ import {
   login,
   listCentralAdmins,
   createCentralAdmin,
+  updateCentralAdmin,
+  deleteCentralAdmin,
   getAllCompanies,
   getCompanyTenants,
   getTenantDashboard,
@@ -31,6 +33,8 @@ const router = Router();
 router.post('/auth/login', login);
 router.get('/ceo-team', listCentralAdmins);
 router.post('/ceo-team', createCentralAdmin);
+router.put('/ceo-team/:id', updateCentralAdmin);
+router.delete('/ceo-team/:id', deleteCentralAdmin);
 router.get('/companies', getAllCompanies);
 router.get('/tenants', getCompanyTenants);
 router.get('/companies/:tenantId/dashboard', getTenantDashboard);

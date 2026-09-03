@@ -1,4 +1,4 @@
-package com.example.bangar_group_crm
+package com.satishbangargroup.crm
 
 import io.flutter.embedding.android.FlutterActivity
 

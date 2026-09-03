@@ -239,7 +239,7 @@ class _OsmRouteMap extends StatelessWidget {
       children: [
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.example.centralized_app',
+          userAgentPackageName: 'com.satishbangargroup.crm',
         ),
         if (latLngs.length > 1)
           PolylineLayer(

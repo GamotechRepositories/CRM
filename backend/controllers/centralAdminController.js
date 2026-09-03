@@ -174,6 +174,104 @@ export const createCentralAdmin = async (req, res) => {
   }
 };
 
+/** Update a team member (not root/CEO) */
+export const updateCentralAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid team member id' });
+    }
+
+    const existing = await CentralAdminUser.findById(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Team member not found' });
+    }
+    if (existing.isRoot || existing.role === CENTRAL_ROOT_ROLE) {
+      return res.status(403).json({ message: 'Root CEO account cannot be edited here' });
+    }
+
+    const name = String(req.body?.name ?? existing.name).trim();
+    const email = String(req.body?.email ?? existing.email).trim().toLowerCase();
+    const phone = String(req.body?.phone ?? existing.phone ?? '').trim();
+    const role = String(req.body?.role ?? existing.role).trim();
+    const status = String(req.body?.status ?? existing.status).trim();
+    const password = req.body?.password != null ? String(req.body.password) : '';
+    let tenants = Array.isArray(req.body?.tenants) ? req.body.tenants : existing.tenants;
+
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Name and email are required' });
+    }
+    if (!CENTRAL_TEAM_ROLES.includes(role)) {
+      return res.status(400).json({
+        message: `Invalid role. Choose one of: ${CENTRAL_TEAM_ROLES.join(', ')}`,
+      });
+    }
+    if (role === CENTRAL_ROOT_ROLE) {
+      return res.status(400).json({ message: 'CEO role cannot be assigned to team members' });
+    }
+    if (!['Active', 'Inactive'].includes(status)) {
+      return res.status(400).json({ message: 'Status must be Active or Inactive' });
+    }
+
+    tenants = (tenants || []).filter((tid) => CENTRAL_TENANTS.includes(tid));
+    if (!tenants.length) {
+      return res.status(400).json({ message: 'Select at least one company' });
+    }
+
+    if (email !== existing.email) {
+      const emailTaken = await CentralAdminUser.findOne({ email, _id: { $ne: id } }).lean();
+      if (emailTaken) {
+        return res.status(409).json({ message: 'A team member with this email already exists' });
+      }
+    }
+
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      }
+      existing.password = await bcrypt.hash(password, 10);
+    }
+
+    existing.name = name;
+    existing.email = email;
+    existing.phone = phone;
+    existing.role = role;
+    existing.status = status;
+    existing.tenants = tenants;
+    await existing.save();
+
+    return res.status(200).json({
+      message: 'Team member updated',
+      user: toPublicUser(existing),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to update team member', error: error?.message || error });
+  }
+};
+
+/** Delete a team member (not root/CEO) */
+export const deleteCentralAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid team member id' });
+    }
+
+    const existing = await CentralAdminUser.findById(id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Team member not found' });
+    }
+    if (existing.isRoot || existing.role === CENTRAL_ROOT_ROLE) {
+      return res.status(403).json({ message: 'Root CEO account cannot be deleted' });
+    }
+
+    await CentralAdminUser.findByIdAndDelete(id);
+    return res.status(200).json({ message: 'Team member deleted' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to delete team member', error: error?.message || error });
+  }
+};
+
 export const getCompanyTenants = async (_req, res) => {
   try {
     return res.status(200).json(COMPANIES);
