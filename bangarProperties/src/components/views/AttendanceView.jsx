@@ -16,6 +16,7 @@ const getDesignationTitle = (employee) =>
   employee?.designation?.title || employee?.designation?.name || employee?.designation || employee?.department || '—'
 
 const LATE_AFTER_LABEL = getLateAfterLabel()
+const UNDO_CHECKOUT_MS = 2 * 60 * 1000
 const CHART_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#3b82f6']
 
 const formatTime = (ms) => {
@@ -286,6 +287,14 @@ const AttendanceView = () => {
 
   const hasCheckedInToday = Boolean(myTodayAttendance?.checkIn)
   const hasCheckedOutToday = Boolean(myTodayAttendance?.checkOut)
+  const checkOutAtMs = myTodayAttendance?.checkOut
+    ? new Date(myTodayAttendance.checkOut).getTime()
+    : NaN
+  const undoRemainingMs =
+    hasCheckedOutToday && !Number.isNaN(checkOutAtMs)
+      ? Math.max(0, UNDO_CHECKOUT_MS - (liveClock.getTime() - checkOutAtMs))
+      : 0
+  const canUndoCheckOut = isToday && hasCheckedOutToday && undoRemainingMs > 0
   const isCheckInLockedForToday = checkInLockedDate === getTodayDateKey()
   const isSessionActive = hasCheckedInToday && !hasCheckedOutToday
   const canCheckIn = isToday && !hasCheckedInToday && !isCheckInLockedForToday
@@ -732,6 +741,25 @@ const AttendanceView = () => {
       void backfillCheckOutAddress(selectedEmployee, location.latitude, location.longitude)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error checking out')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUndoCheckOut = async () => {
+    if (!selectedEmployee) {
+      setError('User is not ready yet. Please try again.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      await api.post('/attendance/undo-check-out', { employee: selectedEmployee })
+      await fetchDayAttendance()
+      await syncActiveSessionFromServer()
+      fetchMonthAttendance()
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error undoing check-out')
     } finally {
       setLoading(false)
     }
@@ -1359,6 +1387,16 @@ const AttendanceView = () => {
                       Check Out
                     </button>
                   </div>
+                  {canUndoCheckOut && (
+                    <button
+                      type='button'
+                      onClick={handleUndoCheckOut}
+                      disabled={loading}
+                      className='w-full mt-2 py-2.5 rounded-lg border border-amber-500 bg-amber-50 text-amber-800 text-sm font-semibold hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                    >
+                      Undo Check Out · {formatTime(undoRemainingMs)}
+                    </button>
+                  )}
                   <div className='grid grid-cols-2 gap-2 mt-2'>
                     <button
                       type='button'
@@ -1388,7 +1426,12 @@ const AttendanceView = () => {
                   {hasCheckedInToday && !hasCheckedOutToday && (
                     <p className='text-xs text-emerald-700 mt-2'>You are checked in for today. Check out when you finish work.</p>
                   )}
-                  {hasCheckedOutToday && (
+                  {hasCheckedOutToday && canUndoCheckOut && (
+                    <p className='text-xs text-amber-700 mt-2'>
+                      Checked out by mistake? You can undo for {formatTime(undoRemainingMs)}.
+                    </p>
+                  )}
+                  {hasCheckedOutToday && !canUndoCheckOut && (
                     <p className='text-xs text-blue-700 mt-2'>Attendance completed for today. Check-in opens again tomorrow.</p>
                   )}
                   <div className='grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100'>

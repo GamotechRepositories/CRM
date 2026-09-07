@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   checkIn,
   checkOut,
+  undoCheckOut,
   getTodayAttendance,
   getAttendanceByMonth,
   getAttendanceByEmployee,
@@ -18,6 +19,7 @@ const router = Router();
 
 router.post('/attendance/check-in', checkIn);
 router.post('/attendance/check-out', checkOut);
+router.post('/attendance/undo-check-out', undoCheckOut);
 router.post('/attendance/break/start', startBreak);
 router.post('/attendance/break/end', endBreak);
 router.post('/attendance/meeting/start', startMeeting);

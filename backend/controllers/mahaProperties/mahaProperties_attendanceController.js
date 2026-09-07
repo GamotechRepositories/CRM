@@ -158,6 +158,77 @@ export const checkOut = async (req, res) => {
   }
 };
 
+const UNDO_CHECKOUT_MS = 2 * 60 * 1000;
+
+export const undoCheckOut = async (req, res) => {
+  try {
+    const { employee } = req.body;
+    if (!employee) {
+      return res.status(400).json({ message: 'Employee is required' });
+    }
+
+    const { today, tomorrow } = getTodayRange();
+    const attendance = await Attendance.findOne({
+      employee,
+      date: { $gte: today, $lt: tomorrow },
+      checkIn: { $exists: true, $ne: null },
+      checkOut: { $ne: null },
+    });
+
+    if (!attendance) {
+      return res.status(400).json({ message: 'No check-out found for today to undo' });
+    }
+
+    const checkedOutAt = new Date(attendance.checkOut).getTime();
+    if (Number.isNaN(checkedOutAt)) {
+      return res.status(400).json({ message: 'Invalid check-out time' });
+    }
+
+    const remainingMs = UNDO_CHECKOUT_MS - (Date.now() - checkedOutAt);
+    if (remainingMs <= 0) {
+      return res.status(400).json({
+        message: 'Undo window expired. Check-out can only be undone within 2 minutes.',
+      });
+    }
+
+    // Drop the last timeline point if it matches this checkout (coords / timestamp)
+    const timeline = Array.isArray(attendance.locationTimeline) ? [...attendance.locationTimeline] : [];
+    if (timeline.length) {
+      const last = timeline[timeline.length - 1];
+      const lastAt = last?.at ? new Date(last.at).getTime() : NaN;
+      const sameTime = !Number.isNaN(lastAt) && Math.abs(lastAt - checkedOutAt) < 5000;
+      const sameCoords =
+        attendance.checkOutLatitude != null &&
+        attendance.checkOutLongitude != null &&
+        last?.latitude != null &&
+        last?.longitude != null &&
+        Math.abs(Number(last.latitude) - Number(attendance.checkOutLatitude)) < 0.0001 &&
+        Math.abs(Number(last.longitude) - Number(attendance.checkOutLongitude)) < 0.0001;
+      if (sameTime || sameCoords) {
+        timeline.pop();
+        attendance.locationTimeline = timeline;
+      }
+    }
+
+    attendance.checkOut = null;
+    attendance.checkOutLatitude = null;
+    attendance.checkOutLongitude = null;
+    attendance.checkOutAddress = null;
+    attendance.durationHours = null;
+    attendance.status = 'In Progress';
+
+    await attendance.save();
+    const populated = await Attendance.findById(attendance._id).populate('employee');
+    res.status(200).json({
+      message: 'Check-out undone successfully',
+      attendance: populated,
+      undoRemainingMs: remainingMs,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error undoing check-out', error });
+  }
+};
+
 export const getTodayAttendance = async (req, res) => {
   try {
     const { employeeId, date } = req.query;
