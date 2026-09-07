@@ -37,6 +37,11 @@ const formatDuration = (minutes) => {
   return `${m}m`
 }
 
+const currentMonthValue = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 const formatDate = (d) => {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -237,10 +242,10 @@ const InfoCard = ({ title, icon, children, actionLabel, onAction }) => (
 )
 
 const DetailRow = ({ label, value, badge }) => (
-  <div className='flex items-start justify-between gap-3 py-2 border-b border-gray-50 last:border-0'>
-    <span className='text-sm text-gray-500 shrink-0'>{label}</span>
+  <div className='flex items-start justify-between gap-2 sm:gap-3 py-2 border-b border-gray-50 last:border-0 min-w-0'>
+    <span className='text-sm text-gray-500 shrink-0 max-w-[42%]'>{label}</span>
     {badge ? <StatusBadge status={value} /> : (
-      <span className='text-sm font-medium text-gray-900 text-right break-words'>{value ?? '—'}</span>
+      <span className='text-sm font-medium text-gray-900 text-right break-words min-w-0'>{value ?? '—'}</span>
     )}
   </div>
 )
@@ -308,6 +313,7 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
   const [docPreview, setDocPreview] = useState(null)
   const [photoUploading, setPhotoUploading] = useState(false)
   const [photoMessage, setPhotoMessage] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue())
   const photoInputRef = useRef(null)
 
   const handleProfilePhotoUpload = async (e) => {
@@ -346,7 +352,9 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
     const fetchProfile = async () => {
       try {
         setLoading(true)
-        const res = await api.get(`/employees/${id}/profile`)
+        const res = await api.get(`/employees/${id}/profile`, {
+          params: { month: selectedMonth || currentMonthValue() },
+        })
         setProfile(res.data)
       } catch (err) {
         setError(err.response?.data?.message || err.message || 'Failed to load profile')
@@ -355,7 +363,7 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
       }
     }
     if (id) fetchProfile()
-  }, [id])
+  }, [id, selectedMonth])
 
   useEffect(() => {
     const fetchAssignedAssets = async () => {
@@ -807,11 +815,11 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
   }
 
   return (
-    <div className='p-6 md:p-8 bg-gray-50 min-h-full'>
-      <div className='w-full'>
+    <div className='p-4 sm:p-6 md:p-8 bg-gray-50 min-h-full overflow-x-hidden'>
+      <div className='w-full max-w-full min-w-0'>
         {/* Page header */}
-        <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
-          <div>
+        <div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6'>
+          <div className='min-w-0'>
             {isSelfProfile && (
               <nav className='text-sm text-gray-500 mb-2'>
                 <span className='text-gray-900 font-medium'>My Workspace</span>
@@ -819,21 +827,41 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
                 <span className='text-gray-900 font-medium'>My Profile</span>
               </nav>
             )}
-            <h1 className='text-2xl font-bold text-gray-900'>{isSelfProfile ? 'My Profile' : 'Employee Profile'}</h1>
+            <h1 className='text-xl sm:text-2xl font-bold text-gray-900'>{isSelfProfile ? 'My Profile' : 'Employee Profile'}</h1>
             {isSelfProfile && (
-              <p className='text-sm text-gray-500 mt-1'>Your complete employment, payroll, attendance, and performance information.</p>
+              <p className='text-sm text-gray-500 mt-1'>
+                Monthly view of employment, payroll, attendance, and performance.
+                {profile?.monthLabel ? (
+                  <span className='text-gray-400'> · Showing {profile.monthLabel}</span>
+                ) : null}
+              </p>
             )}
+            {!isSelfProfile && profile?.monthLabel ? (
+              <p className='text-sm text-gray-500 mt-1'>Showing data for {profile.monthLabel}</p>
+            ) : null}
           </div>
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-wrap items-center gap-2 w-full sm:w-auto'>
+            <div className='flex items-center gap-2 w-full sm:w-auto'>
+              <label htmlFor='profile-month' className='text-sm font-medium text-gray-700 shrink-0'>
+                Month
+              </label>
+              <input
+                id='profile-month'
+                type='month'
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value || currentMonthValue())}
+                className='flex-1 sm:flex-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+              />
+            </div>
             {!isSelfProfile && (
               <>
-                <button type='button' className='px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'>
+                <button type='button' className='flex-1 sm:flex-none px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'>
                   Generate ID Card
                 </button>
-                <button type='button' onClick={() => navigate(`/employees/edit/${id}`)} className='px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700'>
+                <button type='button' onClick={() => navigate(`/employees/edit/${id}`)} className='flex-1 sm:flex-none px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700'>
                   Edit Profile
                 </button>
-                <button type='button' onClick={() => navigate('/employees')} className='px-4 py-2 text-sm font-medium bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100'>
+                <button type='button' onClick={() => navigate('/employees')} className='w-full sm:w-auto px-4 py-2 text-sm font-medium bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100'>
                   Back to List
                 </button>
               </>
@@ -842,7 +870,7 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
               <button
                 type='button'
                 onClick={() => navigate(getDashboardPath())}
-                className='px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'
+                className='w-full sm:w-auto px-4 py-2 text-sm font-medium border border-gray-300 bg-white rounded-lg hover:bg-gray-50'
               >
                 Back to Dashboard
               </button>
@@ -851,64 +879,77 @@ const EmployeeProfileView = ({ employeeId: employeeIdProp, isSelfProfile = false
         </div>
 
         {/* Hero card */}
-        <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6'>
-          <div className='flex flex-col lg:flex-row gap-6'>
-            <div className='flex flex-col items-center gap-2 shrink-0 mx-auto lg:mx-0'>
-              <div className='relative w-28 h-28 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-3xl font-bold overflow-hidden border-4 border-white shadow-md'>
-                {e.profilePhoto ? (
-                  <img src={e.profilePhoto} alt={e.name} className='w-full h-full object-cover' />
-                ) : (
-                  (e.name || '?').charAt(0).toUpperCase()
-                )}
-                {photoUploading ? (
-                  <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium'>
-                    Uploading…
-                  </div>
+        <div className='bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 mb-6 overflow-hidden'>
+          <div className='flex flex-col gap-5 min-w-0'>
+            <div className='flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 text-center sm:text-left min-w-0'>
+              <div className='flex flex-col items-center gap-2 shrink-0'>
+                <div className='relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-3xl font-bold overflow-hidden border-4 border-white shadow-md'>
+                  {e.profilePhoto ? (
+                    <img src={e.profilePhoto} alt={e.name} className='w-full h-full object-cover' />
+                  ) : (
+                    (e.name || '?').charAt(0).toUpperCase()
+                  )}
+                  {photoUploading ? (
+                    <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-medium'>
+                      Uploading…
+                    </div>
+                  ) : null}
+                </div>
+                {isSelfProfile ? (
+                  <>
+                    <input
+                      ref={photoInputRef}
+                      type='file'
+                      accept='image/*'
+                      className='hidden'
+                      onChange={handleProfilePhotoUpload}
+                    />
+                    <button
+                      type='button'
+                      disabled={photoUploading}
+                      onClick={() => photoInputRef.current?.click()}
+                      className='px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-60'
+                    >
+                      {e.profilePhoto ? 'Change photo' : 'Upload photo'}
+                    </button>
+                    {photoMessage ? (
+                      <p
+                        className={`text-xs text-center max-w-[11rem] ${
+                          photoMessage.includes('updated') ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        {photoMessage}
+                      </p>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
-              {isSelfProfile ? (
-                <>
-                  <input
-                    ref={photoInputRef}
-                    type='file'
-                    accept='image/*'
-                    className='hidden'
-                    onChange={handleProfilePhotoUpload}
-                  />
-                  <button
-                    type='button'
-                    disabled={photoUploading}
-                    onClick={() => photoInputRef.current?.click()}
-                    className='px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-60'
-                  >
-                    {e.profilePhoto ? 'Change photo' : 'Upload photo'}
-                  </button>
-                  {photoMessage ? (
-                    <p
-                      className={`text-xs text-center max-w-[10rem] ${
-                        photoMessage.includes('updated') ? 'text-green-600' : 'text-red-600'
-                      }`}
-                    >
-                      {photoMessage}
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-            <div className='flex-1 min-w-0'>
-              <div className='flex flex-wrap items-center gap-3 mb-1'>
-                <h2 className='text-2xl font-bold text-gray-900'>{e.name}</h2>
-                <StatusBadge status={empStatus} />
-              </div>
-              <p className='text-blue-600 font-medium'>{e.designation?.title || e.designation?.name || e.designation || '—'}</p>
-              <p className='text-sm text-gray-500 mt-1'>{val(e.department)}</p>
-              <div className='flex flex-wrap gap-4 mt-4 text-sm text-gray-600'>
-                <span className='flex items-center gap-1.5'><MailIcon /> {val(e.email)}</span>
-                <span className='flex items-center gap-1.5'><PhoneIcon /> {val(e.officialMobile || e.personalMobile)}</span>
-                <span className='flex items-center gap-1.5'><LocationIcon /> {val(e.workLocation || e.currentAddress)}</span>
+
+              <div className='flex-1 min-w-0 w-full'>
+                <div className='flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-3 mb-1'>
+                  <h2 className='text-xl sm:text-2xl font-bold text-gray-900 break-words'>{e.name}</h2>
+                  <StatusBadge status={empStatus} />
+                </div>
+                <p className='text-blue-600 font-medium break-words'>{e.designation?.title || e.designation?.name || e.designation || '—'}</p>
+                <p className='text-sm text-gray-500 mt-1 break-words'>{val(e.department)}</p>
+                <div className='flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-x-4 sm:gap-y-2 mt-4 text-sm text-gray-600'>
+                  <span className='inline-flex items-start gap-1.5 min-w-0'>
+                    <span className='shrink-0 mt-0.5'><MailIcon /></span>
+                    <span className='break-all min-w-0'>{val(e.email)}</span>
+                  </span>
+                  <span className='inline-flex items-start gap-1.5 min-w-0'>
+                    <span className='shrink-0 mt-0.5'><PhoneIcon /></span>
+                    <span className='break-words min-w-0'>{val(e.officialMobile || e.personalMobile)}</span>
+                  </span>
+                  <span className='inline-flex items-start gap-1.5 min-w-0'>
+                    <span className='shrink-0 mt-0.5'><LocationIcon /></span>
+                    <span className='break-words min-w-0'>{val(e.workLocation || e.currentAddress)}</span>
+                  </span>
+                </div>
               </div>
             </div>
-            <div className='grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 lg:min-w-[320px] text-sm'>
+
+            <div className='grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0 pt-4 border-t border-gray-100 min-w-0 text-sm'>
               <DetailRow label='Department' value={val(e.department)} />
               <DetailRow label='Employee ID' value={val(e.employeeCode || e._id)} />
               <DetailRow label='Reporting To' value={val(e.reportingManager?.name)} />

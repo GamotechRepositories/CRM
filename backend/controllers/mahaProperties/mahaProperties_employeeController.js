@@ -104,6 +104,7 @@ export const getEmployeeProfile = async (req, res) => {
   try {
     const profile = await buildEmployeeProfile({
       employeeId: req.params.id,
+      month: req.query.month || null,
       models: {
         Employee,
         Project,

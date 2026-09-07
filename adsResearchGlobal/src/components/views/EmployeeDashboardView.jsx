@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import {
+  formatTaskDuration,
+  getTaskRemainingMinutes,
+  getTaskStatusColor,
+  normalizeTaskStatus,
+} from '../../utils/taskStatus'
 
 const KpiCard = ({ title, value, subtitle, icon, color, onClick }) => (
   <button
@@ -126,88 +132,139 @@ const StarDisplay = ({ score, size = 'sm' }) => {
   )
 }
 
-const formatINR = (amount) => `₹ ${Math.round(amount).toLocaleString('en-IN')}`
-
-const PIPELINE_STAGE_CONFIG = [
-  { label: 'Leads', fill: '#3b82f6', avgValue: 52000, clip: 'polygon(0% 0%, 100% 0%, 88% 100%, 12% 100%)' },
-  { label: 'Qualified', fill: '#8b5cf6', avgValue: 65000, clip: 'polygon(12% 0%, 88% 0%, 78% 100%, 22% 100%)' },
-  { label: 'Proposal', fill: '#14b8a6', avgValue: 60000, clip: 'polygon(22% 0%, 78% 0%, 68% 100%, 32% 100%)' },
-  { label: 'Negotiation', fill: '#f59e0b', avgValue: 52500, clip: 'polygon(32% 0%, 68% 0%, 58% 100%, 42% 100%)' },
-  { label: 'Closed Won', fill: '#10b981', avgValue: 60000, clip: 'polygon(42% 0%, 58% 0%, 52% 100%, 48% 100%)' },
-]
-
-const buildPipelineStages = (leads) => {
-  const counts = [
-    leads.length,
-    leads.filter((l) => l.status === 'Interested').length,
-    leads.filter((l) => l.status === 'Meeting Schedule').length,
-    leads.filter((l) => l.status === 'Call You After Sometime').length,
-    leads.filter((l) => l.meetingInfoSent === true).length,
-  ]
-
-  const stages = PIPELINE_STAGE_CONFIG.map((cfg, i) => ({
-    ...cfg,
-    count: counts[i],
-    value: counts[i] * cfg.avgValue,
-  }))
-
-  const totalValue = stages.reduce((sum, s) => sum + s.value, 0)
-  const topCount = Math.max(1, stages[0].count)
-  const conversionPct = stages[0].count ? Math.round((stages[stages.length - 1].count / stages[0].count) * 100) : 0
-
-  return { stages, totalValue, conversionPct, topCount }
+const formatCountdown = (totalSeconds) => {
+  if (totalSeconds == null || !Number.isFinite(totalSeconds)) return '—'
+  const sec = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-const SalesPipelineFunnel = ({ stages, totalValue, onViewPipeline }) => (
-  <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-full'>
-    <div className='flex items-center justify-between px-5 py-4 border-b border-gray-100'>
-      <h3 className='text-sm font-semibold text-gray-900'>My Sales Pipeline</h3>
-      <button type='button' onClick={onViewPipeline} className='text-xs font-medium text-blue-600 hover:text-blue-700'>
-        View Pipeline
-      </button>
-    </div>
+const getRemainingSeconds = (task, nowMs = Date.now()) => {
+  const estimated = Number(task?.estimatedDurationMinutes)
+  if (!Number.isFinite(estimated) || estimated <= 0) return null
+  const status = normalizeTaskStatus(task?.status)
+  if ((status === 'In Progress' || status === 'Paused') && task?.startedAt) {
+    const startedMs = new Date(task.startedAt).getTime()
+    if (Number.isNaN(startedMs)) return estimated * 60
+    const endMs =
+      status === 'Paused' && task?.pausedAt
+        ? new Date(task.pausedAt).getTime()
+        : nowMs
+    const refMs = Number.isNaN(endMs) ? nowMs : endMs
+    const elapsedSec = Math.floor((refMs - startedMs) / 1000)
+    return Math.max(0, estimated * 60 - elapsedSec)
+  }
+  return estimated * 60
+}
 
-    <div className='p-5'>
-      <div className='space-y-0'>
-        {stages.map((stage, index) => (
-          <div key={stage.label} className='grid grid-cols-[1fr_auto] gap-3 items-center' style={{ marginTop: index === 0 ? 0 : -2 }}>
-            <div className='flex justify-center px-2'>
+const pickCurrentTask = (taskList = []) => {
+  const real = (Array.isArray(taskList) ? taskList : []).filter(isRealTask)
+  const byPriority = (status) =>
+    real
+      .filter((t) => normalizeTaskStatus(t.status) === status)
+      .sort((a, b) => new Date(b.startedAt || b.updatedAt || 0) - new Date(a.startedAt || a.updatedAt || 0))
+  return byPriority('In Progress')[0] || byPriority('Paused')[0] || null
+}
+
+const CurrentTaskTimer = ({ task, onOpen }) => {
+  const [nowMs, setNowMs] = useState(Date.now())
+  const status = normalizeTaskStatus(task?.status)
+  const isLive = status === 'In Progress'
+
+  useEffect(() => {
+    if (!task || !isLive) return undefined
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [task?._id, isLive])
+
+  if (!task) {
+    return (
+      <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-full'>
+        <div className='flex items-center justify-between px-5 py-4 border-b border-gray-100'>
+          <h3 className='text-sm font-semibold text-gray-900'>Current Task Timer</h3>
+        </div>
+        <div className='p-8 text-center'>
+          <p className='text-4xl font-bold tabular-nums text-gray-300'>--:--</p>
+          <p className='text-sm text-gray-500 mt-3'>No task in progress</p>
+          <p className='text-xs text-gray-400 mt-1'>Start a task from My Tasks to see the remaining timer here.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const remainingSec = getRemainingSeconds(task, nowMs)
+  const remainingMins = getTaskRemainingMinutes(task, nowMs)
+  const estimated = Number(task.estimatedDurationMinutes) || 0
+  const elapsedMins =
+    estimated > 0 && remainingMins != null ? Math.max(0, estimated - remainingMins) : null
+  const progressPct =
+    estimated > 0 && remainingMins != null
+      ? Math.min(100, Math.round((elapsedMins / estimated) * 100))
+      : 0
+  const overtime = remainingSec === 0 && status === 'In Progress'
+
+  return (
+    <div className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-full'>
+      <div className='flex items-center justify-between px-5 py-4 border-b border-gray-100 gap-2'>
+        <h3 className='text-sm font-semibold text-gray-900'>Current Task Timer</h3>
+        <button type='button' onClick={onOpen} className='text-xs font-medium text-blue-600 hover:text-blue-700 shrink-0'>
+          Open Task
+        </button>
+      </div>
+      <div className='p-5'>
+        <div className='flex flex-wrap items-center gap-2 mb-3'>
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold ${getTaskStatusColor(status)}`}>
+            {status || task.status}
+          </span>
+          {task.priority ? (
+            <span className='text-xs font-medium text-gray-500'>{task.priority} priority</span>
+          ) : null}
+        </div>
+        <p className='text-sm font-semibold text-gray-900 line-clamp-2'>{task.title}</p>
+        <p className='text-xs text-gray-500 mt-1'>{getProjectName(task)}</p>
+
+        <div className='mt-6 text-center'>
+          <p className='text-[11px] uppercase tracking-wide text-gray-400 font-medium mb-1'>
+            {overtime ? 'Time up' : status === 'Paused' ? 'Time remaining (paused)' : 'Time remaining'}
+          </p>
+          <p
+            className={`text-4xl sm:text-5xl font-bold tabular-nums tracking-tight ${
+              overtime ? 'text-red-600' : status === 'Paused' ? 'text-violet-700' : 'text-blue-700'
+            }`}
+          >
+            {formatCountdown(remainingSec)}
+          </p>
+          {remainingMins != null ? (
+            <p className='text-xs text-gray-500 mt-2'>
+              {formatTaskDuration(remainingMins) || '0m'} left
+              {estimated ? ` of ${formatTaskDuration(estimated) || `${estimated}m`} estimate` : ''}
+            </p>
+          ) : (
+            <p className='text-xs text-gray-500 mt-2'>No time estimate set for this task</p>
+          )}
+        </div>
+
+        {estimated > 0 && (
+          <div className='mt-5'>
+            <div className='h-2 rounded-full bg-gray-100 overflow-hidden'>
               <div
-                className='w-full max-w-[200px] h-11 flex items-center justify-center transition-transform hover:scale-[1.02]'
-                style={{
-                  clipPath: stage.clip,
-                  backgroundColor: stage.fill,
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.12))',
-                }}
-              >
-                <span className='text-white text-lg font-bold tabular-nums'>
-                  {String(stage.count).padStart(2, '0')}
-                </span>
-              </div>
+                className={`h-full rounded-full transition-all ${overtime ? 'bg-red-500' : 'bg-blue-500'}`}
+                style={{ width: `${Math.min(100, progressPct)}%` }}
+              />
             </div>
-            <div className='w-28 pr-1 text-right'>
-              <p className='text-sm font-semibold text-gray-900'>{stage.label}</p>
-              <p className='text-xs text-gray-500 tabular-nums mt-0.5'>{formatINR(stage.value)}</p>
+            <div className='flex justify-between text-[11px] text-gray-400 mt-1.5'>
+              <span>Elapsed {formatTaskDuration(elapsedMins) || '0m'}</span>
+              <span>{progressPct}%</span>
             </div>
           </div>
-        ))}
+        )}
       </div>
-
-      <div className='mt-5 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100/80 border border-gray-100 px-4 py-3.5 flex items-center justify-between gap-3'>
-        <span className='text-xs font-medium text-gray-600'>Total Pipeline Value</span>
-        <span className='text-base font-bold text-gray-900 tabular-nums'>{formatINR(totalValue)}</span>
-      </div>
-
-      {stages[0].count > 0 && (
-        <p className='text-[11px] text-gray-400 text-center mt-3'>
-          {stages[stages.length - 1].count} closed from {stages[0].count} leads
-          {' · '}
-          {Math.round((stages[stages.length - 1].count / stages[0].count) * 100)}% win rate
-        </p>
-      )}
     </div>
-  </div>
-)
+  )
+}
 
 const PerformanceRing = ({ percent }) => {
   const p = Math.min(100, Math.max(0, percent))
@@ -290,7 +347,7 @@ const EmployeeDashboardView = () => {
       (l) => l.status === 'Meeting Schedule' && l.meetingTime && isSameDay(l.meetingTime, now)
     )
 
-    const pipelineData = buildPipelineStages(myLeads)
+    const currentTask = pickCurrentTask(tasks)
 
     const todaySchedule = [
       ...meetingsToday.map((m) => ({
@@ -339,7 +396,7 @@ const EmployeeDashboardView = () => {
       completedThisMonth,
       openDeals,
       meetingsToday,
-      pipelineData,
+      currentTask,
       todaySchedule,
       recentLeads,
       performancePct,
@@ -398,10 +455,15 @@ const EmployeeDashboardView = () => {
           </div>
         </Panel>
 
-        <SalesPipelineFunnel
-          stages={stats.pipelineData.stages}
-          totalValue={stats.pipelineData.totalValue}
-          onViewPipeline={() => navigate('/lead-management')}
+        <CurrentTaskTimer
+          task={stats.currentTask}
+          onOpen={() => {
+            if (!stats.currentTask?._id) {
+              navigate('/my-tasks')
+              return
+            }
+            navigate(`/my-tasks/${stats.currentTask._id}`)
+          }}
         />
 
         <Panel title="Today's Schedule" actionLabel='Add Meeting' onAction={() => navigate('/add-lead?meeting=1')}>
