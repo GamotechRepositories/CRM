@@ -61,25 +61,29 @@ export const hasOpenUrgentTask = (tasks = [], employeeId, excludeTaskId = null) 
   })
 }
 
-/** Status choices for the task status control (Pause only when urgent is open). */
+/** Status choices for the task status control (forward-only; Pause only when urgent is open). */
 export const getEditableStatusOptions = (task, { hasOpenUrgent = false } = {}) => {
   const current = normalizeTaskStatus(task?.status) || 'Pending'
   const isUrgentTask = String(task?.priority || '') === 'Urgent'
+
+  if (current === 'Completed' || current === 'Cancelled') {
+    return [current]
+  }
 
   if (current === 'Paused') {
     if (hasOpenUrgent) return ['Paused', 'Completed', 'Cancelled']
     return ['Paused', 'In Progress', 'Completed', 'Cancelled']
   }
 
-  if (current === 'In Progress' && hasOpenUrgent && !isUrgentTask) {
-    return ['In Progress', 'Paused', 'Completed', 'Cancelled']
+  if (current === 'In Progress') {
+    if (hasOpenUrgent && !isUrgentTask) {
+      return ['In Progress', 'Paused', 'Completed', 'Cancelled']
+    }
+    return ['In Progress', 'Completed', 'Cancelled']
   }
 
-  const base = ['Pending', 'In Progress', 'Completed', 'Cancelled']
-  if (current === 'Paused' || !base.includes(current)) {
-    return [...new Set([...base, current])]
-  }
-  return base
+  // Pending — can move forward, not sideways into Paused unless urgent rules apply elsewhere
+  return ['Pending', 'In Progress', 'Completed', 'Cancelled']
 }
 
 export const taskStatusToSocialStatus = (status) => {

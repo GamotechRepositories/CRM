@@ -26,13 +26,16 @@ class TaskStatus {
 
   static List<String> editableOptions(Map<String, dynamic> task) {
     final current = normalize(task['status']);
-    if (current == 'Paused') {
-      return ['Paused', 'In Progress', 'Completed', 'Cancelled'];
-    }
     if (current == 'Completed' || current == 'Cancelled') {
       return [current];
     }
-    return ['Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled'];
+    if (current == 'Paused') {
+      return ['Paused', 'In Progress', 'Completed', 'Cancelled'];
+    }
+    if (current == 'In Progress') {
+      return ['In Progress', 'Paused', 'Completed', 'Cancelled'];
+    }
+    return ['Pending', 'In Progress', 'Completed', 'Cancelled'];
   }
 
   static (Color bg, Color fg) colors(String status) {

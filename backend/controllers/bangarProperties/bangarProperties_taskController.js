@@ -12,7 +12,7 @@ import { runTaskNotificationSideEffects } from '../../utils/taskNotificationHook
 import { applyTaskStatusTiming, assertEmployeeAvailableForTask } from '../../utils/taskTiming.js';
 import { applyAutoTaskStarRating } from '../../utils/applyAutoTaskStarRating.js';
 import { assertValidTaskSchedule } from '../../utils/validateTaskSchedule.js';
-import { normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
+import { assertForwardOnlyStatusTransition, normalizeTaskStatus, socialStatusToTaskStatus } from '../../utils/taskStatus.js';
 import {
   assertCanStartOrResumeTask,
   assertEmployeeCanPause,
@@ -335,6 +335,7 @@ export const updateTask = async (req, res) => {
     const payload = normalizeTaskPayload(req.body);
     if (req.body.status !== undefined) {
       payload.status = nextStatus;
+      assertForwardOnlyStatusTransition(existing.status, nextStatus);
     }
 
     await assertEmployeeCanPause({ Task, task: existing, nextStatus });
