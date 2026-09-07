@@ -2,7 +2,7 @@ import Designation from '../../models/adsResearchGlobal/adsResearchGlobal_design
 import Employee from '../../models/adsResearchGlobal/adsResearchGlobal_employee.js';
 import { createDesignationController } from '../../utils/createDesignationController.js';
 
-const controller = createDesignationController(Designation, Employee);
+const controller = createDesignationController(Designation, Employee, 'adsResearchGlobal');
 
 export const {
   createDesignation,

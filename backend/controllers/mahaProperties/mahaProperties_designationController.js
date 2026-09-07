@@ -2,7 +2,7 @@ import Designation from '../../models/mahaProperties/mahaProperties_designation.
 import Employee from '../../models/mahaProperties/mahaProperties_employee.js';
 import { createDesignationController } from '../../utils/createDesignationController.js';
 
-const controller = createDesignationController(Designation, Employee);
+const controller = createDesignationController(Designation, Employee, 'mahaProperties');
 
 export const {
   createDesignation,

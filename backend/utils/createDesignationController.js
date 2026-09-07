@@ -1,6 +1,7 @@
 import { buildDesignationPayload } from './designationFields.js';
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from './cache.js';
 
-export const createDesignationController = (Designation, Employee) => {
+export const createDesignationController = (Designation, Employee, tenantId = 'shared') => {
   const attachEmployeeCounts = async (designations) => {
     return Promise.all(
       designations.map(async (d) => {
@@ -9,6 +10,10 @@ export const createDesignationController = (Designation, Employee) => {
         return { ...doc, employeeCount };
       })
     );
+  };
+
+  const bust = async () => {
+    await invalidateTenantCache(tenantId, 'designations', 'dashboard');
   };
 
   const createDesignation = async (req, res) => {
@@ -22,6 +27,7 @@ export const createDesignationController = (Designation, Employee) => {
         return res.status(409).json({ message: 'Designation with this title already exists' });
       }
       const designation = await Designation.create(payload);
+      await bust();
       res.status(201).json({ ...designation.toObject(), employeeCount: 0 });
     } catch (error) {
       res.status(500).json({ message: 'Error creating designation', error: error.message });
@@ -30,13 +36,19 @@ export const createDesignationController = (Designation, Employee) => {
 
   const getDesignations = async (req, res) => {
     try {
-      const filter = {};
-      if (req.query.active === 'true') filter.isActive = true;
-      if (req.query.department?.trim()) filter.department = req.query.department.trim();
-
-      const designations = await Designation.find(filter).sort({ sortOrder: 1, title: 1 });
-      const withCounts = await attachEmployeeCounts(designations);
-      res.status(200).json(withCounts);
+      const filterParts = {
+        active: req.query.active === 'true' ? '1' : '',
+        department: String(req.query.department || '').trim(),
+      };
+      const key = cacheKey(tenantId, 'designations', filterParts);
+      const { data } = await withCache(key, CACHE_TTL.designations, async () => {
+        const filter = {};
+        if (req.query.active === 'true') filter.isActive = true;
+        if (req.query.department?.trim()) filter.department = req.query.department.trim();
+        const designations = await Designation.find(filter).sort({ sortOrder: 1, title: 1 });
+        return attachEmployeeCounts(designations);
+      });
+      res.status(200).json(data);
     } catch (error) {
       res.status(500).json({ message: 'Error fetching designations', error: error.message });
     }
@@ -44,10 +56,15 @@ export const createDesignationController = (Designation, Employee) => {
 
   const getDesignationById = async (req, res) => {
     try {
-      const designation = await Designation.findById(req.params.id);
-      if (!designation) return res.status(404).json({ message: 'Designation not found' });
-      const [withCount] = await attachEmployeeCounts([designation]);
-      res.status(200).json(withCount);
+      const key = cacheKey(tenantId, 'designations', { id: req.params.id });
+      const { data } = await withCache(key, CACHE_TTL.designations, async () => {
+        const designation = await Designation.findById(req.params.id);
+        if (!designation) return null;
+        const [withCount] = await attachEmployeeCounts([designation]);
+        return withCount;
+      });
+      if (!data) return res.status(404).json({ message: 'Designation not found' });
+      res.status(200).json(data);
     } catch (error) {
       res.status(500).json({ message: 'Error fetching designation', error: error.message });
     }
@@ -75,6 +92,7 @@ export const createDesignationController = (Designation, Employee) => {
         new: true,
         runValidators: true,
       });
+      await bust();
       const [withCount] = await attachEmployeeCounts([updated]);
       res.status(200).json(withCount);
     } catch (error) {
@@ -96,6 +114,7 @@ export const createDesignationController = (Designation, Employee) => {
       }
 
       await Designation.findByIdAndDelete(req.params.id);
+      await bust();
       res.status(200).json({ message: 'Designation deleted successfully' });
     } catch (error) {
       res.status(500).json({ message: 'Error deleting designation', error: error.message });

@@ -7,6 +7,9 @@ import SocialMediaCalendar from '../../models/mahaProperties/mahaProperties_soci
 import { calculateBillingSummary } from '../../utils/mahaProperties/mahaProperties_clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './mahaProperties_billingController.js';
 import { socialStatusToTaskStatus } from '../../utils/taskStatus.js';
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
+
+const COMPANY_KEY = 'mahaProperties';
 
 // Create a new client
 export const createClient = async (req, res) => {
@@ -54,6 +57,7 @@ export const createClient = async (req, res) => {
     });
 
     await newClient.save();
+    await invalidateTenantCache(COMPANY_KEY, 'clients', 'dashboard');
     const populated = await Client.findById(newClient._id).populate('onboardBy');
     res.status(201).json({
       message: 'Client created successfully',
@@ -67,12 +71,15 @@ export const createClient = async (req, res) => {
 // Get all clients
 export const getClients = async (req, res) => {
   try {
-    const filter = {}
-    if (req.query.clientCategory) {
-      filter.clientCategory = req.query.clientCategory
-    }
-    const clients = await Client.find(filter).populate('onboardBy');
-    res.status(200).json(clients);
+    const filter = {};
+    if (req.query.clientCategory) filter.clientCategory = req.query.clientCategory;
+    const key = cacheKey(COMPANY_KEY, 'clients', {
+      category: String(req.query.clientCategory || ''),
+    });
+    const { data } = await withCache(key, CACHE_TTL.clients, async () => {
+      return Client.find(filter).sort({ createdAt: -1 }).populate('onboardBy').lean();
+    });
+    res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching clients', error });
   }
@@ -286,6 +293,7 @@ export const updateClient = async (req, res) => {
     const updated = await Client.findByIdAndUpdate(req.params.id, updates, {
       new: true,
     }).populate('onboardBy');
+    await invalidateTenantCache(COMPANY_KEY, 'clients', 'dashboard');
     if (!updated) return res.status(404).json({ message: 'Client not found' });
     res.status(200).json({ message: 'Client updated', client: updated });
   } catch (error) {
@@ -297,6 +305,7 @@ export const updateClient = async (req, res) => {
 export const deleteClient = async (req, res) => {
   try {
     const deleted = await Client.findByIdAndDelete(req.params.id);
+    await invalidateTenantCache(COMPANY_KEY, 'clients', 'dashboard');
     if (!deleted) return res.status(404).json({ message: 'Client not found' });
     res.status(200).json({ message: 'Client deleted successfully' });
   } catch (error) {

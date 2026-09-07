@@ -13,6 +13,7 @@ import { getEmployeeApiError, validateEmployeePayload } from "../../utils/employ
 import { assignEmployeeCodeOnCreate, validateEmployeeCodeOnUpdate } from "../../utils/employeeCode.js";
 import { createUpdateProfilePhotoHandler } from '../../utils/updateEmployeeProfilePhoto.js';
 import bcrypt from "bcryptjs";
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
 
 const COMPANY_KEY = 'salesTechReality';
 
@@ -34,6 +35,7 @@ export const createEmployee = async (req, res) => {
       password: hashedPassword,
     });
     await newEmployee.save();
+    await invalidateTenantCache(COMPANY_KEY, 'employees', 'designations', 'dashboard');
     res.status(201).json({
       message: "Employee created successfully",
       employee: newEmployee,
@@ -47,8 +49,11 @@ export const createEmployee = async (req, res) => {
 // Get all employees
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find().populate('designation');
-    res.status(200).json(employees);
+    const key = cacheKey(COMPANY_KEY, 'employees', { list: 'all' });
+    const { data } = await withCache(key, CACHE_TTL.employees, async () => {
+      return Employee.find().populate('designation').lean();
+    });
+    res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching employees', error });
   }
@@ -80,6 +85,7 @@ export const updateEmployee = async (req, res) => {
       .populate('designation')
       .populate('reportingManager', 'name email');
     if (!updated) return res.status(404).json({ message: 'Employee not found' });
+    await invalidateTenantCache(COMPANY_KEY, 'employees', 'designations', 'dashboard');
     res.status(200).json({ message: 'Employee updated', employee: updated });
   } catch (error) {
     const { status, message } = getEmployeeApiError(error, "Error updating employee");
@@ -93,6 +99,7 @@ export const updateProfilePhoto = createUpdateProfilePhotoHandler(Employee);
 export const deleteEmployee = async (req, res) => {
   try {
     const deleted = await Employee.findByIdAndDelete(req.params.id);
+    await invalidateTenantCache(COMPANY_KEY, 'employees', 'designations', 'dashboard');
     if (!deleted) return res.status(404).json({ message: 'Employee not found' });
     res.status(200).json({ message: 'Employee deleted successfully' });
   } catch (error) {

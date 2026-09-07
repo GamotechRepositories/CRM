@@ -4,6 +4,9 @@ import Billing from '../../models/adsResearchGlobal/adsResearchGlobal_billing.js
 import Task from '../../models/adsResearchGlobal/adsResearchGlobal_task.js';
 import { syncClientProfile, calculateBillingSummary } from '../../utils/adsResearchGlobal/adsResearchGlobal_clientProfileSync.js';
 import { computeTracking, withDynamicRemainingCost } from './adsResearchGlobal_billingController.js';
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
+
+const COMPANY_KEY = 'adsResearchGlobal';
 
 const normalizeProjectPayload = (body = {}) => {
   const normalized = { ...body };
@@ -79,6 +82,7 @@ export const createProject = async (req, res) => {
     });
 
     await newProject.save();
+    await invalidateTenantCache(COMPANY_KEY, 'projects', 'dashboard');
     await syncClientProfile({ clientId: client, preferredProjectId: newProject._id });
     const populated = await Project.findById(newProject._id)
       .populate('client')
@@ -153,11 +157,15 @@ export const getMyProjects = async (req, res) => {
 // Get all projects
 export const getProjects = async (req, res) => {
   try {
-    const projects = await Project.find()
-      .populate('client')
-      .populate('projectManager')
-      .populate('teamMembers');
-    res.status(200).json(projects);
+    const key = cacheKey(COMPANY_KEY, 'projects', { list: 'all' });
+    const { data } = await withCache(key, CACHE_TTL.projects, async () => {
+      return Project.find()
+        .populate('client')
+        .populate('projectManager')
+        .populate('teamMembers')
+        .lean();
+    });
+    res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching projects', error });
   }
@@ -305,6 +313,7 @@ export const updateProject = async (req, res) => {
       .populate('client')
       .populate('projectManager')
       .populate('teamMembers');
+    await invalidateTenantCache(COMPANY_KEY, 'projects', 'dashboard');
     if (!updated) return res.status(404).json({ message: 'Project not found' });
     const previousClientId = extractId(previous?.client);
     const updatedClientId = extractId(updated?.client);
@@ -322,6 +331,7 @@ export const updateProject = async (req, res) => {
 export const deleteProject = async (req, res) => {
   try {
     const deleted = await Project.findByIdAndDelete(req.params.id);
+    await invalidateTenantCache(COMPANY_KEY, 'projects', 'dashboard');
     if (!deleted) return res.status(404).json({ message: 'Project not found' });
     if (deleted?.client) await syncClientProfile({ clientId: deleted.client });
     res.status(200).json({ message: 'Project deleted successfully' });

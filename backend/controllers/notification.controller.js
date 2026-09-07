@@ -413,7 +413,7 @@ export const scheduleNotification = async (req, res) => {
     };
 
     if (!isQueueEnabled()) {
-      throw new ValidationError('Scheduled notifications require REDIS_URL');
+      throw new ValidationError('Scheduled notifications require Redis (set REDIS_URL or REDIS_HOST)');
     }
 
     const result = await scheduleNotificationJob(JOB_TYPES.SYSTEM, jobData, delayMs, priority);

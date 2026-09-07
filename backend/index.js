@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db.js';
+import { connectRedis } from './config/redis.js';
 import { getFirebaseAdmin } from './config/firebase.js';
 import { startNotificationWorker } from './worker/notification.worker.js';
 import { startMeetingReminderJob } from './jobs/meetingReminder.job.js';
@@ -22,6 +23,7 @@ const companies = ['adsResearchGlobal', 'bangarProperties', 'mahaProperties', 's
 
 // Connect Database
 await connectDB();
+await connectRedis();
 
 // Background job: auto check-out previous day's open sessions
 const runAttendanceSweeper = async () => {

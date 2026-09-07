@@ -104,13 +104,13 @@ async function processJob(job) {
 let worker = null;
 
 /**
- * Start BullMQ worker (only when REDIS_URL is configured).
+ * Start BullMQ worker (only when Redis is configured).
  * @returns {Worker | null}
  */
 export function startNotificationWorker() {
   if (worker) return worker;
   if (!isQueueEnabled()) {
-    logger.warn('WorkerInit', 'REDIS_URL not set — notification worker disabled');
+    logger.warn('WorkerInit', 'Redis not configured — notification worker disabled (set REDIS_URL or REDIS_HOST)');
     return null;
   }
 

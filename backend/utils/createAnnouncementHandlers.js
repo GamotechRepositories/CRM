@@ -2,6 +2,7 @@ import {
   ANNOUNCEMENT_PRIORITIES,
   ANNOUNCEMENT_STATUSES,
 } from './announcementFields.js';
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from './cache.js';
 
 const toDate = (value) => {
   if (!value) return null;
@@ -25,11 +26,13 @@ const normalizePayload = (body = {}) => {
   };
 };
 
-export const createAnnouncementHandlers = ({ Announcement, Employee, notificationService }) => {
+export const createAnnouncementHandlers = ({ Announcement, Employee, notificationService, tenantId = 'shared' }) => {
   const populateAnnouncement = (query) =>
     query
       .populate('createdBy', 'name email employeeCode profilePhoto')
       .sort({ pinned: -1, publishedAt: -1, createdAt: -1 });
+
+  const bust = () => invalidateTenantCache(tenantId, 'announcements');
 
   const sendNotifications = async (announcement, actorId) => {
     if (!notificationService?.notifyAnnouncement) return null;
@@ -48,21 +51,28 @@ export const createAnnouncementHandlers = ({ Announcement, Employee, notificatio
   const getAnnouncements = async (req, res) => {
     try {
       const { status, priority, pinned, active } = req.query;
-      const filter = {};
+      const key = cacheKey(tenantId, 'announcements', {
+        status: status || '',
+        priority: priority || '',
+        pinned: pinned || '',
+        active: active || '',
+      });
 
-      if (status && ANNOUNCEMENT_STATUSES.includes(status)) filter.status = status;
-      if (priority && ANNOUNCEMENT_PRIORITIES.includes(priority)) filter.priority = priority;
-      if (pinned === 'true') filter.pinned = true;
-      if (pinned === 'false') filter.pinned = false;
+      const { data } = await withCache(key, CACHE_TTL.announcements, async () => {
+        const filter = {};
+        if (status && ANNOUNCEMENT_STATUSES.includes(status)) filter.status = status;
+        if (priority && ANNOUNCEMENT_PRIORITIES.includes(priority)) filter.priority = priority;
+        if (pinned === 'true') filter.pinned = true;
+        if (pinned === 'false') filter.pinned = false;
+        if (active === 'true') {
+          filter.status = 'Published';
+          const now = new Date();
+          filter.$or = [{ expiresAt: null }, { expiresAt: { $gt: now } }];
+        }
+        return populateAnnouncement(Announcement.find(filter)).lean();
+      });
 
-      if (active === 'true') {
-        filter.status = 'Published';
-        const now = new Date();
-        filter.$or = [{ expiresAt: null }, { expiresAt: { $gt: now } }];
-      }
-
-      const announcements = await populateAnnouncement(Announcement.find(filter));
-      res.status(200).json(announcements);
+      res.status(200).json(data);
     } catch (error) {
       res.status(500).json({ message: 'Error fetching announcements', error: error?.message });
     }
@@ -88,6 +98,7 @@ export const createAnnouncementHandlers = ({ Announcement, Employee, notificatio
       }
 
       const announcement = await Announcement.create(payload);
+      await bust();
       let notified = 0;
 
       if (announcement.status === 'Published' && announcement.notifyEmployees) {
@@ -144,6 +155,7 @@ export const createAnnouncementHandlers = ({ Announcement, Employee, notificatio
         new: true,
         runValidators: true,
       });
+      await bust();
 
       let notified = 0;
       const shouldNotify =
@@ -170,6 +182,7 @@ export const createAnnouncementHandlers = ({ Announcement, Employee, notificatio
     try {
       const deleted = await Announcement.findByIdAndDelete(req.params.id);
       if (!deleted) return res.status(404).json({ message: 'Announcement not found' });
+      await bust();
       res.status(200).json({ message: 'Announcement deleted' });
     } catch (error) {
       res.status(500).json({ message: 'Error deleting announcement', error: error?.message });

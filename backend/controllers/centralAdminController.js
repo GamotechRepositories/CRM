@@ -19,6 +19,7 @@ import {
   createTenantLeadRecord,
   updateTenantLeadRecord,
 } from '../utils/centralAdminTenantCrud.js';
+import { cacheKey, cacheGet, cacheSet, CACHE_TTL } from '../utils/cache.js';
 
 const COMPANIES = [
   {
@@ -417,6 +418,14 @@ export const getTenantDashboard = async (req, res) => {
       return res.status(404).json({ message: 'Company tenant not found' });
     }
 
+    const nowForMonth = new Date();
+    const monthValue = `${nowForMonth.getFullYear()}-${String(nowForMonth.getMonth() + 1).padStart(2, '0')}`;
+    const dashKey = cacheKey(tenantId, 'dashboard', { month: monthValue });
+    const cached = await cacheGet(dashKey);
+    if (cached) {
+      return res.status(200).json(cached);
+    }
+
     const [
       Company,
       Employee,
@@ -442,7 +451,6 @@ export const getTenantDashboard = async (req, res) => {
     const company = await Company.findOne().sort({ createdAt: 1 }).lean();
 
     // Month-scoped KPIs (tasks, leaves, revenue, expenses)
-    const nowForMonth = new Date();
     const monthStart = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth(), 1, 0, 0, 0, 0);
     const monthEnd = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth() + 1, 0, 23, 59, 59, 999);
     const taskMonthFilter = {
@@ -561,7 +569,7 @@ export const getTenantDashboard = async (req, res) => {
       return { ...project, progress };
     });
 
-    return res.status(200).json({
+    const payload = {
       tenantId: tenant.id,
       tenantLabel: tenant.label,
       company: company
@@ -601,7 +609,9 @@ export const getTenantDashboard = async (req, res) => {
       recentEmployees,
       recentProjects: projectsWithProgress,
       recentLeads,
-    });
+    };
+    await cacheSet(dashKey, payload, CACHE_TTL.dashboard);
+    return res.status(200).json(payload);
   } catch (error) {
     return res.status(500).json({ message: 'Failed to load company dashboard', error: error?.message || error });
   }

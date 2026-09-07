@@ -32,13 +32,32 @@ const DEFAULT_JOB_OPTIONS = {
 };
 
 /**
- * Create Redis connection for BullMQ.
+ * Resolve Redis URL from REDIS_URL or REDIS_HOST + REDIS_PORT.
+ * @returns {string | null}
+ */
+export function getRedisUrl() {
+  const fromUrl = String(process.env.REDIS_URL || '').trim();
+  if (fromUrl) return fromUrl;
+
+  const host = String(process.env.REDIS_HOST || '').trim();
+  if (!host) return null;
+
+  const port = Number(process.env.REDIS_PORT || 6379);
+  const password = String(process.env.REDIS_PASSWORD || '').trim();
+  if (password) {
+    return `redis://:${encodeURIComponent(password)}@${host}:${port}`;
+  }
+  return `redis://${host}:${port}`;
+}
+
+/**
+ * Create Redis connection for BullMQ (ioredis).
  * @returns {IORedis | null}
  */
 export function getRedisConnection() {
   if (redisConnection) return redisConnection;
 
-  const redisUrl = process.env.REDIS_URL;
+  const redisUrl = getRedisUrl();
   if (!redisUrl) return null;
 
   redisConnection = new IORedis(redisUrl, {
@@ -51,7 +70,7 @@ export function getRedisConnection() {
 
 /** @returns {boolean} */
 export function isQueueEnabled() {
-  return Boolean(process.env.REDIS_URL);
+  return Boolean(getRedisUrl());
 }
 
 /**
@@ -109,7 +128,7 @@ export async function enqueueNotificationJob(name, data, inlineHandler, priority
 export async function scheduleNotificationJob(name, data, delayMs, priority = 'normal') {
   const queue = getNotificationQueue();
   if (!queue) {
-    throw new QueueError('Scheduled notifications require REDIS_URL');
+    throw new QueueError('Scheduled notifications require Redis (set REDIS_URL or REDIS_HOST)');
   }
 
   const job = await queue.add(name, data, {

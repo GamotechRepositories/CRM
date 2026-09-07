@@ -2,7 +2,7 @@ import Designation from '../../models/bangarProperties/bangarProperties_designat
 import Employee from '../../models/bangarProperties/bangarProperties_employee.js';
 import { createDesignationController } from '../../utils/createDesignationController.js';
 
-const controller = createDesignationController(Designation, Employee);
+const controller = createDesignationController(Designation, Employee, 'bangarProperties');
 
 export const {
   createDesignation,

@@ -2,7 +2,7 @@ import Designation from '../../models/salesTechReality/salesTechReality_designat
 import Employee from '../../models/salesTechReality/salesTechReality_employee.js';
 import { createDesignationController } from '../../utils/createDesignationController.js';
 
-const controller = createDesignationController(Designation, Employee);
+const controller = createDesignationController(Designation, Employee, 'salesTechReality');
 
 export const {
   createDesignation,

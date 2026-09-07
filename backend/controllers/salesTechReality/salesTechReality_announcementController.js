@@ -12,4 +12,4 @@ export const {
   getAnnouncementById,
   updateAnnouncement,
   deleteAnnouncement,
-} = createAnnouncementHandlers({ Announcement, Employee, notificationService });
+} = createAnnouncementHandlers({ Announcement, Employee, notificationService, tenantId: 'salesTechReality' });
