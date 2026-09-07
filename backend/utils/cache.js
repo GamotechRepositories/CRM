@@ -121,4 +121,5 @@ export const CACHE_TTL = {
   projects: 180,
   announcements: 120,
   dashboard: 60,
+  tasks: 60, // my-tasks / task lists change often
 };

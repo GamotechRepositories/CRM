@@ -19,8 +19,11 @@ import {
   handleUrgentTaskAssigned,
   handleUrgentTaskCompleted,
 } from '../../utils/urgentTaskInterrupt.js';
+import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
 
 const notificationService = createNotificationService({ Notification });
+
+const COMPANY_KEY = 'salesTechReality';
 
 const normalizeDateStart = (value) => {
   const d = new Date(value);
@@ -199,6 +202,7 @@ export const createTask = async (req, res) => {
     await Promise.all(
       populatedTasks.map((task) => runTaskNotificationSideEffects({ notificationService, updated: task }))
     );
+    await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
     return res.status(201).json({
       message: assigneeIds.length > 1 ? 'Tasks assigned successfully' : 'Task assigned successfully',
       task: populatedTasks[0] || null,
@@ -216,6 +220,12 @@ export const createTask = async (req, res) => {
 export const getTasks = async (req, res) => {
   try {
     const { projectId, employeeId, assignedBy } = req.query;
+    const key = cacheKey(COMPANY_KEY, 'tasks', {
+      projectId: String(projectId || ''),
+      employeeId: String(employeeId || ''),
+      assignedBy: String(assignedBy || ''),
+    });
+    const { data } = await withCache(key, CACHE_TTL.tasks, async () => {
     const filter = { isRecurringTemplate: { $ne: true } };
     if (projectId) filter.project = projectId;
     if (employeeId) filter.assignedTo = employeeId;
@@ -226,7 +236,8 @@ export const getTasks = async (req, res) => {
       .populate('assignedTo')
       .populate('assignedBy')
       .populate('rating.ratedBy', 'name designation')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     let result = [...tasks];
     const includeSocialMedia = !assignedBy && (!projectId || projectId === 'social-media');
@@ -235,7 +246,8 @@ export const getTasks = async (req, res) => {
       const socialQuery = employeeId ? { 'posts.assignedTo': employeeId } : {};
       const calendars = await SocialMediaCalendar.find(socialQuery)
         .populate('client')
-        .populate('posts.assignedTo');
+        .populate('posts.assignedTo')
+        .lean();
 
       const socialTasks = [];
       for (const cal of calendars) {
@@ -285,7 +297,9 @@ export const getTasks = async (req, res) => {
       });
     }
 
-    res.status(200).json(result);
+    return result;
+    });
+    res.status(200).json(data);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching tasks', error });
   }
@@ -412,6 +426,7 @@ export const updateTask = async (req, res) => {
     await runTaskNotificationSideEffects({ notificationService, existing, updated });
     await syncClientProfileByProjectId(existing.project);
     await syncClientProfileByProjectId(updated?.project?._id || updated?.project || req.body?.project);
+    await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
     res.status(200).json({
       message: 'Task updated',
       task: updated,
@@ -428,6 +443,7 @@ export const updateTask = async (req, res) => {
 export const deleteTask = async (req, res) => {
   try {
     const deleted = await Task.findByIdAndDelete(req.params.id);
+    await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
     if (!deleted) return res.status(404).json({ message: 'Task not found' });
     await syncClientProfileByProjectId(deleted.project);
     res.status(200).json({ message: 'Task deleted successfully' });
