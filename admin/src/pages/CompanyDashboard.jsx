@@ -107,13 +107,13 @@ const CompanyDashboard = () => {
       { title: 'Projects', value: stats.projects ?? 0, subtitle: 'Total Projects', icon: 'projects', iconBg: 'bg-indigo-100 text-indigo-700', to: `${base}/projects` },
       { title: 'Active Projects', value: stats.activeProjects ?? 0, subtitle: 'Currently Active', icon: 'activeProjects', iconBg: 'bg-emerald-100 text-emerald-700', to: `${base}/projects?status=active` },
       { title: 'Leads', value: stats.leads ?? 0, subtitle: 'Total Leads', icon: 'leads', iconBg: 'bg-amber-100 text-amber-700', to: `${base}/leads` },
-      { title: 'Tasks', value: stats.tasks ?? 0, subtitle: 'Total Tasks', icon: 'tasks', iconBg: 'bg-pink-100 text-pink-700', to: `${base}/tasks` },
-      { title: 'Pending Tasks', value: stats.pendingTasks ?? 0, subtitle: 'Awaiting Action', icon: 'pendingTasks', iconBg: 'bg-orange-100 text-orange-700', to: `${base}/tasks?status=pending` },
-      { title: 'Completed Tasks', value: stats.completedTasks ?? 0, subtitle: 'Completed', icon: 'completedTasks', iconBg: 'bg-green-100 text-green-700', to: `${base}/tasks?status=completed` },
-      { title: 'Revenue', value: formatINR(stats.totalRevenue), subtitle: 'Total Revenue', icon: 'revenue', iconBg: 'bg-emerald-100 text-emerald-700', to: `${base}/reports` },
-      { title: 'Expenses', value: formatINR(stats.totalExpenses), subtitle: 'Total Expenses', icon: 'expenses', iconBg: 'bg-rose-100 text-rose-700', to: `${base}/reports` },
-      { title: 'Pending Leaves', value: stats.pendingLeaves ?? 0, subtitle: 'Awaiting Approval', icon: 'leaves', iconBg: 'bg-cyan-100 text-cyan-700', to: `${base}/leaves?status=pending` },
-      { title: 'Pending Invoices', value: stats.pendingInvoices ?? 0, subtitle: 'Unpaid Invoices', icon: 'invoices', iconBg: 'bg-slate-100 text-slate-700', to: `${base}/invoices?status=pending` },
+      { title: 'Tasks', value: stats.tasks ?? 0, subtitle: 'This Month', icon: 'tasks', iconBg: 'bg-pink-100 text-pink-700', to: `${base}/tasks` },
+      { title: 'Pending Tasks', value: stats.pendingTasks ?? 0, subtitle: 'This Month', icon: 'pendingTasks', iconBg: 'bg-orange-100 text-orange-700', to: `${base}/tasks?status=pending` },
+      { title: 'Completed Tasks', value: stats.completedTasks ?? 0, subtitle: 'This Month', icon: 'completedTasks', iconBg: 'bg-green-100 text-green-700', to: `${base}/tasks?status=completed` },
+      { title: 'Revenue', value: formatINR(stats.totalRevenue), subtitle: 'This Month', icon: 'revenue', iconBg: 'bg-emerald-100 text-emerald-700', to: `${base}/reports` },
+      { title: 'Expenses', value: formatINR(stats.totalExpenses), subtitle: 'This Month', icon: 'expenses', iconBg: 'bg-rose-100 text-rose-700', to: `${base}/reports` },
+      { title: 'Pending Leaves', value: stats.pendingLeaves ?? 0, subtitle: 'This Month', icon: 'leaves', iconBg: 'bg-cyan-100 text-cyan-700', to: `${base}/leaves?status=pending` },
+      { title: 'Pending Invoices', value: stats.pendingInvoices ?? 0, subtitle: 'This Month', icon: 'invoices', iconBg: 'bg-slate-100 text-slate-700', to: `${base}/invoices?status=pending` },
     ],
     [stats, base]
   )
@@ -246,7 +246,7 @@ const CompanyDashboard = () => {
             <div className='flex items-center justify-between mb-4'>
               <h3 className='text-sm font-semibold text-gray-900'>Tasks Overview</h3>
               <NavLink to={`${base}/tasks`} className='text-xs font-medium text-blue-600 hover:text-blue-700'>
-                View All Tasks
+                View This Month
               </NavLink>
             </div>
             <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>

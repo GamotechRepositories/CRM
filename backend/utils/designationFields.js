@@ -156,9 +156,33 @@ export const getDefaultDesignationMeta = (title) => {
       sortOrder: 8,
       permissions: {
         ...base.permissions,
+        canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
+        canManageEmployees: true,
+      },
+    };
+  }
+
+  if (t === 'manager') {
+    return {
+      ...base,
+      code: 'MANAGER',
+      description: 'Department manager — projects, clients, and team coordination',
+      level: 'Manager',
+      accessRole: 'manager',
+      sortOrder: 9,
+      permissions: {
+        hasFullAccess: false,
+        canAddProject: true,
+        canEditProject: true,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: true,
+        canManageEmployees: true,
+        canManageSocialCalendar: true,
       },
     };
   }
@@ -261,9 +285,12 @@ export const getDefaultDesignationMeta = (title) => {
       sortOrder: 12,
       permissions: {
         ...base.permissions,
+        canAddProject: true,
+        canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
         canApproveLeave: true,
+        canManageEmployees: true,
       },
     };
   }

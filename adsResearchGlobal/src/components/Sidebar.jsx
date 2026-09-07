@@ -39,16 +39,26 @@ const isPathActive = (pathname, path) => {
 const Sidebar = ({ isOpen = true, onToggle }) => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, logout, hasFullAccess, canViewProjects, getSidebarSections, getDashboardPath } = useAuth()
+  const { user, logout, hasFullAccess, canViewProjects, canManageClients, canManageEmployees, getSidebarSections, getDashboardPath } = useAuth()
   const fullAccess = hasFullAccess()
   const canViewProjectsValue = canViewProjects()
+  const canManageClientsValue = canManageClients()
+  const canManageEmployeesValue = canManageEmployees()
   const allowedSections = getSidebarSections()
   const dashboardPath = getDashboardPath()
   const isTeamLeader = getDashboardKind(user) === 'team_leader'
 
   const sections = useMemo(
-    () => getSidebarNav({ fullAccess, canViewProjects: canViewProjectsValue, allowedSections, dashboardPath, isTeamLeader }),
-    [fullAccess, canViewProjectsValue, allowedSections, dashboardPath, isTeamLeader]
+    () => getSidebarNav({
+      fullAccess,
+      canViewProjects: canViewProjectsValue,
+      canManageClients: canManageClientsValue,
+      canManageEmployees: canManageEmployeesValue,
+      allowedSections,
+      dashboardPath,
+      isTeamLeader,
+    }),
+    [fullAccess, canViewProjectsValue, canManageClientsValue, canManageEmployeesValue, allowedSections, dashboardPath, isTeamLeader]
   )
 
   const defaultExpanded = useMemo(() => {

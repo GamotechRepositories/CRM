@@ -4,10 +4,6 @@ import { useAuth } from '../context/AuthContext'
 
 const HR_ONLY_PATHS = [
   '/admin-dashboard',
-  '/clients',
-  '/add-client',
-  '/employees',
-  '/add-employee',
   '/salaries',
   '/add-salary',
   '/billings',
@@ -16,6 +12,16 @@ const HR_ONLY_PATHS = [
   '/calendar',
   '/company-profile',
 ]
+
+const isClientPath = (pathname) =>
+  pathname === '/clients'
+  || pathname === '/add-client'
+  || pathname.startsWith('/clients/edit/')
+
+const isEmployeeManagePath = (pathname) =>
+  pathname === '/employees'
+  || pathname === '/add-employee'
+  || pathname.startsWith('/employees/edit/')
 
 const isHROnlyPath = (pathname) => {
   return HR_ONLY_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
@@ -35,7 +41,16 @@ const isProjectsOnlyPath = (pathname) => {
 const isTasksListPath = (pathname) => pathname === '/tasks'
 
 const RoleGuard = ({ children }) => {
-  const { user, hasFullAccess, canAddProject, canEditProject, canViewProjects, getDashboardPath } = useAuth()
+  const {
+    user,
+    hasFullAccess,
+    canAddProject,
+    canEditProject,
+    canViewProjects,
+    canManageClients,
+    canManageEmployees,
+    getDashboardPath,
+  } = useAuth()
   const location = useLocation()
   const dashboardPath = getDashboardPath()
 
@@ -51,6 +66,12 @@ const RoleGuard = ({ children }) => {
     return <Navigate to={`/my-tasks/${tasksDetailMatch[1]}`} replace />
   }
   if (isHROnlyPath(location.pathname)) {
+    return <Navigate to={dashboardPath} replace />
+  }
+  if (isClientPath(location.pathname) && !canManageClients()) {
+    return <Navigate to={dashboardPath} replace />
+  }
+  if (isEmployeeManagePath(location.pathname) && !canManageEmployees()) {
     return <Navigate to={dashboardPath} replace />
   }
   if (isProjectsOnlyPath(location.pathname) && !canViewProjects()) {

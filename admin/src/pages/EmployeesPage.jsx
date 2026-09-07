@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 import AdminCompanyShell, { getInitials } from '../components/AdminCompanyShell'
+import EmployeeFormModal from '../components/EmployeeFormModal'
 import { TENANT_NAMES } from '../config/tenants'
 
 const AVATAR_COLORS = [
@@ -30,6 +31,11 @@ const formatDate = (value) => {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const currentMonthValue = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 const formatINR = (value) => {
@@ -94,6 +100,8 @@ const EmployeesPage = () => {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [tab, setTab] = useState('overview')
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue())
+  const [employeeModal, setEmployeeModal] = useState({ open: false, mode: 'create' })
 
   useEffect(() => {
     let cancelled = false
@@ -134,10 +142,11 @@ const EmployeesPage = () => {
       try {
         setProfileLoading(true)
         setError('')
-        const res = await api.get(`/companies/${tenantId}/employees/${employeeId}`)
+        const res = await api.get(`/companies/${tenantId}/employees/${employeeId}`, {
+          params: { month: selectedMonth },
+        })
         if (!cancelled) {
           setProfile(res.data)
-          setTab('overview')
         }
       } catch (err) {
         if (!cancelled) {
@@ -152,7 +161,12 @@ const EmployeesPage = () => {
     return () => {
       cancelled = true
     }
-  }, [tenantId, employeeId])
+  }, [tenantId, employeeId, selectedMonth])
+
+  useEffect(() => {
+    setSelectedMonth(currentMonthValue())
+    setTab('overview')
+  }, [employeeId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -178,6 +192,28 @@ const EmployeesPage = () => {
 
   const openEmployee = (id) => navigate(`/company/${tenantId}/employees/${id}`)
   const backToList = () => navigate(`/company/${tenantId}/employees`)
+
+  const reloadEmployees = async () => {
+    const res = await api.get(`/companies/${tenantId}/employees`)
+    setEmployees(res.data?.employees || [])
+  }
+
+  const reloadProfile = async () => {
+    if (!employeeId) return
+    const res = await api.get(`/companies/${tenantId}/employees/${employeeId}`, {
+      params: { month: selectedMonth },
+    })
+    setProfile(res.data)
+  }
+
+  const handleEmployeeSaved = async (savedEmployee) => {
+    await reloadEmployees()
+    if (employeeId && savedEmployee?._id && String(savedEmployee._id) === String(employeeId)) {
+      await reloadProfile()
+    } else if (savedEmployee?._id && employeeModal.mode === 'create') {
+      navigate(`/company/${tenantId}/employees/${savedEmployee._id}`)
+    }
+  }
 
   const emp = profile?.employee
   const attendanceSummary = profile?.attendance?.summary || {}
@@ -224,6 +260,14 @@ const EmployeesPage = () => {
                 <option value='active'>Active</option>
                 <option value='inactive'>Inactive</option>
               </select>
+              <button
+                type='button'
+                onClick={() => setEmployeeModal({ open: true, mode: 'create' })}
+                className='inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700'
+              >
+                <span className='text-lg leading-none'>+</span>
+                Add employee
+              </button>
             </div>
           </div>
 
@@ -347,6 +391,26 @@ const EmployeesPage = () => {
                   {val(emp.designation?.title)} · {val(emp.department)}
                 </p>
                 <p className='text-sm text-gray-400 mt-0.5'>{emp.email}</p>
+                <p className='text-xs text-blue-600 mt-1'>
+                  Showing data for {profile?.monthLabel || selectedMonth}
+                </p>
+              </div>
+              <div className='flex flex-wrap items-center gap-2'>
+                <label htmlFor='employee-profile-month' className='text-sm text-gray-600'>Month</label>
+                <input
+                  id='employee-profile-month'
+                  type='month'
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value || currentMonthValue())}
+                  className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                />
+                <button
+                  type='button'
+                  onClick={() => setEmployeeModal({ open: true, mode: 'edit' })}
+                  className='rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100'
+                >
+                  Edit employee
+                </button>
               </div>
               <div className='grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto lg:min-w-[420px]'>
                 <StatPill label='Projects' value={projects.length} />
@@ -389,7 +453,7 @@ const EmployeesPage = () => {
                 </div>
               </SectionCard>
 
-              <SectionCard title='Attendance snapshot'>
+              <SectionCard title={`Attendance snapshot · ${profile?.monthLabel || selectedMonth}`}>
                 <div className='grid grid-cols-2 gap-3'>
                   <StatPill label='Present' value={attendanceSummary.presentDays ?? 0} />
                   <StatPill label='Absent' value={attendanceSummary.absentDays ?? 0} />
@@ -526,7 +590,7 @@ const EmployeesPage = () => {
           )}
 
           {tab === 'tasks' && (
-            <SectionCard title={`Tasks (${tasks.length})`}>
+            <SectionCard title={`Tasks (${tasks.length}) · ${profile?.monthLabel || selectedMonth}`}>
               {tasks.length ? (
                 <div className='overflow-x-auto'>
                   <table className='min-w-full text-sm'>
@@ -566,7 +630,7 @@ const EmployeesPage = () => {
 
           {tab === 'attendance' && (
             <div className='grid grid-cols-1 xl:grid-cols-2 gap-5'>
-              <SectionCard title='Recent attendance'>
+              <SectionCard title={`Recent attendance · ${profile?.monthLabel || selectedMonth}`}>
                 {attendanceRecords.length ? (
                   <div className='overflow-x-auto max-h-96 overflow-y-auto'>
                     <table className='min-w-full text-sm'>
@@ -599,7 +663,7 @@ const EmployeesPage = () => {
                 )}
               </SectionCard>
 
-              <SectionCard title='Leave history'>
+              <SectionCard title={`Leave history · ${profile?.monthLabel || selectedMonth}`}>
                 {leaves.length ? (
                   <div className='overflow-x-auto max-h-96 overflow-y-auto'>
                     <table className='min-w-full text-sm'>
@@ -637,7 +701,7 @@ const EmployeesPage = () => {
           )}
 
           {tab === 'payroll' && (
-            <SectionCard title={`Salary history (${salaries.length})`}>
+            <SectionCard title={`Salary history (${salaries.length}) · ${profile?.monthLabel || selectedMonth}`}>
               {salaries.length ? (
                 <div className='overflow-x-auto'>
                   <table className='min-w-full text-sm'>
@@ -677,7 +741,7 @@ const EmployeesPage = () => {
 
           {tab === 'performance' && (
             <div className='grid grid-cols-1 xl:grid-cols-3 gap-5'>
-              <SectionCard title='Task ratings'>
+              <SectionCard title={`Task ratings · ${profile?.monthLabel || selectedMonth}`}>
                 <div className='grid grid-cols-2 gap-3'>
                   <StatPill label='Average' value={taskPerf.averageRating ?? '—'} />
                   <StatPill label='Rated tasks' value={taskPerf.ratedTaskCount ?? 0} />
@@ -686,7 +750,7 @@ const EmployeesPage = () => {
                 </div>
               </SectionCard>
               <div className='xl:col-span-2'>
-                <SectionCard title='Recent ratings'>
+                <SectionCard title={`Recent ratings · ${profile?.monthLabel || selectedMonth}`}>
                   {(taskPerf.ratings || []).length ? (
                     <div className='space-y-3'>
                       {taskPerf.ratings.slice(0, 10).map((r) => (
@@ -711,6 +775,16 @@ const EmployeesPage = () => {
           )}
         </>
       )}
+
+      <EmployeeFormModal
+        open={employeeModal.open}
+        mode={employeeModal.mode}
+        tenantId={tenantId}
+        employee={employeeModal.mode === 'edit' ? emp : null}
+        employees={employees}
+        onClose={() => setEmployeeModal({ open: false, mode: 'create' })}
+        onSaved={handleEmployeeSaved}
+      />
     </AdminCompanyShell>
   )
 }

@@ -6,6 +6,21 @@ const EMPTY_SECTION_IDS = []
 export const getDesignationTitle = (user) =>
   (user?.designation?.title || user?.designation?.name || '').toLowerCase()
 
+const MANAGER_ADD_PROJECT_DENY = new Set(['engineering manager', 'social media manager'])
+
+/** Manager / operations roles (excludes HR). Mirrors dashboardRoutes manager detection. */
+export const isOperationalManagerUser = (user) => {
+  if (!user || isAdminUser(user)) return false
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  const title = getDesignationTitle(user)
+  if (title === 'hr manager' || accessRole === 'hr') return false
+  if (accessRole === 'manager') return true
+  if (title === 'manager') return true
+  if (title.includes('manager')) return true
+  if (title.includes('operations')) return true
+  return false
+}
+
 export const isAdminUser = (user) => {
   const title = getDesignationTitle(user)
   const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
@@ -30,6 +45,7 @@ export const canViewProjectsForUser = (user) => {
   if (isAdminUser(user)) return true
   const fromDesignation = user?.designation?.permissions?.canViewProjects
   if (typeof fromDesignation === 'boolean') return fromDesignation
+  if (isOperationalManagerUser(user)) return true
   const title = getDesignationTitle(user)
   return [
     'admin',
@@ -46,8 +62,13 @@ export const canViewProjectsForUser = (user) => {
 export const canAddProjectForUser = (user) => {
   if (isAdminUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canAddProject')
-  if (fromDesignation !== null) return fromDesignation
+  if (fromDesignation === true) return true
+
   const title = getDesignationTitle(user)
+  if (MANAGER_ADD_PROJECT_DENY.has(title)) return false
+  if (isOperationalManagerUser(user)) return true
+
+  if (fromDesignation === false) return false
   return [
     'admin',
     'hr manager',
@@ -63,8 +84,16 @@ export const canEditProjectForUser = (user) => {
   const fromDesignation = getDesignationPermission(user, 'canEditProject')
   if (fromDesignation === true) return true
   if (canAddProjectForUser(user)) return true
+  if (isOperationalManagerUser(user)) return true
   const title = getDesignationTitle(user)
   return ['engineering manager', 'project manager'].includes(title)
+}
+
+/** Managers who can create projects can also add clients needed for those projects. */
+export const canManageClientsForUser = (user) => {
+  if (isAdminUser(user)) return true
+  if (hasFullAccessForUser(user)) return true
+  return canAddProjectForUser(user)
 }
 
 /** Any logged-in employee can assign tasks to other employees. */

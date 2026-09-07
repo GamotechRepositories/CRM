@@ -10,6 +10,15 @@ import {
   getTenantDashboard,
   getTenantEmployees,
   getTenantEmployeeProfile,
+  getTenantDesignations,
+  createTenantEmployee,
+  updateTenantEmployee,
+  createTenantClient,
+  updateTenantClient,
+  createTenantProject,
+  updateTenantProject,
+  createTenantLead,
+  updateTenantLead,
   getTenantModuleList,
   getTenantClientDashboard,
   getTenantProjectDashboard,
@@ -40,6 +49,15 @@ router.get('/tenants', getCompanyTenants);
 router.get('/companies/:tenantId/dashboard', getTenantDashboard);
 router.get('/companies/:tenantId/employees', getTenantEmployees);
 router.get('/companies/:tenantId/employees/:employeeId', getTenantEmployeeProfile);
+router.get('/companies/:tenantId/designations', getTenantDesignations);
+router.post('/companies/:tenantId/employees', createTenantEmployee);
+router.put('/companies/:tenantId/employees/:employeeId', updateTenantEmployee);
+router.post('/companies/:tenantId/clients', createTenantClient);
+router.put('/companies/:tenantId/clients/:clientId', updateTenantClient);
+router.post('/companies/:tenantId/projects', createTenantProject);
+router.put('/companies/:tenantId/projects/:projectId', updateTenantProject);
+router.post('/companies/:tenantId/leads', createTenantLead);
+router.put('/companies/:tenantId/leads/:leadId', updateTenantLead);
 router.get('/companies/:tenantId/modules/:module', getTenantModuleList);
 router.get('/companies/:tenantId/clients/:clientId/dashboard', getTenantClientDashboard);
 router.get('/companies/:tenantId/projects/:projectId/dashboard', getTenantProjectDashboard);

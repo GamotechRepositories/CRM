@@ -17,7 +17,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(AUTH_KEY)
-      if (raw) setUser(JSON.parse(raw))
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const canManage =
+          parsed.canManageEmployees ??
+          parsed.canManageAll ??
+          parsed.isCentralAdmin ??
+          parsed.isRoot ??
+          false
+        setUser({
+          ...parsed,
+          canManageEmployees: canManage,
+          canManageAll: canManage,
+        })
+      }
     } catch {
       localStorage.removeItem(AUTH_KEY)
     } finally {
@@ -40,7 +53,15 @@ export const AuthProvider = ({ children }) => {
   }
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, isAuthenticated: Boolean(user) }),
+    () => ({
+      user,
+      loading,
+      login,
+      logout,
+      isAuthenticated: Boolean(user),
+      canManageEmployees: () => Boolean(user?.canManageEmployees ?? user?.canManageAll ?? user?.isCentralAdmin ?? user?.isRoot),
+      canManageAll: () => Boolean(user?.canManageAll ?? user?.canManageEmployees ?? user?.isCentralAdmin ?? user?.isRoot),
+    }),
     [user, loading]
   )
 

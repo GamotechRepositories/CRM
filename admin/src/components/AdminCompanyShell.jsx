@@ -3,21 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { AppIcon } from './Icons'
 import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
+import {
+  findNavItem,
+  getCompanyAdminNav,
+  getNavGroupForActiveId,
+} from '../config/companyAdminFeatures'
 import centralLogo from '../assets/logo.jpg'
-
-const NAV_ITEMS = [
-  { id: 'home', label: 'Home', icon: 'home', absolutePath: '/' },
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '' },
-  { id: 'employees', label: 'Employees', icon: 'employees', path: 'employees' },
-  { id: 'clients', label: 'Clients', icon: 'clients', path: 'clients' },
-  { id: 'projects', label: 'Projects', icon: 'projects', path: 'projects' },
-  { id: 'leads', label: 'Leads', icon: 'leads', path: 'leads' },
-  { id: 'tasks', label: 'Tasks', icon: 'tasks', path: 'tasks' },
-  { id: 'invoices', label: 'Invoices', icon: 'invoices', path: 'invoices' },
-  { id: 'leaves', label: 'Leaves', icon: 'leaves', path: 'leaves' },
-  { id: 'reports', label: 'Reports', icon: 'reports', path: 'reports' },
-  { id: 'settings', label: 'Settings', icon: 'settings', path: 'settings' },
-]
 
 const getInitials = (name = '') =>
   name
@@ -38,6 +29,19 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   const sidebarMenuRef = useRef(null)
 
   const hasCompanyContext = Boolean(paramTenantId)
+  const navItems = getCompanyAdminNav(paramTenantId || TENANT_IDS[0])
+  const activeGroupId = getNavGroupForActiveId(navItems, activeNav)
+
+  const [expandedGroups, setExpandedGroups] = useState(() =>
+    activeGroupId ? { [activeGroupId]: true } : { 'employees-group': true }
+  )
+
+  useEffect(() => {
+    if (activeGroupId) {
+      setExpandedGroups((prev) => ({ ...prev, [activeGroupId]: true }))
+    }
+  }, [activeGroupId])
+
   const logo = hasCompanyContext ? TENANT_LOGOS[paramTenantId] : centralLogo
   const name = hasCompanyContext
     ? (TENANT_NAMES[paramTenantId] || paramTenantId)
@@ -51,7 +55,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
     }
     setShowHeaderCompanyMenu(false)
     setShowSidebarCompanyMenu(false)
-    const current = NAV_ITEMS.find((item) => item.id === activeNav)
+    const current = findNavItem(navItems, activeNav)
     if (current?.absolutePath) {
       navigate(current.absolutePath)
       return
@@ -78,9 +82,13 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
       navigate(item.absolutePath)
       return
     }
-    if (item.path === null) return
+    if (item.path === null || item.path === undefined) return
     const targetTenant = paramTenantId || TENANT_IDS[0]
     navigate(item.path ? `/company/${targetTenant}/${item.path}` : `/company/${targetTenant}`)
+  }
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
   }
 
   const CompanySwitcherMenu = ({ className = '' }) => (
@@ -94,11 +102,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
           <button
             key={id}
             type='button'
-            onClick={() => {
-              setShowHeaderCompanyMenu(false)
-              setShowSidebarCompanyMenu(false)
-              switchCompany(id)
-            }}
+            onClick={() => switchCompany(id)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-indigo-50 transition-colors ${
               selected ? 'bg-indigo-50' : 'bg-white'
             }`}
@@ -119,6 +123,29 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
       })}
     </div>
   )
+
+  const renderNavItem = (item, nested = false) => {
+    const active = activeNav === item.id
+    return (
+      <button
+        key={item.id}
+        type='button'
+        onClick={() => handleNav(item)}
+        className={`w-full flex items-center gap-3 rounded-xl py-2.5 text-sm transition-colors ${
+          nested ? 'pl-9 pr-3' : 'px-3'
+        } ${
+          active
+            ? 'bg-blue-600 text-white'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+        }`}
+        title={!sidebarOpen ? item.label : undefined}
+      >
+        {!nested && <AppIcon id={item.icon} className='size-5 shrink-0' />}
+        {nested && <span className='text-slate-500 text-xs'>•</span>}
+        {sidebarOpen && <span className='font-medium truncate text-left'>{item.label}</span>}
+      </button>
+    )
+  }
 
   return (
     <div className='h-screen overflow-hidden bg-[#F5F7FB] flex'>
@@ -145,24 +172,37 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
         </div>
 
         <nav className='flex-1 px-3 py-4 space-y-1 overflow-y-auto'>
-          {NAV_ITEMS.map((item) => {
-            const active = activeNav === item.id
-            return (
-              <button
-                key={item.id}
-                type='button'
-                onClick={() => handleNav(item)}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
-                  active
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
-                }`}
-                title={!sidebarOpen ? item.label : undefined}
-              >
-                <AppIcon id={item.icon} className='size-5 shrink-0' />
-                {sidebarOpen && <span className='font-medium'>{item.label}</span>}
-              </button>
-            )
+          {navItems.map((item) => {
+            if (item.type === 'group') {
+              const groupActive = item.children.some((child) => child.id === activeNav)
+              const isExpanded = expandedGroups[item.id]
+              return (
+                <div key={item.id} className='space-y-0.5'>
+                  <button
+                    type='button'
+                    onClick={() => (sidebarOpen ? toggleGroup(item.id) : handleNav(item.children[0]))}
+                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                      groupActive ? 'text-white bg-white/5' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                    title={!sidebarOpen ? item.label : undefined}
+                  >
+                    <AppIcon id={item.icon} className='size-5 shrink-0' />
+                    {sidebarOpen && (
+                      <>
+                        <span className='font-medium flex-1 text-left'>{item.label}</span>
+                        <span className={`text-xs transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▾</span>
+                      </>
+                    )}
+                  </button>
+                  {sidebarOpen && isExpanded && (
+                    <div className='space-y-0.5 pb-1'>
+                      {item.children.map((child) => renderNavItem(child, true))}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            return renderNavItem(item)
           })}
         </nav>
 

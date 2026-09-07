@@ -229,7 +229,16 @@ const AddProject = () => {
                 </select>
               </div>
               <div className='sm:col-span-2 relative' ref={clientRef}>
-                <label className='block text-sm font-medium text-gray-700'>Client</label>
+                <div className='flex items-center justify-between gap-2'>
+                  <label className='block text-sm font-medium text-gray-700'>Client</label>
+                  <button
+                    type='button'
+                    onClick={() => navigate('/add-client')}
+                    className='text-xs font-semibold text-blue-600 hover:text-blue-800'
+                  >
+                    + New client
+                  </button>
+                </div>
                 <input
                   type='text'
                   value={clientSearch}

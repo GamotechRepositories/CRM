@@ -12,6 +12,9 @@ import ClientOverviewPage from './pages/ClientOverviewPage'
 import ProjectOverviewPage from './pages/ProjectOverviewPage'
 import TaskOverviewPage from './pages/TaskOverviewPage'
 import InvoiceOverviewPage from './pages/InvoiceOverviewPage'
+import PerformancePage from './pages/PerformancePage'
+import AttendancePage from './pages/AttendancePage'
+import TasksPage from './pages/TasksPage'
 
 const withAuth = (element) => <RequireAuth>{element}</RequireAuth>
 
@@ -32,11 +35,17 @@ function App() {
           <Route path='/company/:tenantId/projects' element={withAuth(<ModulePage moduleId='projects' />)} />
           <Route path='/company/:tenantId/projects/:projectId' element={withAuth(<ProjectOverviewPage />)} />
           <Route path='/company/:tenantId/leads' element={withAuth(<ModulePage moduleId='leads' />)} />
-          <Route path='/company/:tenantId/tasks' element={withAuth(<ModulePage moduleId='tasks' />)} />
+          <Route path='/company/:tenantId/tasks' element={withAuth(<TasksPage />)} />
           <Route path='/company/:tenantId/tasks/:taskId' element={withAuth(<TaskOverviewPage />)} />
           <Route path='/company/:tenantId/invoices' element={withAuth(<ModulePage moduleId='invoices' />)} />
           <Route path='/company/:tenantId/invoices/:invoiceId' element={withAuth(<InvoiceOverviewPage />)} />
           <Route path='/company/:tenantId/leaves' element={withAuth(<ModulePage moduleId='leaves' />)} />
+          <Route path='/company/:tenantId/expenses' element={withAuth(<ModulePage moduleId='expenses' />)} />
+          <Route path='/company/:tenantId/salaries' element={withAuth(<ModulePage moduleId='salaries' />)} />
+          <Route path='/company/:tenantId/attendance' element={withAuth(<AttendancePage />)} />
+          <Route path='/company/:tenantId/performance' element={withAuth(<PerformancePage />)} />
+          <Route path='/company/:tenantId/properties' element={withAuth(<ModulePage moduleId='properties' />)} />
+          <Route path='/company/:tenantId/quotations' element={withAuth(<ModulePage moduleId='quotations' />)} />
           <Route path='/company/:tenantId/reports' element={withAuth(<ModulePage moduleId='reports' />)} />
           <Route path='/company/:tenantId/settings' element={withAuth(<ModulePage moduleId='settings' />)} />
           <Route path='*' element={<Navigate to='/' replace />} />

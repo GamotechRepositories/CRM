@@ -1,6 +1,42 @@
 import { isLateCheckIn } from './attendanceLate.js';
 
-export const buildEmployeeProfile = async ({ employeeId, models }) => {
+const parseMonthRange = (monthParam) => {
+  const value = String(monthParam || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(value)) return null;
+  const [yStr, mStr] = value.split('-');
+  const year = Number(yStr);
+  const monthIndex = Number(mStr) - 1;
+  if (year < 2000 || year > 2100 || monthIndex < 0 || monthIndex > 11) return null;
+  const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+  const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+  return {
+    year,
+    monthIndex,
+    month: monthIndex + 1,
+    monthValue: `${year}-${String(monthIndex + 1).padStart(2, '0')}`,
+    monthLabel: rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+    rangeStart,
+    rangeEnd,
+  };
+};
+
+const inRange = (value, range) => {
+  if (!range || !value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  return d >= range.rangeStart && d <= range.rangeEnd;
+};
+
+const leaveOverlapsMonth = (leave, range) => {
+  if (!range) return true;
+  const start = leave?.startDate ? new Date(leave.startDate) : null;
+  const end = leave?.endDate ? new Date(leave.endDate) : start;
+  if (!start || Number.isNaN(start.getTime())) return false;
+  const safeEnd = end && !Number.isNaN(end.getTime()) ? end : start;
+  return start <= range.rangeEnd && safeEnd >= range.rangeStart;
+};
+
+export const buildEmployeeProfile = async ({ employeeId, models, month = null }) => {
   const { Employee, Project, Task, Attendance, Leave, Salary } = models;
 
   const employee = await Employee.findById(employeeId)
@@ -10,7 +46,35 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
 
   if (!employee) return null;
 
-  const [managedProjects, teamProjects, tasks, attendance, leaves, salaries] = await Promise.all([
+  const monthRange = parseMonthRange(month);
+
+  const attendanceFilter = { employee: employeeId };
+  const leaveFilter = { employee: employeeId };
+  const taskFilter = { assignedTo: employeeId, isRecurringTemplate: { $ne: true } };
+  const salaryFilter = { employee: employeeId };
+
+  if (monthRange) {
+    attendanceFilter.date = { $gte: monthRange.rangeStart, $lte: monthRange.rangeEnd };
+    leaveFilter.startDate = { $lte: monthRange.rangeEnd };
+    leaveFilter.$or = [
+      { endDate: { $gte: monthRange.rangeStart } },
+      { endDate: null },
+      { endDate: { $exists: false } },
+    ];
+    taskFilter.$or = [
+      { createdAt: { $gte: monthRange.rangeStart, $lte: monthRange.rangeEnd } },
+      { dueDate: { $gte: monthRange.rangeStart, $lte: monthRange.rangeEnd } },
+      { completedAt: { $gte: monthRange.rangeStart, $lte: monthRange.rangeEnd } },
+      { 'rating.ratedAt': { $gte: monthRange.rangeStart, $lte: monthRange.rangeEnd } },
+    ];
+    salaryFilter.year = monthRange.year;
+    salaryFilter.month = monthRange.month;
+  }
+
+  const attendanceQuery = Attendance.find(attendanceFilter).sort({ date: -1 });
+  if (!monthRange) attendanceQuery.limit(60);
+
+  const [managedProjects, teamProjects, tasks, attendance, leavesAll, leaves, salaries] = await Promise.all([
     Project.find({ projectManager: employeeId })
       .populate('client', 'clientName name companyName mailId clientNumber businessType city')
       .select('projectName status priority progress startDate endDate deadline client department')
@@ -19,25 +83,31 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       .populate('client', 'clientName name companyName mailId clientNumber businessType city')
       .select('projectName status priority progress startDate endDate deadline client department projectManager')
       .lean(),
-    Task.find({ assignedTo: employeeId, isRecurringTemplate: { $ne: true } })
+    Task.find(taskFilter)
       .populate('project', 'projectName')
       .populate('rating.ratedBy', 'name designation')
       .select('title status priority dueDate completedAt project estimatedDurationMinutes rating createdAt')
       .sort({ updatedAt: -1 })
       .lean(),
-    Attendance.find({ employee: employeeId }).sort({ date: -1 }).limit(60).lean(),
+    attendanceQuery.lean(),
+    // Full leave history for annual leave-balance calculation
     Leave.find({ employee: employeeId }).sort({ startDate: -1 }).lean(),
-    Salary.find({ employee: employeeId }).sort({ year: -1, month: -1 }).lean(),
+    Leave.find(leaveFilter).sort({ startDate: -1 }).lean(),
+    Salary.find(salaryFilter).sort({ year: -1, month: -1 }).lean(),
   ]);
+
+  const monthLeaves = monthRange
+    ? leaves.filter((leave) => leaveOverlapsMonth(leave, monthRange))
+    : leaves;
 
   const presentDays = attendance.filter((a) => ['Full Day', 'Half Day'].includes(a.status)).length;
   const absentDays = attendance.filter((a) => a.status === 'Absent').length;
   const lateMarks = attendance.filter((a) => isLateCheckIn(a.checkIn)).length;
 
   const leaveBalance = {
-    sick: 12 - leaves.filter((l) => l.leaveType === 'Sick' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
-    casual: 12 - leaves.filter((l) => l.leaveType === 'Casual' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
-    annual: 15 - leaves.filter((l) => l.leaveType === 'Annual' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
+    sick: 12 - leavesAll.filter((l) => l.leaveType === 'Sick' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
+    casual: 12 - leavesAll.filter((l) => l.leaveType === 'Casual' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
+    annual: 15 - leavesAll.filter((l) => l.leaveType === 'Annual' && l.status === 'Approved').reduce((s, l) => s + (l.numberOfDays || 1), 0),
   };
 
   const assignedProjects = [
@@ -89,6 +159,16 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       .sort((a, b) => new Date(b.ratedAt || 0) - new Date(a.ratedAt || 0)),
   };
 
+  const employeePerformance = employee.performance || {};
+  const filteredPerformance = monthRange
+    ? {
+        ...employeePerformance,
+        reviews: (employeePerformance.reviews || []).filter((r) => inRange(r.date, monthRange)),
+        appraisalHistory: (employeePerformance.appraisalHistory || []).filter((a) => inRange(a.date, monthRange)),
+        goals: (employeePerformance.goals || []).filter((g) => inRange(g.dueDate, monthRange) || inRange(g.createdAt, monthRange)),
+      }
+    : employeePerformance;
+
   return {
     employee,
     assignedProjects,
@@ -98,10 +178,10 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       summary: { presentDays, absentDays, lateMarks, totalRecords: attendance.length },
       records: attendance,
       leaveBalance,
-      leaveHistory: leaves,
+      leaveHistory: monthLeaves,
     },
     salaries,
-    performance: employee.performance || {},
+    performance: filteredPerformance,
     skills: employee.skills || {},
     assets: employee.assets || {},
     documents: employee.documents || {},
@@ -111,5 +191,7 @@ export const buildEmployeeProfile = async ({ employeeId, models }) => {
       accountStatus: employee.access?.accountStatus || employee.employmentStatus || employee.status || 'Active',
     },
     notes: employee.notes || {},
+    month: monthRange?.monthValue || null,
+    monthLabel: monthRange?.monthLabel || null,
   };
 };

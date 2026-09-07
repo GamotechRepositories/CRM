@@ -7,6 +7,18 @@ import CentralAdminUser, {
 } from '../models/centralAdmin/centralAdmin_user.js';
 import { signAuthToken } from '../utils/jwtAuth.js';
 import { authenticateCompanyEmployee } from '../utils/companyEmployeeLogin.js';
+import { normalizeEmployeePayload } from '../utils/normalizeEmployeePayload.js';
+import { getEmployeeApiError, validateEmployeePayload } from '../utils/employeeApiErrors.js';
+import { assignEmployeeCodeOnCreate, validateEmployeeCodeOnUpdate } from '../utils/employeeCode.js';
+import { isAdminEmployee } from '../utils/adminAccess.js';
+import {
+  createTenantClientRecord,
+  updateTenantClientRecord,
+  createTenantProjectRecord,
+  updateTenantProjectRecord,
+  createTenantLeadRecord,
+  updateTenantLeadRecord,
+} from '../utils/centralAdminTenantCrud.js';
 
 const COMPANIES = [
   {
@@ -72,7 +84,11 @@ export const login = async (req, res) => {
         message: 'Login successful',
         token,
         expiresIn: process.env.JWT_EXPIRES_IN || '30d',
-        user,
+        user: {
+          ...user,
+          canManageEmployees: true,
+          canManageAll: true,
+        },
       });
     }
 
@@ -98,7 +114,11 @@ export const login = async (req, res) => {
       message: 'Login successful',
       token,
       expiresIn: process.env.JWT_EXPIRES_IN || '30d',
-      user,
+      user: {
+        ...user,
+        canManageEmployees: canCentralAdminManageEmployees(user),
+        canManageAll: canCentralAdminManageEmployees(user),
+      },
     });
   } catch (error) {
     return res.status(500).json({ message: 'Login failed', error: error?.message || error });
@@ -421,6 +441,34 @@ export const getTenantDashboard = async (req, res) => {
 
     const company = await Company.findOne().sort({ createdAt: 1 }).lean();
 
+    // Month-scoped KPIs (tasks, leaves, revenue, expenses)
+    const nowForMonth = new Date();
+    const monthStart = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth(), 1, 0, 0, 0, 0);
+    const monthEnd = new Date(nowForMonth.getFullYear(), nowForMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+    const taskMonthFilter = {
+      isRecurringTemplate: { $ne: true },
+      createdAt: { $gte: monthStart, $lte: monthEnd },
+    };
+    const pendingLeaveMonthFilter = {
+      status: 'Pending',
+      $and: [
+        { startDate: { $lte: monthEnd } },
+        {
+          $or: [
+            { endDate: { $gte: monthStart } },
+            { endDate: null },
+            { endDate: { $exists: false } },
+          ],
+        },
+      ],
+    };
+    const isInCurrentMonth = (value) => {
+      if (!value) return false;
+      const d = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(d.getTime())) return false;
+      return d >= monthStart && d <= monthEnd;
+    };
+
     const [
       employees,
       clients,
@@ -443,41 +491,52 @@ export const getTenantDashboard = async (req, res) => {
       safeCount(Project),
       safeCount(Project, { status: { $in: ['In Progress', 'Not Started', 'Active'] } }),
       Lead ? safeCount(Lead) : 0,
-      Task ? safeCount(Task, { isRecurringTemplate: { $ne: true } }) : 0,
-      Task ? safeCount(Task, { status: 'Pending', isRecurringTemplate: { $ne: true } }) : 0,
-      Task ? safeCount(Task, { status: 'In Progress', isRecurringTemplate: { $ne: true } }) : 0,
-      Task ? safeCount(Task, { status: 'Completed', isRecurringTemplate: { $ne: true } }) : 0,
-      Leave ? safeCount(Leave, { status: 'Pending' }) : 0,
-      Billing ? safeFind(Billing, {}, { select: 'totalAmount amountPaid status createdAt paymentDate invoiceDate' }) : [],
-      Expense ? safeFind(Expense, {}, { select: 'amount totalAmount' }) : [],
+      Task ? safeCount(Task, taskMonthFilter) : 0,
+      Task ? safeCount(Task, { ...taskMonthFilter, status: 'Pending' }) : 0,
+      Task ? safeCount(Task, { ...taskMonthFilter, status: 'In Progress' }) : 0,
+      Task ? safeCount(Task, { ...taskMonthFilter, status: 'Completed' }) : 0,
+      Leave ? safeCount(Leave, pendingLeaveMonthFilter) : 0,
+      Billing
+        ? safeFind(Billing, {}, {
+            select: 'totalAmount amountPaid status createdAt paymentDate invoiceDate paymentDetails',
+          })
+        : [],
+      Expense
+        ? safeFind(Expense, {}, { select: 'amount totalAmount date createdAt' })
+        : [],
       safeFind(Employee, {}, { sort: { createdAt: -1 }, limit: 5, select: 'name email designation createdAt' }),
       safeFind(Project, {}, { sort: { createdAt: -1 }, limit: 5, select: 'projectName status startDate deadline createdAt' }),
       Lead ? safeFind(Lead, {}, { sort: { createdAt: -1 }, limit: 5, select: 'businessName name status createdAt' }) : [],
     ]);
 
-    const totalRevenue = billings.reduce((sum, b) => sum + (Number(b.amountPaid) || Number(b.totalAmount) || 0), 0);
-    const pendingInvoices = billings.filter((b) => {
+    const billingPaidAt = (b) =>
+      b?.paymentDetails?.paymentDate || b?.paymentDate || b?.invoiceDate || b?.createdAt;
+
+    const monthBillings = billings.filter((b) => isInCurrentMonth(billingPaidAt(b)));
+    const totalRevenue = monthBillings.reduce(
+      (sum, b) => sum + (Number(b.amountPaid) || Number(b.paymentDetails?.amount) || Number(b.totalAmount) || 0),
+      0
+    );
+    const pendingInvoices = monthBillings.filter((b) => {
       const status = String(b.status || '').toLowerCase();
       return status !== 'paid' && status !== 'completed';
     }).length;
-    const totalExpenses = expenses.reduce(
-      (sum, e) => sum + (Number(e.amount) || Number(e.totalAmount) || 0),
-      0
-    );
+    const totalExpenses = expenses.reduce((sum, e) => {
+      if (!isInCurrentMonth(e.date || e.createdAt)) return sum;
+      return sum + (Number(e.amount) || Number(e.totalAmount) || 0);
+    }, 0);
 
     const revenueByDay = [];
-    const now = new Date();
-    for (let i = 6; i >= 0; i -= 1) {
-      const day = new Date(now);
-      day.setHours(0, 0, 0, 0);
-      day.setDate(day.getDate() - i);
+    const daysInMonth = monthEnd.getDate();
+    for (let dayNum = 1; dayNum <= daysInMonth; dayNum += 1) {
+      const day = new Date(monthStart.getFullYear(), monthStart.getMonth(), dayNum, 0, 0, 0, 0);
       const next = new Date(day);
       next.setDate(next.getDate() + 1);
-      const dayRevenue = billings.reduce((sum, b) => {
-        const paidAt = new Date(b.paymentDate || b.invoiceDate || b.createdAt);
+      const dayRevenue = monthBillings.reduce((sum, b) => {
+        const paidAt = new Date(billingPaidAt(b));
         if (Number.isNaN(paidAt.getTime())) return sum;
         if (paidAt >= day && paidAt < next) {
-          return sum + (Number(b.amountPaid) || Number(b.totalAmount) || 0);
+          return sum + (Number(b.amountPaid) || Number(b.paymentDetails?.amount) || Number(b.totalAmount) || 0);
         }
         return sum;
       }, 0);
@@ -643,10 +702,12 @@ export const getTenantEmployeeProfile = async (req, res) => {
       return res.status(500).json({ message: 'Employee related models are unavailable for this company' });
     }
 
+    const monthParam = String(req.query.month || '').trim();
     const { buildEmployeeProfile } = await import('../utils/buildEmployeeProfile.js');
     const profile = await buildEmployeeProfile({
       employeeId,
       models: { Employee, Project, Task, Attendance, Leave, Salary },
+      month: monthParam || null,
     });
     if (!profile) return res.status(404).json({ message: 'Employee not found' });
 
@@ -699,6 +760,183 @@ export const getTenantEmployeeProfile = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to load employee profile', error: error?.message || error });
+  }
+};
+
+const resolveTenant = (tenantId) => COMPANIES.find((company) => company.id === tenantId) || null;
+
+const loadTenantEmployeeModel = async (tenantId) => {
+  await import(`../models/${tenantId}/${tenantId}_designation.js`).catch(() => null);
+  return importTenantModel(tenantId, 'employee');
+};
+
+/** Central admin + company Admin designation may create/update employees in any tenant. */
+export const canCentralAdminManageEmployees = (user) => {
+  if (!user) return false;
+  if (user.isCentralAdmin || user.isRoot) return true;
+  if (user.role === CENTRAL_ROOT_ROLE) return true;
+  if (user.isCompanyEmployee && isAdminEmployee(user)) return true;
+  return false;
+};
+
+export const getTenantDesignations = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const tenant = resolveTenant(tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company tenant not found' });
+
+    await import(`../models/${tenantId}/${tenantId}_designation.js`).catch(() => null);
+    const Designation = await importTenantModel(tenantId, 'designation');
+    if (!Designation) {
+      return res.status(500).json({ message: 'Designations are unavailable for this company' });
+    }
+
+    const designations = await Designation.find({ isActive: { $ne: false } })
+      .sort({ sortOrder: 1, title: 1 })
+      .select('title accessRole department level')
+      .lean();
+
+    return res.status(200).json({ tenantId: tenant.id, designations });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to load designations', error: error?.message || error });
+  }
+};
+
+export const createTenantEmployee = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const tenant = resolveTenant(tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company tenant not found' });
+
+    const Employee = await loadTenantEmployeeModel(tenantId);
+    if (!Employee) return res.status(500).json({ message: 'Employee model unavailable for this company' });
+
+    const { payload, password } = normalizeEmployeePayload(req.body);
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Password is required and must be at least 6 characters' });
+    }
+    const missing = validateEmployeePayload(payload);
+    if (missing.length) {
+      return res.status(400).json({ message: `Missing required fields: ${missing.join(', ')}` });
+    }
+
+    await assignEmployeeCodeOnCreate(Employee, tenantId, payload);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newEmployee = new Employee({ ...payload, password: hashedPassword });
+    await newEmployee.save();
+
+    const employee = await Employee.findById(newEmployee._id)
+      .populate('designation', 'title accessRole department')
+      .populate('reportingManager', 'name email')
+      .select('-password')
+      .lean();
+
+    return res.status(201).json({ message: 'Employee created successfully', employee });
+  } catch (error) {
+    const { status, message } = getEmployeeApiError(error, 'Error creating employee');
+    return res.status(error.status || status).json({ message: error.message || message });
+  }
+};
+
+export const updateTenantEmployee = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const employeeId = String(req.params.employeeId || '').trim();
+    const tenant = resolveTenant(tenantId);
+    if (!tenant) return res.status(404).json({ message: 'Company tenant not found' });
+    if (!employeeId) return res.status(400).json({ message: 'Employee id is required' });
+
+    const Employee = await loadTenantEmployeeModel(tenantId);
+    if (!Employee) return res.status(500).json({ message: 'Employee model unavailable for this company' });
+
+    const { payload, password } = normalizeEmployeePayload(req.body);
+    await validateEmployeeCodeOnUpdate(Employee, tenantId, employeeId, payload);
+    const updates = { ...payload };
+    if (password && password.length >= 6) {
+      updates.password = await bcrypt.hash(password, 10);
+    }
+
+    const updated = await Employee.findByIdAndUpdate(employeeId, updates, { new: true, runValidators: true })
+      .populate('designation', 'title accessRole department')
+      .populate('reportingManager', 'name email')
+      .select('-password')
+      .lean();
+
+    if (!updated) return res.status(404).json({ message: 'Employee not found' });
+
+    return res.status(200).json({ message: 'Employee updated successfully', employee: updated });
+  } catch (error) {
+    const { status, message } = getEmployeeApiError(error, 'Error updating employee');
+    return res.status(error.status || status).json({ message: error.message || message });
+  }
+};
+
+export const createTenantClient = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const client = await createTenantClientRecord(tenantId, req.body);
+    return res.status(201).json({ message: 'Client created successfully', client });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error creating client' });
+  }
+};
+
+export const updateTenantClient = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const clientId = String(req.params.clientId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const client = await updateTenantClientRecord(tenantId, clientId, req.body);
+    return res.status(200).json({ message: 'Client updated successfully', client });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error updating client' });
+  }
+};
+
+export const createTenantProject = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const project = await createTenantProjectRecord(tenantId, req.body);
+    return res.status(201).json({ message: 'Project created successfully', project });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error creating project' });
+  }
+};
+
+export const updateTenantProject = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const projectId = String(req.params.projectId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const project = await updateTenantProjectRecord(tenantId, projectId, req.body);
+    return res.status(200).json({ message: 'Project updated successfully', project });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error updating project' });
+  }
+};
+
+export const createTenantLead = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const lead = await createTenantLeadRecord(tenantId, req.body);
+    return res.status(201).json({ message: 'Lead created successfully', lead });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error creating lead' });
+  }
+};
+
+export const updateTenantLead = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const leadId = String(req.params.leadId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const lead = await updateTenantLeadRecord(tenantId, leadId, req.body);
+    return res.status(200).json({ message: 'Lead updated successfully', lead });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error updating lead' });
   }
 };
 
@@ -919,36 +1157,88 @@ export const getTenantModuleList = async (req, res) => {
       else if (statusFilter === 'in-progress') filter.status = 'In Progress';
       else if (statusFilter) filter.status = new RegExp(`^${statusFilter}$`, 'i');
 
-      const monthParam = String(req.query.month || '').trim(); // YYYY-MM
+      const now = new Date();
+      const monthParam = String(req.query.month || '').trim();
+      const dateParam = String(req.query.date || req.query.day || '').trim();
+      const rangeMode = String(req.query.range || '').trim().toLowerCase() === 'month' || (/^\d{4}-\d{2}$/.test(monthParam) && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam))
+        ? 'month'
+        : 'day';
+
+      let rangeStart;
+      let rangeEnd;
+      let dateValue = null;
+      let dateLabel = null;
+      let monthValue = null;
       let monthLabel = null;
-      if (/^\d{4}-\d{2}$/.test(monthParam)) {
-        const [yStr, mStr] = monthParam.split('-');
-        const year = Number(yStr);
-        const monthIndex = Number(mStr) - 1;
-        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
-          const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
-          const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
-          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-          filter.$or = [
-            { createdAt: { $gte: rangeStart, $lte: rangeEnd } },
-            { dueDate: { $gte: rangeStart, $lte: rangeEnd } },
-            { completedAt: { $gte: rangeStart, $lte: rangeEnd } },
-          ];
+
+      if (rangeMode === 'month') {
+        let year = now.getFullYear();
+        let monthIndex = now.getMonth();
+        if (/^\d{4}-\d{2}$/.test(monthParam)) {
+          const [yStr, mStr] = monthParam.split('-');
+          const parsedYear = Number(yStr);
+          const parsedMonth = Number(mStr) - 1;
+          if (parsedYear >= 2000 && parsedYear <= 2100 && parsedMonth >= 0 && parsedMonth <= 11) {
+            year = parsedYear;
+            monthIndex = parsedMonth;
+          }
         }
+        rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+        rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+        monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      } else {
+        let dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+          const [yStr, mStr, dStr] = dateParam.split('-');
+          const year = Number(yStr);
+          const monthIndex = Number(mStr) - 1;
+          const day = Number(dStr);
+          const candidate = new Date(year, monthIndex, day, 0, 0, 0, 0);
+          if (
+            year >= 2000 &&
+            year <= 2100 &&
+            monthIndex >= 0 &&
+            monthIndex <= 11 &&
+            day >= 1 &&
+            day <= 31 &&
+            !Number.isNaN(candidate.getTime()) &&
+            candidate.getFullYear() === year &&
+            candidate.getMonth() === monthIndex &&
+            candidate.getDate() === day
+          ) {
+            dayStart = candidate;
+          }
+        }
+        rangeStart = dayStart;
+        rangeEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+        dateValue = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
+        dateLabel = dayStart.toLocaleDateString('en-IN', {
+          weekday: 'short',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
       }
+
+      // Tasks created in the selected day or month
+      filter.createdAt = { $gte: rangeStart, $lte: rangeEnd };
 
       const items = await Task.find(filter)
         .populate('project', 'projectName')
         .populate('assignedTo', 'name email')
         .populate('assignedBy', 'name email')
         .populate('rating.ratedBy', 'name email')
-        .sort({ updatedAt: -1 })
+        .sort({ createdAt: -1 })
         .lean();
       return res.status(200).json({
         tenantId,
         tenantLabel: tenant.label,
         module,
-        month: monthParam || null,
+        range: rangeMode,
+        date: dateValue,
+        dateLabel,
+        month: monthValue,
         monthLabel,
         items,
       });
@@ -957,10 +1247,39 @@ export const getTenantModuleList = async (req, res) => {
     if (module === 'invoices') {
       const Billing = await importTenantModel(tenantId, 'billing');
       if (!Billing) return res.status(404).json({ message: 'Invoices not available' });
+
+      const monthParam = String(req.query.month || '').trim();
+      let monthLabel = null;
+      let monthValue = null;
+      let rangeStart = null;
+      let rangeEnd = null;
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const year = Number(yStr);
+        const monthIndex = Number(mStr) - 1;
+        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
+          rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+          rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        }
+      }
+
       let items = await Billing.find({})
         .populate('client', 'clientName mailId clientNumber')
         .sort({ createdAt: -1 })
         .lean();
+
+      if (rangeStart && rangeEnd) {
+        items = items.filter((b) => {
+          const raw = b.paymentDetails?.paymentDate || b.createdAt;
+          if (!raw) return false;
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime())) return false;
+          return d >= rangeStart && d <= rangeEnd;
+        });
+      }
+
       if (statusFilter === 'pending') {
         items = items.filter((b) => {
           const paid = Number(b.paymentDetails?.amount) || Number(b.amountPaid) || 0;
@@ -971,7 +1290,14 @@ export const getTenantModuleList = async (req, res) => {
           return true;
         });
       }
-      return res.status(200).json({ tenantId, tenantLabel: tenant.label, module, items });
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
+      });
     }
 
     if (module === 'leaves') {
@@ -980,12 +1306,47 @@ export const getTenantModuleList = async (req, res) => {
       const filter = {};
       if (statusFilter === 'pending') filter.status = 'Pending';
       else if (statusFilter) filter.status = new RegExp(`^${statusFilter}$`, 'i');
+
+      const monthParam = String(req.query.month || '').trim();
+      let monthLabel = null;
+      let monthValue = null;
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const year = Number(yStr);
+        const monthIndex = Number(mStr) - 1;
+        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
+          const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+          const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+          // Leaves that overlap the selected month
+          filter.$and = [
+            ...(filter.$and || []),
+            { startDate: { $lte: rangeEnd } },
+            {
+              $or: [
+                { endDate: { $gte: rangeStart } },
+                { endDate: null },
+                { endDate: { $exists: false } },
+              ],
+            },
+          ];
+        }
+      }
+
       const items = await Leave.find(filter)
-        .populate('employee', 'name email department')
+        .populate('employee', 'name email department profilePhoto')
         .populate('approvedBy', 'name email')
-        .sort({ createdAt: -1 })
+        .sort({ startDate: -1, createdAt: -1 })
         .lean();
-      return res.status(200).json({ tenantId, tenantLabel: tenant.label, module, items });
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
+      });
     }
 
     if (module === 'reports') {
@@ -1127,6 +1488,234 @@ export const getTenantModuleList = async (req, res) => {
         tenantLabel: tenant.label,
         module,
         company: company || null,
+      });
+    }
+
+    if (module === 'expenses') {
+      const Expense = await importTenantModel(tenantId, 'expense');
+      if (!Expense) return res.status(404).json({ message: 'Expenses not available' });
+
+      const monthParam = String(req.query.month || '').trim();
+      let monthLabel = null;
+      let monthValue = null;
+      const filter = {};
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const year = Number(yStr);
+        const monthIndex = Number(mStr) - 1;
+        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
+          const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+          const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+          filter.date = { $gte: rangeStart, $lte: rangeEnd };
+        }
+      }
+
+      const items = await Expense.find(filter).sort({ date: -1, createdAt: -1 }).lean();
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
+      });
+    }
+
+    if (module === 'salaries') {
+      const Salary = await importTenantModel(tenantId, 'salary');
+      if (!Salary) return res.status(404).json({ message: 'Payroll not available' });
+
+      const monthParam = String(req.query.month || '').trim();
+      let monthLabel = null;
+      let monthValue = null;
+      const filter = {};
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const year = Number(yStr);
+        const monthIndex = Number(mStr) - 1;
+        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
+          filter.year = year;
+          filter.month = monthIndex + 1;
+          const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        }
+      }
+
+      const items = await Salary.find(filter)
+        .populate('employee', 'name email department designation profilePhoto')
+        .sort({ year: -1, month: -1, amount: -1 })
+        .lean();
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
+      });
+    }
+
+    if (module === 'attendance') {
+      const Attendance = await importTenantModel(tenantId, 'attendance');
+      if (!Attendance) return res.status(404).json({ message: 'Attendance not available' });
+
+      const Employee = await importTenantModel(tenantId, 'employee');
+      const monthParam = String(req.query.month || '').trim();
+      const employeeId = String(req.query.employeeId || '').trim();
+      const employeeSearch = String(req.query.employee || req.query.search || '').trim();
+
+      const now = new Date();
+      let year = now.getFullYear();
+      let monthIndex = now.getMonth();
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const parsedYear = Number(yStr);
+        const parsedMonth = Number(mStr) - 1;
+        if (parsedYear >= 2000 && parsedYear <= 2100 && parsedMonth >= 0 && parsedMonth <= 11) {
+          year = parsedYear;
+          monthIndex = parsedMonth;
+        }
+      }
+
+      const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+      const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+      const monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+
+      const Leave = await importTenantModel(tenantId, 'leave');
+
+      const employees = Employee
+        ? await Employee.find({ status: { $ne: 'Inactive' } })
+            .select('name email department designation profilePhoto employeeCode')
+            .sort({ name: 1 })
+            .lean()
+        : [];
+
+      const filter = { date: { $gte: rangeStart, $lte: rangeEnd } };
+
+      if (employeeId && mongoose.isValidObjectId(employeeId)) {
+        filter.employee = employeeId;
+      } else if (employeeSearch && Employee) {
+        const escaped = employeeSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const matchingEmployees = await Employee.find({
+          name: new RegExp(escaped, 'i'),
+        })
+          .select('_id')
+          .lean();
+        const ids = matchingEmployees.map((row) => row._id);
+        filter.employee = ids.length ? { $in: ids } : null;
+        if (!ids.length) {
+          return res.status(200).json({
+            tenantId,
+            tenantLabel: tenant.label,
+            module,
+            month: monthValue,
+            monthLabel,
+            items: [],
+            leaves: [],
+            summary: {
+              totalRecords: 0,
+              fullDay: 0,
+              halfDay: 0,
+              absent: 0,
+              inProgress: 0,
+              uniqueEmployees: 0,
+            },
+            employees,
+          });
+        }
+      }
+
+      const leaveFilter = {
+        status: 'Approved',
+        startDate: { $lte: rangeEnd },
+        endDate: { $gte: rangeStart },
+      };
+      if (filter.employee) leaveFilter.employee = filter.employee;
+
+      const [items, leaves] = await Promise.all([
+        Attendance.find(filter)
+          .populate('employee', 'name email department designation profilePhoto employeeCode')
+          .sort({ date: -1 })
+          .lean(),
+        Leave
+          ? Leave.find(leaveFilter)
+              .select('employee leaveType startDate endDate numberOfDays reason')
+              .lean()
+          : Promise.resolve([]),
+      ]);
+
+      const uniqueEmployeeIds = new Set(
+        items.map((row) => String(row.employee?._id || row.employee || '')).filter(Boolean)
+      );
+
+      const summary = {
+        totalRecords: items.length,
+        fullDay: items.filter((row) => row.status === 'Full Day').length,
+        halfDay: items.filter((row) => row.status === 'Half Day').length,
+        absent: items.filter((row) => row.status === 'Absent').length,
+        inProgress: items.filter((row) => row.status === 'In Progress').length,
+        uniqueEmployees: uniqueEmployeeIds.size,
+      };
+
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
+        leaves,
+        summary,
+        employees,
+      });
+    }
+
+    if (module === 'properties') {
+      const Property = await importTenantModel(tenantId, 'property');
+      if (!Property) return res.status(404).json({ message: 'Properties not available' });
+      const items = await Property.find({})
+        .populate('assignedTo', 'name email')
+        .sort({ updatedAt: -1 })
+        .lean();
+      return res.status(200).json({ tenantId, tenantLabel: tenant.label, module, items });
+    }
+
+    if (module === 'quotations') {
+      const Quotation = await importTenantModel(tenantId, 'quotation');
+      if (!Quotation) return res.status(404).json({ message: 'Quotations not available' });
+
+      const monthParam = String(req.query.month || '').trim();
+      let monthLabel = null;
+      let monthValue = null;
+      const filter = {};
+      if (/^\d{4}-\d{2}$/.test(monthParam)) {
+        const [yStr, mStr] = monthParam.split('-');
+        const year = Number(yStr);
+        const monthIndex = Number(mStr) - 1;
+        if (year >= 2000 && year <= 2100 && monthIndex >= 0 && monthIndex <= 11) {
+          const rangeStart = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+          const rangeEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+          monthLabel = rangeStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          monthValue = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+          filter.createdAt = { $gte: rangeStart, $lte: rangeEnd };
+        }
+      }
+
+      const items = await Quotation.find(filter)
+        .populate('client', 'clientName mailId')
+        .sort({ createdAt: -1 })
+        .lean();
+      return res.status(200).json({
+        tenantId,
+        tenantLabel: tenant.label,
+        module,
+        month: monthValue,
+        monthLabel,
+        items,
       });
     }
 

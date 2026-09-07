@@ -2,13 +2,15 @@
  * Sidebar navigation structure.
  * Items support: requiresFullAccess, requiresProjectAccess, employeeOnly (hidden from full-access-only sections when false - N/A)
  */
-export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, dashboardPath = '/dashboard', isTeamLeader = false }) => {
+export const getSidebarNav = ({ fullAccess, canViewProjects, canManageClients, canManageEmployees, allowedSections, dashboardPath = '/dashboard', isTeamLeader = false }) => {
   const useSectionFilter = Array.isArray(allowedSections) && allowedSections.length > 0 && !fullAccess
   const isSectionAllowed = (section) => !useSectionFilter || allowedSections.includes(section.id)
 
   const filterItem = (item) => {
     if (item.requiresFullAccess && !fullAccess) return false
     if (item.requiresProjectAccess && !canViewProjects) return false
+    if (item.requiresClientAccess && !canManageClients) return false
+    if (item.requiresEmployeeAccess && !canManageEmployees) return false
     return true
   }
 
@@ -72,7 +74,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       icon: '👨',
       type: 'group',
       children: [
-        { id: 'directory', label: 'Directory', path: '/employees', requiresFullAccess: true },
+        { id: 'directory', label: 'Directory', path: '/employees', requiresEmployeeAccess: true },
         { id: 'attendance', label: 'Attendance', path: '/attendance' },
         { id: 'leave', label: 'Leave', path: '/leave' },
         { id: 'performance', label: 'Performance', path: '/module/performance', requiresFullAccess: true },
@@ -113,7 +115,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, allowedSections, da
       type: 'group',
       children: [
         { id: 'orders', label: 'Orders', path: '/module/orders', requiresFullAccess: true },
-        { id: 'customers', label: 'Customers', path: '/clients', requiresFullAccess: true },
+        { id: 'customers', label: 'Customers', path: '/clients', requiresClientAccess: true },
         { id: 'pipeline', label: 'Sales Pipeline', path: '/lead-management' },
       ],
     },

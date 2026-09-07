@@ -1,20 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
-import AdminCompanyShell from '../components/AdminCompanyShell'
+import AdminCompanyShell, { getInitials } from '../components/AdminCompanyShell'
+import ClientFormModal from '../components/ClientFormModal'
+import ProjectFormModal from '../components/ProjectFormModal'
+import LeadFormModal from '../components/LeadFormModal'
 import { TENANT_NAMES } from '../config/tenants'
+import { moduleSupportsCrud } from '../config/companyAdminFeatures'
 import { useAuth } from '../context/AuthContext'
-
-const TITLES = {
-  clients: 'Clients',
-  projects: 'Projects',
-  leads: 'Leads',
-  tasks: 'Tasks',
-  invoices: 'Invoices',
-  leaves: 'Leaves',
-  reports: 'Reports',
-  settings: 'Settings',
-}
+import { MODULE_TITLES, leadStatusesForTenant } from './ModulePage.shared'
 
 const formatDate = (value) => {
   if (!value) return '—'
@@ -31,6 +25,49 @@ const formatINR = (value) =>
   }).format(Number(value) || 0)
 
 const val = (v) => (v === null || v === undefined || v === '' ? '—' : v)
+
+const AVATAR_COLORS = [
+  'bg-violet-500',
+  'bg-blue-500',
+  'bg-emerald-500',
+  'bg-amber-500',
+  'bg-rose-500',
+  'bg-cyan-500',
+  'bg-indigo-500',
+  'bg-pink-500',
+]
+
+const EmployeeCell = ({ employee }) => {
+  const [imgError, setImgError] = useState(false)
+  const name = employee?.name || '—'
+  const email = employee?.email || ''
+  const photo = String(employee?.profilePhoto || '').trim()
+  const showPhoto = Boolean(photo) && !imgError
+  const colorIndex = String(employee?._id || name)
+    .split('')
+    .reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
+
+  return (
+    <div className='flex items-center gap-3 min-w-[180px]'>
+      {showPhoto ? (
+        <img
+          src={photo}
+          alt={name}
+          className='w-9 h-9 rounded-full object-cover shrink-0 border border-gray-200'
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0 ${AVATAR_COLORS[colorIndex % AVATAR_COLORS.length]}`}>
+          {getInitials(name)}
+        </div>
+      )}
+      <div className='min-w-0'>
+        <p className='font-medium text-gray-900 truncate'>{name}</p>
+        {email ? <p className='text-xs text-gray-400 truncate'>{email}</p> : null}
+      </div>
+    </div>
+  )
+}
 
 const statusClass = (status) => {
   const s = String(status || '').toLowerCase()
@@ -62,46 +99,6 @@ const statusClass = (status) => {
   return 'bg-slate-50 text-slate-600'
 }
 
-const PROPERTY_LEAD_STATUSES = [
-  'Call not Received',
-  'Call You After Sometime',
-  'Interested',
-  'Not Interested',
-  'Meeting Schedule',
-  'Site Visit',
-  'Meeting Revisit',
-  'Booking Token',
-  'Incentive Earned',
-  'Pending',
-]
-
-const STR_LEAD_STATUSES = [
-  'Call not Received',
-  'Call You After Sometime',
-  'Interested',
-  'Not Interested',
-  'Meeting Schedule',
-  'Site Visit',
-  'Zoom Meeting',
-  'Booking Done',
-  'Token Done',
-  'Pending',
-]
-
-const ADS_LEAD_STATUSES = [
-  'Call not Received',
-  'Call You After Sometime',
-  'Interested',
-  'Not Interested',
-  'Meeting Schedule',
-]
-
-const leadStatusesForTenant = (tenantId) => {
-  if (tenantId === 'adsResearchGlobal') return ADS_LEAD_STATUSES
-  if (tenantId === 'salesTechReality') return STR_LEAD_STATUSES
-  return PROPERTY_LEAD_STATUSES
-}
-
 const Badge = ({ children }) => (
   <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${statusClass(children)}`}>
     {val(children)}
@@ -112,6 +109,8 @@ const currentMonthValue = () => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
+
+const MONTHLY_MODULES = ['reports', 'leaves', 'invoices', 'expenses', 'salaries', 'quotations']
 
 const DataTable = ({ columns, rows, emptyText, onRowClick }) => (
   <div className='bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden'>
@@ -158,14 +157,14 @@ const ModulePage = ({ moduleId }) => {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const status = searchParams.get('status') || ''
-  const title = TITLES[moduleId] || 'Module'
+  const title = MODULE_TITLES[moduleId] || 'Module'
   const company = TENANT_NAMES[tenantId] || tenantId
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue)
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue())
   const [processingLeaveId, setProcessingLeaveId] = useState('')
   const [leadStatusFilter, setLeadStatusFilter] = useState('')
   const [leadSourceFilter, setLeadSourceFilter] = useState('')
@@ -173,6 +172,29 @@ const ModulePage = ({ moduleId }) => {
   const [leadSortDir, setLeadSortDir] = useState('desc')
   const [leadDateFrom, setLeadDateFrom] = useState('')
   const [leadDateTo, setLeadDateTo] = useState('')
+  const [formModal, setFormModal] = useState({ open: false, mode: 'create', record: null })
+  const [clientOptions, setClientOptions] = useState([])
+
+  const canCreate = moduleSupportsCrud(moduleId, 'create')
+  const canUpdate = moduleSupportsCrud(moduleId, 'update')
+
+  const reloadData = async () => {
+    const params = {}
+    if (status) params.status = status
+    if (MONTHLY_MODULES.includes(moduleId) && selectedMonth) params.month = selectedMonth
+    if (moduleId === 'leads') {
+      if (leadStatusFilter) params.status = leadStatusFilter
+      if (leadSourceFilter) params.leadSource = leadSourceFilter
+      if (leadSortBy) params.sortBy = leadSortBy
+      if (leadSortDir) params.sortDir = leadSortDir
+      if (leadDateFrom) params.dateFrom = leadDateFrom
+      if (leadDateTo) params.dateTo = leadDateTo
+    }
+    const res = await api.get(`/companies/${tenantId}/modules/${moduleId}`, {
+      params: Object.keys(params).length ? params : undefined,
+    })
+    setData(res.data)
+  }
 
   useEffect(() => {
     setLeadStatusFilter('')
@@ -197,7 +219,7 @@ const ModulePage = ({ moduleId }) => {
         setData(null)
         const params = {}
         if (status) params.status = status
-        if ((moduleId === 'reports' || moduleId === 'tasks') && selectedMonth) {
+        if (MONTHLY_MODULES.includes(moduleId) && selectedMonth) {
           params.month = selectedMonth
         }
         if (moduleId === 'leads') {
@@ -237,6 +259,21 @@ const ModulePage = ({ moduleId }) => {
     leadDateFrom,
     leadDateTo,
   ])
+
+  useEffect(() => {
+    if (!tenantId || moduleId !== 'projects') return
+    let cancelled = false
+    api.get(`/companies/${tenantId}/modules/clients`)
+      .then((res) => {
+        if (!cancelled) setClientOptions(res.data?.items || [])
+      })
+      .catch(() => {
+        if (!cancelled) setClientOptions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tenantId, moduleId, formModal.open])
 
   const items = data?.items || []
 
@@ -280,6 +317,21 @@ const ModulePage = ({ moduleId }) => {
   }
 
   const columns = useMemo(() => {
+    const editAction = (row) => (
+      canUpdate ? (
+        <button
+          type='button'
+          onClick={(e) => {
+            e.stopPropagation()
+            setFormModal({ open: true, mode: 'edit', record: row })
+          }}
+          className='rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50'
+        >
+          Edit
+        </button>
+      ) : null
+    )
+
     if (moduleId === 'clients') {
       return [
         { key: 'clientName', label: 'Client', render: (r) => <span className='font-medium text-blue-600'>{val(r.clientName)}</span> },
@@ -288,6 +340,7 @@ const ModulePage = ({ moduleId }) => {
         { key: 'businessType', label: 'Business', render: (r) => val(r.businessType) },
         { key: 'clientType', label: 'Type', render: (r) => <Badge>{r.clientType}</Badge> },
         { key: 'date', label: 'Date', render: (r) => formatDate(r.date || r.createdAt) },
+        { key: 'actions', label: '', render: editAction },
       ]
     }
     if (moduleId === 'projects') {
@@ -298,6 +351,7 @@ const ModulePage = ({ moduleId }) => {
         { key: 'priority', label: 'Priority', render: (r) => val(r.priority) },
         { key: 'progress', label: 'Progress', render: (r) => `${r.progress || 0}%` },
         { key: 'deadline', label: 'Deadline', render: (r) => formatDate(r.deadline || r.endDate) },
+        { key: 'actions', label: '', render: editAction },
       ]
     }
     if (moduleId === 'leads') {
@@ -315,27 +369,8 @@ const ModulePage = ({ moduleId }) => {
         )
       }
       cols.push({ key: 'createdAt', label: 'Created', render: (r) => formatDate(r.createdAt) })
+      cols.push({ key: 'actions', label: '', render: editAction })
       return cols
-    }
-    if (moduleId === 'tasks') {
-      return [
-        { key: 'title', label: 'Task', render: (r) => <span className='font-medium text-gray-900'>{val(r.title)}</span> },
-        { key: 'project', label: 'Project', render: (r) => val(r.project?.projectName) },
-        { key: 'assignedTo', label: 'Assigned to', render: (r) => val(r.assignedTo?.name) },
-        { key: 'assignedBy', label: 'Assigned by', render: (r) => val(r.assignedBy?.name) },
-        { key: 'priority', label: 'Priority', render: (r) => val(r.priority) },
-        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
-        {
-          key: 'rating',
-          label: 'Rating',
-          render: (r) => {
-            const score = r.rating?.score
-            if (score == null || score === '') return '—'
-            return <span className='font-semibold text-amber-700'>{score}/5</span>
-          },
-        },
-        { key: 'dueDate', label: 'Due', render: (r) => formatDate(r.dueDate) },
-      ]
     }
     if (moduleId === 'invoices') {
       return [
@@ -361,7 +396,7 @@ const ModulePage = ({ moduleId }) => {
     }
     if (moduleId === 'leaves') {
       return [
-        { key: 'employee', label: 'Employee', render: (r) => <span className='font-medium text-gray-900'>{val(r.employee?.name)}</span> },
+        { key: 'employee', label: 'Employee', render: (r) => <EmployeeCell employee={r.employee} /> },
         { key: 'leaveType', label: 'Type', render: (r) => val(r.leaveType) },
         { key: 'startDate', label: 'From', render: (r) => formatDate(r.startDate) },
         { key: 'endDate', label: 'To', render: (r) => formatDate(r.endDate) },
@@ -404,10 +439,54 @@ const ModulePage = ({ moduleId }) => {
         },
       ]
     }
+    if (moduleId === 'expenses') {
+      return [
+        { key: 'title', label: 'Expense', render: (r) => val(r.title || r.description) },
+        { key: 'category', label: 'Category', render: (r) => val(r.category) },
+        { key: 'amount', label: 'Amount', render: (r) => formatINR(r.amount || r.totalAmount) },
+        { key: 'date', label: 'Date', render: (r) => formatDate(r.date || r.createdAt) },
+        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status || r.paymentStatus}</Badge> },
+      ]
+    }
+    if (moduleId === 'salaries') {
+      return [
+        { key: 'employee', label: 'Employee', render: (r) => val(r.employee?.name) },
+        { key: 'period', label: 'Period', render: (r) => `${r.month || '—'}/${r.year || '—'}` },
+        { key: 'amount', label: 'Net pay', render: (r) => formatINR(r.netSalary ?? r.amount) },
+        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status || r.paymentStatus || 'Recorded'}</Badge> },
+      ]
+    }
+    if (moduleId === 'attendance') {
+      return [
+        { key: 'employee', label: 'Employee', render: (r) => val(r.employee?.name) },
+        { key: 'date', label: 'Date', render: (r) => formatDate(r.date) },
+        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
+        { key: 'checkIn', label: 'Check in', render: (r) => val(r.checkIn) },
+        { key: 'checkOut', label: 'Check out', render: (r) => val(r.checkOut) },
+      ]
+    }
+    if (moduleId === 'properties') {
+      return [
+        { key: 'title', label: 'Property', render: (r) => val(r.title || r.propertyName) },
+        { key: 'locality', label: 'Locality', render: (r) => val(r.locality) },
+        { key: 'city', label: 'City', render: (r) => val(r.city) },
+        { key: 'price', label: 'Price', render: (r) => formatINR(r.price || r.expectedPrice) },
+        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status || r.verificationStatus}</Badge> },
+      ]
+    }
+    if (moduleId === 'quotations') {
+      return [
+        { key: 'quotationNumber', label: 'Quotation', render: (r) => val(r.quotationNumber || r._id?.slice?.(-6)) },
+        { key: 'client', label: 'Client', render: (r) => val(r.client?.clientName) },
+        { key: 'amount', label: 'Amount', render: (r) => formatINR(r.totalAmount || r.amount) },
+        { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
+        { key: 'createdAt', label: 'Created', render: (r) => formatDate(r.createdAt) },
+      ]
+    }
     return []
-  }, [moduleId, processingLeaveId, tenantId, user?._id])
+  }, [moduleId, processingLeaveId, tenantId, user?._id, canUpdate])
 
-  const subtitle = moduleId === 'reports' || moduleId === 'tasks'
+  const subtitle = MONTHLY_MODULES.includes(moduleId)
     ? (data?.monthLabel || selectedMonth || 'Selected month')
     : moduleId === 'leads'
       ? `${filteredItems.length} shown${leadStatusFilter ? ` · status: ${leadStatusFilter}` : ''}${leadSourceFilter ? ` · source: ${leadSourceFilter}` : ''}${leadDateFrom || leadDateTo ? ` · created: ${leadDateFrom || '…'} → ${leadDateTo || '…'}` : ''}`
@@ -415,7 +494,7 @@ const ModulePage = ({ moduleId }) => {
         ? `${filteredItems.length} shown · filter: ${status}`
         : `${filteredItems.length} record${filteredItems.length === 1 ? '' : 's'}`
 
-  const showMonthPicker = moduleId === 'reports' || moduleId === 'tasks'
+  const showMonthPicker = MONTHLY_MODULES.includes(moduleId)
   const leadStatusOptions = useMemo(() => {
     const fromApi = data?.filters?.statuses || []
     const defaults = leadStatusesForTenant(tenantId)
@@ -430,7 +509,7 @@ const ModulePage = ({ moduleId }) => {
           <h1 className='text-2xl font-bold text-gray-900'>{title}</h1>
           <p className='text-sm text-gray-500 mt-1'>
             {company} · {subtitle}
-            {moduleId === 'tasks' ? ` · ${filteredItems.length} task${filteredItems.length === 1 ? '' : 's'}` : ''}
+            {moduleId === 'leaves' ? ` · ${filteredItems.length} leave${filteredItems.length === 1 ? '' : 's'}` : ''}
           </p>
         </div>
         <div className='flex flex-wrap items-center gap-3'>
@@ -534,6 +613,16 @@ const ModulePage = ({ moduleId }) => {
               placeholder={`Search ${title.toLowerCase()}…`}
               className='w-64 max-w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
             />
+          )}
+          {canCreate && (
+            <button
+              type='button'
+              onClick={() => setFormModal({ open: true, mode: 'create', record: null })}
+              className='inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700'
+            >
+              <span className='text-lg leading-none'>+</span>
+              Add {title.slice(0, -1).toLowerCase() || title.toLowerCase()}
+            </button>
           )}
         </div>
       </div>
@@ -678,25 +767,53 @@ const ModulePage = ({ moduleId }) => {
         <DataTable
           columns={columns}
           rows={filteredItems}
-          emptyText={`No ${title.toLowerCase()} found`}
+          emptyText={
+            moduleId === 'leaves'
+              ? `No leaves found for ${data?.monthLabel || selectedMonth || 'this month'}`
+              : ['invoices', 'expenses', 'salaries', 'quotations'].includes(moduleId)
+                ? `No ${title.toLowerCase()} found for ${data?.monthLabel || selectedMonth || 'this month'}`
+                : `No ${title.toLowerCase()} found`
+          }
           onRowClick={
             moduleId === 'clients'
               ? (row) => navigate(`/company/${tenantId}/clients/${row._id}`)
               : moduleId === 'projects'
                 ? (row) => navigate(`/company/${tenantId}/projects/${row._id}`)
-                : moduleId === 'tasks'
-                  ? (row) => {
-                      if (String(row._id || '').startsWith('social-media-')) return
-                      navigate(`/company/${tenantId}/tasks/${row._id}`)
-                    }
-                  : moduleId === 'invoices'
-                    ? (row) => navigate(`/company/${tenantId}/invoices/${row._id}`)
-                    : undefined
+                : moduleId === 'invoices'
+                  ? (row) => navigate(`/company/${tenantId}/invoices/${row._id}`)
+                  : undefined
           }
         />
       )}
+
+      <ClientFormModal
+        open={moduleId === 'clients' && formModal.open}
+        mode={formModal.mode}
+        tenantId={tenantId}
+        client={formModal.mode === 'edit' ? formModal.record : null}
+        onClose={() => setFormModal({ open: false, mode: 'create', record: null })}
+        onSaved={async () => { await reloadData() }}
+      />
+      <ProjectFormModal
+        open={moduleId === 'projects' && formModal.open}
+        mode={formModal.mode}
+        tenantId={tenantId}
+        project={formModal.mode === 'edit' ? formModal.record : null}
+        clients={clientOptions}
+        onClose={() => setFormModal({ open: false, mode: 'create', record: null })}
+        onSaved={async () => { await reloadData() }}
+      />
+      <LeadFormModal
+        open={moduleId === 'leads' && formModal.open}
+        mode={formModal.mode}
+        tenantId={tenantId}
+        lead={formModal.mode === 'edit' ? formModal.record : null}
+        onClose={() => setFormModal({ open: false, mode: 'create', record: null })}
+        onSaved={async () => { await reloadData() }}
+      />
     </AdminCompanyShell>
   )
 }
 
 export default ModulePage
+export { leadStatusesForTenant }
