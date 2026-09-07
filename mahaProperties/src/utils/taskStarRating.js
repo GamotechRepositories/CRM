@@ -1,12 +1,12 @@
 /**
  * Auto star rating bands (same % rules for any estimate; 60‑min example in comments).
- *   ≤90% (≥10% left) → 5 | ≤100% → 4 | ≤125% → 3 | ≤150% → 2 | >150% → 1
+ *   ≤75% (≥25% left) → 5 | ≤100% → 4 | ≤125% → 3 | ≤150% → 2 | >150% → 1
  *   Not completed → null (UI: ❌)
  */
 
 export const TASK_STAR_BANDS = [
-  { maxRatio: 0.9, score: 5, label: 'Finished with ≥10% time left' },
-  { maxRatio: 1.0, score: 4, label: 'Finished with <10% time left' },
+  { maxRatio: 0.75, score: 5, label: 'Finished with ≥25% time left' },
+  { maxRatio: 1.0, score: 4, label: 'Finished with <25% time left' },
   { maxRatio: 1.25, score: 3, label: 'Late by up to 25%' },
   { maxRatio: 1.5, score: 2, label: 'Late by up to 50%' },
   { maxRatio: Infinity, score: 1, label: 'More than 50% late' },

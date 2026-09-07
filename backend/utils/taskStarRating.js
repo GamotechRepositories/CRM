@@ -2,8 +2,8 @@
  * Auto star rating from completion speed vs estimated duration.
  *
  * For a 60‑minute estimate (same % bands for any estimate):
- *   ≤ 90% of estimate (≥10% time left)     → 5
- *   > 90% and ≤ 100% (<10% time left)      → 4
+ *   ≤ 75% of estimate (≥25% time left)     → 5
+ *   > 75% and ≤ 100% (<25% time left)      → 4
  *   > 100% and ≤ 125% (late up to 25%)     → 3
  *   > 125% and ≤ 150% (late up to 50%)     → 2
  *   > 150% (more than 50% late)            → 1
@@ -11,8 +11,8 @@
  */
 
 export const TASK_STAR_BANDS = [
-  { maxRatio: 0.9, score: 5, label: 'Finished with ≥10% time left' },
-  { maxRatio: 1.0, score: 4, label: 'Finished with <10% time left' },
+  { maxRatio: 0.75, score: 5, label: 'Finished with ≥25% time left' },
+  { maxRatio: 1.0, score: 4, label: 'Finished with <25% time left' },
   { maxRatio: 1.25, score: 3, label: 'Late by up to 25%' },
   { maxRatio: 1.5, score: 2, label: 'Late by up to 50%' },
   { maxRatio: Infinity, score: 1, label: 'More than 50% late' },
