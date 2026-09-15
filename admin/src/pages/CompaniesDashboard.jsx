@@ -27,7 +27,7 @@ const CompanyLogo = ({ logo, name }) => {
 }
 
 const CompaniesDashboard = () => {
-  const { user, logout } = useAuth()
+  const { user, logout, allowedTenants } = useAuth()
   const navigate = useNavigate()
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -72,7 +72,9 @@ const CompaniesDashboard = () => {
       }
     }
 
-    return TENANT_IDS.map((tenantId) => {
+    const tenantScope = allowedTenants?.length ? allowedTenants : TENANT_IDS
+
+    return tenantScope.map((tenantId) => {
       const row = byTenant.get(tenantId)
       return {
         tenantId,
@@ -87,12 +89,18 @@ const CompaniesDashboard = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q))
     })
-  }, [filtered, search])
+  }, [filtered, search, allowedTenants])
 
   const handleLogout = () => {
+    const viaOperation = Boolean(user?.isOperationLogin || user?.loginVia === 'operation')
     logout()
-    navigate('/login')
+    navigate(viaOperation ? '/login/operation' : '/login')
   }
+
+  const roleLabel =
+    user?.isOperationLogin || String(user?.role || '').toUpperCase() === 'COO'
+      ? 'Chief Operating Officer'
+      : user?.role || 'Admin'
 
   return (
     <div className='min-h-screen bg-[#f8f9fa]'>
@@ -101,7 +109,8 @@ const CompaniesDashboard = () => {
           <div>
             <h1 className='text-xl font-bold text-gray-900'>Central Admin</h1>
             <p className='text-sm text-gray-500 mt-0.5'>
-              All companies · Signed in as {user?.email || 'root'}
+              {roleLabel} · Signed in as {user?.email || 'root'}
+              {allowedTenants?.length ? ` · ${allowedTenants.length} companies` : ''}
             </p>
           </div>
           <div className='flex items-center gap-2'>

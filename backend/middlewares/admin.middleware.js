@@ -9,10 +9,12 @@ export const requireAdmin = (req, res, next) => {
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
+  const role = String(req.auth.role || '').trim();
   const isAdmin =
     Boolean(req.auth.isRoot) ||
-    String(req.auth.role || '').toUpperCase() === CENTRAL_ROOT_ROLE.toUpperCase() ||
-    String(req.auth.role || '').trim() === 'Meeting Coordinator';
+    role.toUpperCase() === CENTRAL_ROOT_ROLE.toUpperCase() ||
+    role.toUpperCase() === 'COO' ||
+    role === 'Meeting Coordinator';
 
   if (!isAdmin) {
     return res.status(403).json({ success: false, message: 'Admin access required' });

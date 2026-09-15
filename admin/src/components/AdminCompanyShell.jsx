@@ -21,7 +21,7 @@ const getInitials = (name = '') =>
 const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   const { tenantId: paramTenantId } = useParams()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, logout, allowedTenants } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showHeaderCompanyMenu, setShowHeaderCompanyMenu] = useState(false)
   const [showSidebarCompanyMenu, setShowSidebarCompanyMenu] = useState(false)
@@ -29,7 +29,8 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   const sidebarMenuRef = useRef(null)
 
   const hasCompanyContext = Boolean(paramTenantId)
-  const navItems = getCompanyAdminNav(paramTenantId || TENANT_IDS[0])
+  const switchableTenants = allowedTenants?.length ? allowedTenants : TENANT_IDS
+  const navItems = getCompanyAdminNav(paramTenantId || switchableTenants[0] || TENANT_IDS[0])
   const activeGroupId = getNavGroupForActiveId(navItems, activeNav)
 
   const [expandedGroups, setExpandedGroups] = useState(() =>
@@ -49,6 +50,11 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
 
   const switchCompany = (nextTenantId) => {
     if (!nextTenantId) {
+      setShowHeaderCompanyMenu(false)
+      setShowSidebarCompanyMenu(false)
+      return
+    }
+    if (switchableTenants.length && !switchableTenants.includes(nextTenantId)) {
       setShowHeaderCompanyMenu(false)
       setShowSidebarCompanyMenu(false)
       return
@@ -83,7 +89,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
       return
     }
     if (item.path === null || item.path === undefined) return
-    const targetTenant = paramTenantId || TENANT_IDS[0]
+    const targetTenant = paramTenantId || switchableTenants[0] || TENANT_IDS[0]
     navigate(item.path ? `/company/${targetTenant}/${item.path}` : `/company/${targetTenant}`)
   }
 
@@ -96,7 +102,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
       <div className='px-3 py-2 border-b border-gray-100'>
         <p className='text-xs font-semibold uppercase tracking-wide text-gray-400'>Switch company</p>
       </div>
-      {TENANT_IDS.map((id) => {
+      {switchableTenants.map((id) => {
         const selected = hasCompanyContext && id === paramTenantId
         return (
           <button
@@ -278,7 +284,11 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
               </div>
               <button
                 type='button'
-                onClick={() => { logout(); navigate('/login') }}
+                onClick={() => {
+                  const viaOperation = Boolean(user?.isOperationLogin || user?.loginVia === 'operation')
+                  logout()
+                  navigate(viaOperation ? '/login/operation' : '/login')
+                }}
                 className='ml-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
               >
                 Logout

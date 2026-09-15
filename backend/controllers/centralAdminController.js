@@ -6,7 +6,10 @@ import CentralAdminUser, {
   CENTRAL_ROOT_ROLE,
 } from '../models/centralAdmin/centralAdmin_user.js';
 import { signAuthToken } from '../utils/jwtAuth.js';
-import { authenticateCompanyEmployee } from '../utils/companyEmployeeLogin.js';
+import {
+  authenticateCompanyEmployee,
+  authenticateOperationCoo,
+} from '../utils/companyEmployeeLogin.js';
 import { normalizeEmployeePayload } from '../utils/normalizeEmployeePayload.js';
 import { getEmployeeApiError, validateEmployeePayload } from '../utils/employeeApiErrors.js';
 import { assignEmployeeCodeOnCreate, validateEmployeeCodeOnUpdate } from '../utils/employeeCode.js';
@@ -123,6 +126,52 @@ export const login = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: 'Login failed', error: error?.message || error });
+  }
+};
+
+/**
+ * Operations COO login — authenticates against every company CRM where this
+ * Chief Operating Officer exists, then opens a CEO-equivalent admin session
+ * scoped to those companies.
+ */
+export const loginOperation = async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
+    const result = await authenticateOperationCoo(email, password);
+    if (result?.error) {
+      return res.status(result.status || 401).json({ message: result.error });
+    }
+
+    const user = result.user;
+    const token = signAuthToken({
+      sub: String(user._id),
+      email: user.email,
+      role: 'COO',
+      isRoot: false,
+      company: 'admin',
+      tenants: user.tenants,
+    });
+
+    return res.status(200).json({
+      message: 'Operations login successful',
+      token,
+      expiresIn: process.env.JWT_EXPIRES_IN || '30d',
+      tenants: user.tenants,
+      companySessions: user.companySessions,
+      user: {
+        ...user,
+        canManageEmployees: true,
+        canManageAll: true,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Operations login failed', error: error?.message || error });
   }
 };
 
@@ -785,6 +834,9 @@ export const canCentralAdminManageEmployees = (user) => {
   if (!user) return false;
   if (user.isCentralAdmin || user.isRoot) return true;
   if (user.role === CENTRAL_ROOT_ROLE) return true;
+  if (String(user.role || '').toUpperCase() === 'COO' || user.accessEquivalentToCeo || user.isOperationLogin) {
+    return true;
+  }
   if (user.isCompanyEmployee && isAdminEmployee(user)) return true;
   return false;
 };

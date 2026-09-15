@@ -1,8 +1,35 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
 import api from '../api/axios'
+import { TENANT_IDS } from '../config/tenants'
 
 const AUTH_KEY = 'central_admin_user'
+const TOKEN_KEY = 'central_admin_token'
+const COMPANY_SESSIONS_KEY = 'central_operation_company_sessions'
 const AuthContext = createContext(null)
+
+const getApiRoot = () => {
+  const adminBase = import.meta.env.VITE_API_URL || '/api/v1/admin'
+  return String(adminBase).replace(/\/admin\/?$/, '')
+}
+
+const normalizeAdminUser = (parsed) => {
+  if (!parsed) return null
+  const role = String(parsed.role || '').toUpperCase()
+  const canManage =
+    parsed.canManageEmployees ??
+    parsed.canManageAll ??
+    parsed.accessEquivalentToCeo ??
+    parsed.isOperationLogin ??
+    parsed.isCentralAdmin ??
+    parsed.isRoot ??
+    (role === 'COO' || role === 'CEO')
+  return {
+    ...parsed,
+    canManageEmployees: Boolean(canManage),
+    canManageAll: Boolean(canManage),
+  }
+}
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext)
@@ -18,18 +45,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const raw = localStorage.getItem(AUTH_KEY)
       if (raw) {
-        const parsed = JSON.parse(raw)
-        const canManage =
-          parsed.canManageEmployees ??
-          parsed.canManageAll ??
-          parsed.isCentralAdmin ??
-          parsed.isRoot ??
-          false
-        setUser({
-          ...parsed,
-          canManageEmployees: canManage,
-          canManageAll: canManage,
-        })
+        setUser(normalizeAdminUser(JSON.parse(raw)))
       }
     } catch {
       localStorage.removeItem(AUTH_KEY)
@@ -38,31 +54,124 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const persistSession = (nextUser, token = null, companySessions = null) => {
+    const normalized = normalizeAdminUser(nextUser)
+    setUser(normalized)
+    localStorage.setItem(AUTH_KEY, JSON.stringify(normalized))
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    if (companySessions && typeof companySessions === 'object') {
+      localStorage.setItem(COMPANY_SESSIONS_KEY, JSON.stringify(companySessions))
+    }
+    return normalized
+  }
+
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
     const nextUser = res.data?.user
     if (!nextUser) throw new Error(res.data?.message || 'Login failed')
-    setUser(nextUser)
-    localStorage.setItem(AUTH_KEY, JSON.stringify(nextUser))
-    return nextUser
+    return persistSession(nextUser, res.data?.token || null)
+  }
+
+  /**
+   * COO operations login:
+   * 1) Call each company CRM login API with the same payload
+   * 2) Finalize via admin /auth/login/operation (CEO-equivalent session)
+   */
+  const loginOperation = async (email, password) => {
+    const payload = { email, password }
+    const apiRoot = getApiRoot()
+
+    const companyResults = await Promise.all(
+      TENANT_IDS.map(async (tenantId) => {
+        try {
+          const res = await axios.post(`${apiRoot}/${tenantId}/auth/login`, payload)
+          return { tenantId, ok: true, user: res.data?.user || null }
+        } catch {
+          return { tenantId, ok: false, user: null }
+        }
+      })
+    )
+
+    const clientSessions = {}
+    for (const row of companyResults) {
+      if (row.ok && row.user) clientSessions[row.tenantId] = row.user
+    }
+
+    const res = await api.post('/auth/login/operation', payload)
+    const nextUser = res.data?.user
+    if (!nextUser) throw new Error(res.data?.message || 'Operations login failed')
+
+    const companySessions = {
+      ...clientSessions,
+      ...(res.data?.companySessions || nextUser.companySessions || {}),
+    }
+
+    return persistSession(
+      {
+        ...nextUser,
+        tenants: res.data?.tenants || nextUser.tenants || Object.keys(companySessions),
+        companySessions,
+        isOperationLogin: true,
+        loginVia: 'operation',
+        canManageEmployees: true,
+        canManageAll: true,
+        accessEquivalentToCeo: true,
+      },
+      res.data?.token || null,
+      companySessions
+    )
   }
 
   const logout = () => {
     setUser(null)
     localStorage.removeItem(AUTH_KEY)
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(COMPANY_SESSIONS_KEY)
   }
+
+  const allowedTenants = useMemo(() => {
+    if (!user) return []
+    if (user.isRoot || user.accessEquivalentToCeo || user.isOperationLogin || String(user.role || '').toUpperCase() === 'COO') {
+      if (Array.isArray(user.tenants) && user.tenants.length) {
+        return TENANT_IDS.filter((id) => user.tenants.includes(id))
+      }
+      return [...TENANT_IDS]
+    }
+    if (Array.isArray(user.tenants) && user.tenants.length) {
+      return TENANT_IDS.filter((id) => user.tenants.includes(id))
+    }
+    return [...TENANT_IDS]
+  }, [user])
 
   const value = useMemo(
     () => ({
       user,
       loading,
       login,
+      loginOperation,
       logout,
+      allowedTenants,
       isAuthenticated: Boolean(user),
-      canManageEmployees: () => Boolean(user?.canManageEmployees ?? user?.canManageAll ?? user?.isCentralAdmin ?? user?.isRoot),
-      canManageAll: () => Boolean(user?.canManageAll ?? user?.canManageEmployees ?? user?.isCentralAdmin ?? user?.isRoot),
+      canManageEmployees: () =>
+        Boolean(
+          user?.canManageEmployees ??
+            user?.canManageAll ??
+            user?.accessEquivalentToCeo ??
+            user?.isOperationLogin ??
+            user?.isCentralAdmin ??
+            user?.isRoot
+        ),
+      canManageAll: () =>
+        Boolean(
+          user?.canManageAll ??
+            user?.canManageEmployees ??
+            user?.accessEquivalentToCeo ??
+            user?.isOperationLogin ??
+            user?.isCentralAdmin ??
+            user?.isRoot
+        ),
     }),
-    [user, loading]
+    [user, loading, allowedTenants]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

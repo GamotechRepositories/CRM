@@ -25,10 +25,10 @@ const EyeIcon = ({ open }) => (
   </svg>
 )
 
-const REMEMBER_KEY = 'central_admin_remember_email'
+const REMEMBER_KEY = 'central_operation_remember_email'
 
-const Login = () => {
-  const { user, login } = useAuth()
+const OperationLogin = () => {
+  const { user, loginOperation } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,64 +57,69 @@ const Login = () => {
     setInfo('')
     setLoading(true)
     try {
-      await login(email, password)
+      const nextUser = await loginOperation(email, password)
       if (remember) localStorage.setItem(REMEMBER_KEY, email)
       else localStorage.removeItem(REMEMBER_KEY)
+      const count = Array.isArray(nextUser?.tenants) ? nextUser.tenants.length : 0
+      setInfo(count ? `Signed in across ${count} compan${count === 1 ? 'y' : 'ies'}.` : '')
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Login failed')
+      setError(err.response?.data?.message || err.message || 'Operations login failed')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className='min-h-screen flex flex-col bg-gradient-to-br from-indigo-50 via-white to-violet-50'>
+    <div className='min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-emerald-50'>
       <div className='flex-1 flex items-center justify-center p-6 sm:p-10'>
         <div className='w-full max-w-md'>
           <div className='bg-white rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50 p-8 sm:p-10'>
             <div className='flex justify-center mb-6'>
               <img
                 src={Logo}
-                alt='Central Admin logo'
+                alt='Operations login'
                 className='max-w-[280px] w-full h-auto object-contain'
               />
             </div>
             <div className='text-center mb-8'>
-              <h1 className='text-xl font-bold text-slate-900'>Central Admin</h1>
-              <p className='text-sm text-gray-500 mt-1'>Sign in to manage all company CRMs</p>
+              <p className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>Operations</p>
+              <h1 className='text-xl font-bold text-slate-900 mt-1'>Chief Operating Officer</h1>
+              <p className='text-sm text-gray-500 mt-1'>
+                Sign in once to access every company CRM where you are present
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className='space-y-5'>
               <div>
-                <label htmlFor='email' className='block text-sm font-semibold text-slate-800 mb-1.5'>Email Address</label>
+                <label htmlFor='operation-email' className='block text-sm font-semibold text-slate-800 mb-1.5'>Email Address</label>
                 <div className='relative'>
                   <span className='absolute left-3 top-1/2 -translate-y-1/2'><MailIcon /></span>
                   <input
-                    id='email'
+                    id='operation-email'
                     type='email'
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete='email'
-                    className='w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                    className='w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent'
                     placeholder='Enter your email'
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor='password' className='block text-sm font-semibold text-slate-800 mb-1.5'>Password</label>
+                <label htmlFor='operation-password' className='block text-sm font-semibold text-slate-800 mb-1.5'>Password</label>
                 <div className='relative'>
                   <span className='absolute left-3 top-1/2 -translate-y-1/2'><LockIcon /></span>
                   <input
-                    id='password'
+                    id='operation-password'
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     autoComplete='current-password'
-                    className='w-full border border-gray-200 rounded-xl pl-10 pr-11 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                    className='w-full border border-gray-200 rounded-xl pl-10 pr-11 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent'
                     placeholder='Enter your password'
                   />
                   <button
@@ -134,35 +139,32 @@ const Login = () => {
                     type='checkbox'
                     checked={remember}
                     onChange={(e) => setRemember(e.target.checked)}
-                    className='rounded border-gray-300 text-indigo-600 focus:ring-indigo-500'
+                    className='rounded border-gray-300 text-emerald-600 focus:ring-emerald-500'
                   />
                   Remember me
                 </label>
-                <Link
-                  to='/login/operation'
-                  className='font-medium text-indigo-600 hover:text-indigo-700'
-                >
-                  Operations login
+                <Link to='/login' className='font-medium text-emerald-700 hover:text-emerald-800'>
+                  CEO / Team login
                 </Link>
               </div>
 
               {error && <p className='text-red-600 text-sm bg-red-50 border border-red-100 rounded-lg px-3 py-2'>{error}</p>}
-              {info && <p className='text-indigo-700 text-sm bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2'>{info}</p>}
+              {info && <p className='text-emerald-800 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2'>{info}</p>}
 
               <button
                 type='submit'
                 disabled={loading}
-                className='w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 shadow-lg shadow-indigo-200'
+                className='w-full bg-emerald-700 hover:bg-emerald-800 text-white py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50 shadow-lg shadow-emerald-200'
               >
-                {loading ? 'Signing in…' : 'Sign In'}
+                {loading ? 'Signing in across companies…' : 'Sign In to All Companies'}
               </button>
             </form>
           </div>
-          <p className='text-center text-xs text-gray-400 mt-6'>© {year} MultiCRM Central Admin</p>
+          <p className='text-center text-xs text-gray-400 mt-6'>© {year} MultiCRM Operations Access</p>
         </div>
       </div>
     </div>
   )
 }
 
-export default Login
+export default OperationLogin

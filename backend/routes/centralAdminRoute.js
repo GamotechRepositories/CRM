@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   login,
+  loginOperation,
   listCentralAdmins,
   createCentralAdmin,
   updateCentralAdmin,
@@ -40,6 +41,7 @@ import { optionalAuth, requireAuth } from '../utils/jwtAuth.js';
 const router = Router();
 
 router.post('/auth/login', login);
+router.post('/auth/login/operation', loginOperation);
 router.get('/ceo-team', listCentralAdmins);
 router.post('/ceo-team', createCentralAdmin);
 router.put('/ceo-team/:id', updateCentralAdmin);

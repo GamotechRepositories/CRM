@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { CENTRAL_TENANTS } from '../models/centralAdmin/centralAdmin_user.js';
-import { enrichLoginUser } from './adminAccess.js';
+import { enrichLoginUser, isAdminEmployee } from './adminAccess.js';
 
 const employeeModelCache = new Map();
 
@@ -16,11 +16,66 @@ async function getEmployeeModel(companyId) {
   return model;
 }
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function designationTitleOf(employee) {
+  return String(employee?.designation?.title || employee?.designation?.name || '').trim();
+}
+
+/** Chief Operating Officer in Operations (or Leadership seed department). */
+export function isChiefOperatingOfficer(employee) {
+  const title = designationTitleOf(employee).toLowerCase();
+  const isCoo = title === 'chief operating officer' || title === 'coo';
+  if (!isCoo) return false;
+
+  const department = String(
+    employee?.department || employee?.designation?.department || ''
+  )
+    .trim()
+    .toLowerCase();
+
+  // Seeded C-suite uses Leadership; org charts may use Operations / Operation.
+  if (!department) return true;
+  return (
+    department.includes('operation') ||
+    department === 'leadership' ||
+    department === 'operations'
+  );
+}
+
+function toCompanyLoginUser(employee, companyId) {
+  const enriched = enrichLoginUser({ ...employee });
+  delete enriched.password;
+  const designationTitle =
+    designationTitleOf(enriched) || enriched.department || 'Employee';
+
+  return {
+    ...enriched,
+    _id: enriched._id,
+    role: designationTitle,
+    isRoot: false,
+    isCentralAdmin: false,
+    isCompanyEmployee: true,
+    companyTenant: companyId,
+    tenants: [companyId],
+    phone: enriched.phone || enriched.mobileNumber || '',
+  };
+}
+
 /** Find an active CRM employee by email across all company tenants. */
 export async function findCompanyEmployeeByEmail(email) {
-  const normalized = String(email || '').trim().toLowerCase();
-  if (!normalized) return null;
+  const all = await findAllCompanyEmployeesByEmail(email);
+  return all[0] || null;
+}
 
+/** Find matching employees in every company tenant (same email). */
+export async function findAllCompanyEmployeesByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return [];
+
+  const results = [];
   for (const companyId of CENTRAL_TENANTS) {
     const Employee = await getEmployeeModel(companyId);
     const employee = await Employee.findOne({
@@ -31,11 +86,11 @@ export async function findCompanyEmployeeByEmail(email) {
       .lean();
 
     if (employee) {
-      return { companyId, employee };
+      results.push({ companyId, employee });
     }
   }
 
-  return null;
+  return results;
 }
 
 export async function authenticateCompanyEmployee(email, password) {
@@ -63,31 +118,76 @@ export async function authenticateCompanyEmployee(email, password) {
     return { error: 'Invalid email or password', status: 401 };
   }
 
-  const enriched = enrichLoginUser({ ...employee });
-  delete enriched.password;
-
-  const designationTitle =
-    enriched.designation?.title ||
-    enriched.designation?.name ||
-    enriched.department ||
-    'Employee';
-
   return {
-    user: {
-      ...enriched,
-      _id: enriched._id,
-      role: designationTitle,
-      isRoot: false,
-      isCentralAdmin: false,
-      isCompanyEmployee: true,
-      companyTenant: companyId,
-      tenants: [companyId],
-      phone: enriched.phone || enriched.mobileNumber || '',
-    },
+    user: toCompanyLoginUser(employee, companyId),
     companyId,
   };
 }
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Authenticate COO against every company CRM login (same email/password).
+ * Returns CEO-equivalent central admin session scoped to companies that succeeded.
+ */
+export async function authenticateOperationCoo(email, password) {
+  const matches = await findAllCompanyEmployeesByEmail(email);
+  if (!matches.length) {
+    return { error: 'Invalid email or password', status: 401 };
+  }
+
+  const companySessions = {};
+  const tenants = [];
+  let sawCooAccount = false;
+  let sawPasswordMatch = false;
+  let primaryUser = null;
+
+  for (const { companyId, employee } of matches) {
+    if (!isChiefOperatingOfficer(employee)) continue;
+    sawCooAccount = true;
+
+    if (String(employee.status || 'Active') !== 'Active') continue;
+    if (!employee.password) continue;
+
+    const valid = await bcrypt.compare(String(password || ''), employee.password);
+    if (!valid) continue;
+    sawPasswordMatch = true;
+
+    const user = toCompanyLoginUser(employee, companyId);
+    companySessions[companyId] = user;
+    tenants.push(companyId);
+    if (!primaryUser) primaryUser = user;
+  }
+
+  if (!sawCooAccount) {
+    return {
+      error: 'Operations login is only for Chief Operating Officer accounts.',
+      status: 403,
+    };
+  }
+
+  if (!sawPasswordMatch || !primaryUser || !tenants.length) {
+    return { error: 'Invalid email or password', status: 401 };
+  }
+
+  return {
+    user: {
+      ...primaryUser,
+      role: 'COO',
+      isRoot: false,
+      isCentralAdmin: true,
+      isCompanyEmployee: true,
+      isOperationLogin: true,
+      loginVia: 'operation',
+      companyTenant: tenants[0],
+      tenants,
+      companySessions,
+      canManageEmployees: true,
+      canManageAll: true,
+      // Same privilege surface as platform CEO in the admin panel
+      accessEquivalentToCeo: true,
+    },
+    tenants,
+    companySessions,
+  };
 }
+
+export { isAdminEmployee };

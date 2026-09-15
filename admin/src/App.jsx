@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import RequireAuth from './components/RequireAuth'
 import Login from './pages/Login'
+import OperationLogin from './pages/OperationLogin'
 import CompaniesDashboard from './pages/CompaniesDashboard'
 import CompanyDashboard from './pages/CompanyDashboard'
 import EmployeesPage from './pages/EmployeesPage'
@@ -24,6 +25,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path='/login' element={<Login />} />
+          <Route path='/login/operation' element={<OperationLogin />} />
           <Route path='/' element={withAuth(<CompaniesDashboard />)} />
           <Route path='/create-team' element={withAuth(<CreateTeamPage />)} />
           <Route path='/team-members' element={withAuth(<TeamMembersPage />)} />
