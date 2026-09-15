@@ -129,6 +129,24 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(COMPANY_SESSIONS_KEY)
   }
 
+  const companySessions = useMemo(() => {
+    if (user?.companySessions && typeof user.companySessions === 'object') {
+      return user.companySessions
+    }
+    try {
+      const raw = localStorage.getItem(COMPANY_SESSIONS_KEY)
+      return raw ? JSON.parse(raw) : {}
+    } catch {
+      return {}
+    }
+  }, [user])
+
+  const isOperationUser = Boolean(
+    user?.isOperationLogin ||
+      user?.loginVia === 'operation' ||
+      String(user?.role || '').toUpperCase() === 'COO'
+  )
+
   const allowedTenants = useMemo(() => {
     if (!user) return []
     if (user.isRoot || user.accessEquivalentToCeo || user.isOperationLogin || String(user.role || '').toUpperCase() === 'COO') {
@@ -151,6 +169,8 @@ export const AuthProvider = ({ children }) => {
       loginOperation,
       logout,
       allowedTenants,
+      companySessions,
+      isOperationUser,
       isAuthenticated: Boolean(user),
       canManageEmployees: () =>
         Boolean(
@@ -171,7 +191,7 @@ export const AuthProvider = ({ children }) => {
             user?.isRoot
         ),
     }),
-    [user, loading, allowedTenants]
+    [user, loading, allowedTenants, companySessions, isOperationUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

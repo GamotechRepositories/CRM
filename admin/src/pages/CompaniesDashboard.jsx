@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import CooAttendancePanel from '../components/CooAttendancePanel'
 import { useAuth } from '../context/AuthContext'
 import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
 
@@ -27,7 +28,7 @@ const CompanyLogo = ({ logo, name }) => {
 }
 
 const CompaniesDashboard = () => {
-  const { user, logout, allowedTenants } = useAuth()
+  const { user, logout, allowedTenants, companySessions, isOperationUser } = useAuth()
   const navigate = useNavigate()
   const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
@@ -147,6 +148,13 @@ const CompaniesDashboard = () => {
       </header>
 
       <main className='max-w-7xl mx-auto px-4 sm:px-6 py-8'>
+        {isOperationUser && (
+          <CooAttendancePanel
+            allowedTenants={allowedTenants}
+            companySessions={companySessions}
+          />
+        )}
+
         <div className='flex flex-wrap items-center justify-between gap-3 mb-6'>
           <h2 className='text-lg font-semibold text-gray-900'>Companies</h2>
           <input

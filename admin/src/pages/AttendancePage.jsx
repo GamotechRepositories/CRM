@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../api/axios'
 import AdminCompanyShell, { getInitials } from '../components/AdminCompanyShell'
+import CooAttendancePanel from '../components/CooAttendancePanel'
+import { useAuth } from '../context/AuthContext'
 import { TENANT_NAMES } from '../config/tenants'
 
 const AVATAR_COLORS = [
@@ -268,6 +270,7 @@ const StatCard = ({ label, value }) => (
 
 const AttendancePage = () => {
   const { tenantId } = useParams()
+  const { allowedTenants, companySessions, isOperationUser } = useAuth()
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue())
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [employeeId, setEmployeeId] = useState('')
@@ -530,6 +533,14 @@ const AttendancePage = () => {
           )}
         </div>
       </div>
+
+      {isOperationUser && (
+        <CooAttendancePanel
+          allowedTenants={allowedTenants}
+          companySessions={companySessions}
+          scopeTenantId={tenantId}
+        />
+      )}
 
       {error && (
         <div className='mb-4 rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-600'>{error}</div>
