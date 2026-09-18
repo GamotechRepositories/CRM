@@ -41,11 +41,38 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  const mergeOperationSession = (parsedUser, sessions = {}) => {
+    if (!parsedUser) return null
+    const mergedSessions = {
+      ...(typeof sessions === 'object' && sessions ? sessions : {}),
+      ...(parsedUser.companySessions || {}),
+    }
+    const mergedTenants = [
+      ...new Set([
+        ...(Array.isArray(parsedUser.tenants) ? parsedUser.tenants : []),
+        ...Object.keys(mergedSessions),
+      ]),
+    ].filter((id) => TENANT_IDS.includes(id))
+
+    return normalizeAdminUser({
+      ...parsedUser,
+      companySessions: mergedSessions,
+      tenants: mergedTenants.length ? mergedTenants : parsedUser.tenants,
+    })
+  }
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(AUTH_KEY)
+      let sessions = {}
+      try {
+        const sessionsRaw = localStorage.getItem(COMPANY_SESSIONS_KEY)
+        sessions = sessionsRaw ? JSON.parse(sessionsRaw) : {}
+      } catch {
+        sessions = {}
+      }
       if (raw) {
-        setUser(normalizeAdminUser(JSON.parse(raw)))
+        setUser(mergeOperationSession(JSON.parse(raw), sessions))
       }
     } catch {
       localStorage.removeItem(AUTH_KEY)
@@ -55,12 +82,12 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const persistSession = (nextUser, token = null, companySessions = null) => {
-    const normalized = normalizeAdminUser(nextUser)
+    const normalized = mergeOperationSession(nextUser, companySessions || nextUser?.companySessions)
     setUser(normalized)
     localStorage.setItem(AUTH_KEY, JSON.stringify(normalized))
     if (token) localStorage.setItem(TOKEN_KEY, token)
-    if (companySessions && typeof companySessions === 'object') {
-      localStorage.setItem(COMPANY_SESSIONS_KEY, JSON.stringify(companySessions))
+    if (normalized?.companySessions) {
+      localStorage.setItem(COMPANY_SESSIONS_KEY, JSON.stringify(normalized.companySessions))
     }
     return normalized
   }
@@ -101,15 +128,20 @@ export const AuthProvider = ({ children }) => {
     const nextUser = res.data?.user
     if (!nextUser) throw new Error(res.data?.message || 'Operations login failed')
 
-    const companySessions = {
-      ...clientSessions,
-      ...(res.data?.companySessions || nextUser.companySessions || {}),
-    }
+    const serverSessions = res.data?.companySessions || nextUser.companySessions || {}
+    const companySessions = { ...clientSessions, ...serverSessions }
+    const tenantIds = [
+      ...new Set([
+        ...(Array.isArray(res.data?.tenants) ? res.data.tenants : []),
+        ...(Array.isArray(nextUser.tenants) ? nextUser.tenants : []),
+        ...Object.keys(companySessions),
+      ]),
+    ].filter((id) => TENANT_IDS.includes(id))
 
     return persistSession(
       {
         ...nextUser,
-        tenants: res.data?.tenants || nextUser.tenants || Object.keys(companySessions),
+        tenants: tenantIds,
         companySessions,
         isOperationLogin: true,
         loginVia: 'operation',
@@ -130,14 +162,16 @@ export const AuthProvider = ({ children }) => {
   }
 
   const companySessions = useMemo(() => {
-    if (user?.companySessions && typeof user.companySessions === 'object') {
-      return user.companySessions
-    }
+    const fromUser =
+      user?.companySessions && typeof user.companySessions === 'object'
+        ? user.companySessions
+        : {}
     try {
       const raw = localStorage.getItem(COMPANY_SESSIONS_KEY)
-      return raw ? JSON.parse(raw) : {}
+      const fromStorage = raw ? JSON.parse(raw) : {}
+      return { ...fromStorage, ...fromUser }
     } catch {
-      return {}
+      return fromUser
     }
   }, [user])
 
@@ -149,17 +183,24 @@ export const AuthProvider = ({ children }) => {
 
   const allowedTenants = useMemo(() => {
     if (!user) return []
-    if (user.isRoot || user.accessEquivalentToCeo || user.isOperationLogin || String(user.role || '').toUpperCase() === 'COO') {
-      if (Array.isArray(user.tenants) && user.tenants.length) {
-        return TENANT_IDS.filter((id) => user.tenants.includes(id))
-      }
-      return [...TENANT_IDS]
+
+    const sessionTenantIds = Object.keys(companySessions || {}).filter((id) =>
+      TENANT_IDS.includes(id)
+    )
+    const declaredTenantIds = Array.isArray(user.tenants)
+      ? user.tenants.filter((id) => TENANT_IDS.includes(id))
+      : []
+
+    if (isOperationUser) {
+      const merged = [...new Set([...declaredTenantIds, ...sessionTenantIds])]
+      return merged.length ? merged : [...TENANT_IDS]
     }
-    if (Array.isArray(user.tenants) && user.tenants.length) {
-      return TENANT_IDS.filter((id) => user.tenants.includes(id))
-    }
-    return [...TENANT_IDS]
-  }, [user])
+
+    if (user.isRoot) return [...TENANT_IDS]
+
+    const scoped = declaredTenantIds.length ? declaredTenantIds : sessionTenantIds
+    return scoped.length ? scoped : [...TENANT_IDS]
+  }, [user, companySessions, isOperationUser])
 
   const value = useMemo(
     () => ({

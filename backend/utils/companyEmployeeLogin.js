@@ -3,6 +3,17 @@ import { CENTRAL_TENANTS } from '../models/centralAdmin/centralAdmin_user.js';
 import { enrichLoginUser, isAdminEmployee } from './adminAccess.js';
 
 const employeeModelCache = new Map();
+const designationModelCache = new Map();
+
+async function getDesignationModel(companyId) {
+  if (designationModelCache.has(companyId)) {
+    return designationModelCache.get(companyId);
+  }
+  const module = await import(`../models/${companyId}/${companyId}_designation.js`);
+  const model = module.default;
+  designationModelCache.set(companyId, model);
+  return model;
+}
 
 async function getEmployeeModel(companyId) {
   if (employeeModelCache.has(companyId)) {
@@ -24,25 +35,47 @@ function designationTitleOf(employee) {
   return String(employee?.designation?.title || employee?.designation?.name || '').trim();
 }
 
-/** Chief Operating Officer in Operations (or Leadership seed department). */
+async function employeeWithResolvedDesignation(employee, companyId) {
+  if (designationTitleOf(employee)) return employee;
+
+  const designationRef = employee?.designation;
+  const designationId =
+    typeof designationRef === 'object' && designationRef?._id
+      ? designationRef._id
+      : designationRef;
+
+  if (!designationId) return employee;
+
+  try {
+    const Designation = await getDesignationModel(companyId);
+    const doc = await Designation.findById(designationId).lean();
+    if (!doc) return employee;
+    return {
+      ...employee,
+      designation: {
+        ...(typeof designationRef === 'object' ? designationRef : {}),
+        ...doc,
+        title: doc.title || doc.name || designationTitleOf(employee),
+      },
+    };
+  } catch {
+    return employee;
+  }
+}
+
+/** Chief Operating Officer — match by designation title (department may vary per company). */
 export function isChiefOperatingOfficer(employee) {
-  const title = designationTitleOf(employee).toLowerCase();
-  const isCoo = title === 'chief operating officer' || title === 'coo';
-  if (!isCoo) return false;
+  const title = designationTitleOf(employee).toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!title) return false;
 
-  const department = String(
-    employee?.department || employee?.designation?.department || ''
-  )
-    .trim()
-    .toLowerCase();
+  if (title === 'coo') return true;
+  if (title === 'chief operating officer') return true;
+  if (title.includes('chief operating officer')) return true;
 
-  // Seeded C-suite uses Leadership; org charts may use Operations / Operation.
-  if (!department) return true;
-  return (
-    department.includes('operation') ||
-    department === 'leadership' ||
-    department === 'operations'
-  );
+  const code = String(employee?.designation?.code || '').trim().toLowerCase();
+  if (code === 'coo') return true;
+
+  return false;
 }
 
 function toCompanyLoginUser(employee, companyId) {
@@ -141,7 +174,8 @@ export async function authenticateOperationCoo(email, password) {
   let primaryUser = null;
 
   for (const { companyId, employee } of matches) {
-    if (!isChiefOperatingOfficer(employee)) continue;
+    const resolvedEmployee = await employeeWithResolvedDesignation(employee, companyId);
+    if (!isChiefOperatingOfficer(resolvedEmployee)) continue;
     sawCooAccount = true;
 
     if (String(employee.status || 'Active') !== 'Active') continue;
@@ -151,7 +185,7 @@ export async function authenticateOperationCoo(email, password) {
     if (!valid) continue;
     sawPasswordMatch = true;
 
-    const user = toCompanyLoginUser(employee, companyId);
+    const user = toCompanyLoginUser(resolvedEmployee, companyId);
     companySessions[companyId] = user;
     tenants.push(companyId);
     if (!primaryUser) primaryUser = user;

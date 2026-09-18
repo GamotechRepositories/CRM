@@ -73,7 +73,14 @@ const CompaniesDashboard = () => {
       }
     }
 
-    const tenantScope = allowedTenants?.length ? allowedTenants : TENANT_IDS
+    const sessionTenantIds = Object.keys(companySessions || {}).filter((id) => TENANT_IDS.includes(id))
+    const tenantScope = isOperationUser
+      ? [...new Set([...(allowedTenants || []), ...sessionTenantIds])].filter((id) =>
+          TENANT_IDS.includes(id)
+        )
+      : allowedTenants?.length
+        ? allowedTenants
+        : TENANT_IDS
 
     return tenantScope.map((tenantId) => {
       const row = byTenant.get(tenantId)
@@ -90,7 +97,7 @@ const CompaniesDashboard = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q))
     })
-  }, [filtered, search, allowedTenants])
+  }, [filtered, search, allowedTenants, companySessions, isOperationUser])
 
   const handleLogout = () => {
     const viaOperation = Boolean(user?.isOperationLogin || user?.loginVia === 'operation')

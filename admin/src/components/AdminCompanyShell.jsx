@@ -21,7 +21,7 @@ const getInitials = (name = '') =>
 const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   const { tenantId: paramTenantId } = useParams()
   const navigate = useNavigate()
-  const { user, logout, allowedTenants } = useAuth()
+  const { user, logout, allowedTenants, companySessions, isOperationUser } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showHeaderCompanyMenu, setShowHeaderCompanyMenu] = useState(false)
   const [showSidebarCompanyMenu, setShowSidebarCompanyMenu] = useState(false)
@@ -29,7 +29,14 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   const sidebarMenuRef = useRef(null)
 
   const hasCompanyContext = Boolean(paramTenantId)
-  const switchableTenants = allowedTenants?.length ? allowedTenants : TENANT_IDS
+  const sessionTenantIds = Object.keys(companySessions || {}).filter((id) => TENANT_IDS.includes(id))
+  const switchableTenants = isOperationUser
+    ? [...new Set([...(allowedTenants || []), ...sessionTenantIds])].filter((id) =>
+        TENANT_IDS.includes(id)
+      )
+    : allowedTenants?.length
+      ? allowedTenants
+      : TENANT_IDS
   const navItems = getCompanyAdminNav(paramTenantId || switchableTenants[0] || TENANT_IDS[0])
   const activeGroupId = getNavGroupForActiveId(navItems, activeNav)
 

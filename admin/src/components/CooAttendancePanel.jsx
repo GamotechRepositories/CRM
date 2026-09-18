@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
+import { TENANT_IDS, TENANT_LOGOS, TENANT_NAMES } from '../config/tenants'
 import { createTenantClient } from '../utils/tenantApi'
 import {
   formatCoords,
@@ -39,7 +39,13 @@ const CooAttendancePanel = ({ allowedTenants = [], companySessions = {}, scopeTe
   const [now, setNow] = useState(() => Date.now())
 
   const tenants = useMemo(() => {
-    const base = allowedTenants.filter((tenantId) => getEmployeeId(companySessions[tenantId]))
+    const fromSessions = Object.keys(companySessions || {}).filter(
+      (tenantId) => TENANT_IDS.includes(tenantId) && getEmployeeId(companySessions[tenantId])
+    )
+    const fromAllowed = (allowedTenants || []).filter(
+      (tenantId) => TENANT_IDS.includes(tenantId) && getEmployeeId(companySessions[tenantId])
+    )
+    const base = [...new Set([...fromSessions, ...fromAllowed])]
     if (scopeTenantId) return base.filter((tenantId) => tenantId === scopeTenantId)
     return base
   }, [allowedTenants, companySessions, scopeTenantId])
