@@ -1,6 +1,3 @@
-import { getBusinessMinutesFromMidnight } from './businessTime.js';
-import { parseWorkingHours } from './workingHoursTimeline.js';
-
 export const assertValidTaskSchedule = async ({
   Task,
   Employee,
@@ -35,7 +32,10 @@ export const assertValidTaskSchedule = async ({
 
   // Only block NEW schedules in the past. Re-saving an existing start (e.g. status
   // change on an in-progress task) must always be allowed.
-  if (!skipPastCheck && !startUnchanged && start.getTime() < now.getTime()) {
+  // Compare at minute precision — time pickers do not include seconds.
+  const startMinute = Math.floor(start.getTime() / 60000);
+  const nowMinute = Math.floor(now.getTime() / 60000);
+  if (!skipPastCheck && !startUnchanged && startMinute < nowMinute) {
     const error = new Error('Cannot schedule a task in the past');
     error.statusCode = 400;
     throw error;
@@ -54,25 +54,6 @@ export const assertValidTaskSchedule = async ({
 
   if (end <= start) {
     const error = new Error('Scheduled end time must be after the start time');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  // Company working hours are the canonical timeline; employee workingHours is a legacy fallback.
-  const company = Company
-    ? await Company.findOne().sort({ createdAt: 1 }).select('workingHours').lean()
-    : null;
-  let workingHours = String(company?.workingHours || '').trim();
-  if (!workingHours) {
-    const employee = await Employee.findById(assigneeId).select('workingHours').lean();
-    workingHours = employee?.workingHours;
-  }
-  const { startMinutes: workStart, endMinutes: workEnd } = parseWorkingHours(workingHours);
-  const startMinutesOnDay = getBusinessMinutesFromMidnight(start);
-  const endMinutesOnDay = getBusinessMinutesFromMidnight(end);
-
-  if (startMinutesOnDay < workStart || endMinutesOnDay > workEnd) {
-    const error = new Error('Task must fit within the employee working hours');
     error.statusCode = 400;
     throw error;
   }
