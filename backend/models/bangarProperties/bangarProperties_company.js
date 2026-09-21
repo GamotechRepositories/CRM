@@ -6,6 +6,7 @@ const companySchema = new mongoose.Schema({
   authorizedSignature: { type: String, default: '' },
   companyName: { type: String, default: '' },
   workingHours: { type: String, default: '9 AM - 6 PM' },
+  breakTimeMinutes: { type: Number, default: 45, min: 0 },
   address: { type: String, default: '' },
   website: { type: String, default: '' },
   pan: { type: String, default: '' },

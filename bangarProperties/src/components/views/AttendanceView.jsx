@@ -11,6 +11,7 @@ import {
   resolveAddressFromCoords,
 } from '../../utils/geolocation'
 import { getLateAfterLabel, isLateCheckIn } from '../../utils/attendanceLate'
+import { notifyBreakEndingSoon, notifyBreakStarted } from '../../utils/breakTimeAlert'
 
 const getDesignationTitle = (employee) =>
   employee?.designation?.title || employee?.designation?.name || employee?.designation || employee?.department || '—'
@@ -266,10 +267,12 @@ const AttendanceView = () => {
     error: '',
   })
   const [refreshingLocation, setRefreshingLocation] = useState(false)
+  const [breakTimeMinutes, setBreakTimeMinutes] = useState(45)
   const timerRef = useRef(null)
   const lastGeocodeRef = useRef({ lat: null, lon: null, at: 0 })
   const lastTimelinePushRef = useRef({ lat: null, lon: null, at: 0 })
   const addressBackfillRef = useRef(new Set())
+  const breakEndingWarningRef = useRef(null)
 
   const isToday = selectedDate === getTodayDateKey()
 
@@ -454,6 +457,46 @@ const AttendanceView = () => {
     const id = setInterval(() => setLiveClock(new Date()), 1000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api.get('/company-profile')
+      .then((res) => {
+        if (cancelled) return
+        const minutes = Number(res.data?.breakTimeMinutes ?? res.data?.breakTime)
+        setBreakTimeMinutes(Number.isFinite(minutes) && minutes > 0 ? minutes : 45)
+      })
+      .catch(() => {
+        if (!cancelled) setBreakTimeMinutes(45)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isToday || !isBreakActive || !myTodayAttendance?.breakStartedAt) {
+      if (!isBreakActive) breakEndingWarningRef.current = null
+      return
+    }
+
+    const allowedMinutes = breakTimeMinutes || 45
+    if (allowedMinutes <= 5) return
+
+    const breakKey = String(new Date(myTodayAttendance.breakStartedAt).getTime())
+    const remainingMinutes = allowedMinutes - liveBreakMinutes
+
+    if (remainingMinutes <= 5 && remainingMinutes > 0 && breakEndingWarningRef.current !== breakKey) {
+      breakEndingWarningRef.current = breakKey
+      notifyBreakEndingSoon({ remainingMinutes })
+    }
+  }, [
+    isToday,
+    isBreakActive,
+    myTodayAttendance?.breakStartedAt,
+    liveBreakMinutes,
+    breakTimeMinutes,
+  ])
 
   useEffect(() => {
     if (!checkInTime) return undefined
@@ -771,6 +814,7 @@ const AttendanceView = () => {
     setError(null)
     try {
       await api.post('/attendance/break/start', { employee: selectedEmployee })
+      notifyBreakStarted()
       await fetchDayAttendance()
       fetchMonthAttendance()
     } catch (err) {

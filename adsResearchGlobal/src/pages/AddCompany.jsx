@@ -10,6 +10,7 @@ const AddCompany = () => {
     companyLogo: '',
     companyName: '',
     workingHours: '9 AM - 6 PM',
+    breakTimeMinutes: 45,
     address: '',
     website: '',
     pan: '',
@@ -37,6 +38,7 @@ const AddCompany = () => {
           companyLogo: c.companyLogo ?? '',
           companyName: c.companyName ?? '',
           workingHours: c.workingHours ?? '9 AM - 6 PM',
+          breakTimeMinutes: Number(c.breakTimeMinutes ?? c.breakTime) || 45,
           address: c.address ?? '',
           website: c.website ?? '',
           pan: c.pan ?? '',
@@ -67,6 +69,11 @@ const AddCompany = () => {
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((f) => ({ ...f, [name]: value }))
+  }
+
+  const handleNumberChange = (e) => {
+    const { name, value } = e.target
+    setForm((f) => ({ ...f, [name]: value === '' ? '' : Number(value) }))
   }
 
   const addPersonalAccount = () => {
@@ -110,7 +117,11 @@ const AddCompany = () => {
     setLoading(true)
     setError(null)
     try {
-      const payload = { ...form, personalAccounts: form.personalAccounts.filter((a) => a.receiverName || a.bankName || a.bankAccountNumber) }
+      const payload = {
+        ...form,
+        breakTimeMinutes: Number(form.breakTimeMinutes) || 45,
+        personalAccounts: form.personalAccounts.filter((a) => a.receiverName || a.bankName || a.bankAccountNumber),
+      }
       if (payload.personalAccounts.length === 0) payload.personalAccounts = []
       if (isEdit) {
         await api.put(`/companies/${id}`, payload)
@@ -179,6 +190,19 @@ const AddCompany = () => {
               <div>
                 <label className='block text-sm font-medium text-gray-700'>Working Hours</label>
                 <input name='workingHours' value={form.workingHours} onChange={handleChange} className={inputClass} placeholder='e.g. 9 AM - 6 PM' />
+              </div>
+              <div>
+                <label className='block text-sm font-medium text-gray-700'>Break Time (minutes)</label>
+                <input
+                  name='breakTimeMinutes'
+                  type='number'
+                  min='0'
+                  step='1'
+                  value={form.breakTimeMinutes}
+                  onChange={handleNumberChange}
+                  className={inputClass}
+                  placeholder='e.g. 45'
+                />
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-700'>PAN</label>

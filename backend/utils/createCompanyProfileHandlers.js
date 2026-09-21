@@ -4,6 +4,7 @@ const emptyProfile = () => ({
   authorizedSignature: '',
   companyName: '',
   workingHours: '9 AM - 6 PM',
+  breakTimeMinutes: 45,
   address: '',
   website: '',
   pan: '',

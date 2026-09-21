@@ -10,6 +10,7 @@ const EMPTY_FORM = {
   authorizedSignature: '',
   companyName: '',
   workingHours: '9 AM - 6 PM',
+  breakTimeMinutes: 45,
   address: '',
   website: '',
   pan: '',
@@ -47,6 +48,7 @@ const CompanyProfilePage = () => {
           authorizedSignature: c.authorizedSignature ?? '',
           companyName: c.companyName ?? '',
           workingHours: c.workingHours ?? '9 AM - 6 PM',
+          breakTimeMinutes: Number(c.breakTimeMinutes ?? c.breakTime) || 45,
           address: c.address ?? '',
           website: c.website ?? '',
           pan: c.pan ?? '',
@@ -77,6 +79,13 @@ const CompanyProfilePage = () => {
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((f) => ({ ...f, [name]: value }))
+    setSuccess(null)
+  }
+
+  const handleNumberChange = (e) => {
+    const { name, value } = e.target
+    const parsed = value === '' ? '' : Number(value)
+    setForm((f) => ({ ...f, [name]: parsed }))
     setSuccess(null)
   }
 
@@ -154,6 +163,7 @@ const CompanyProfilePage = () => {
     try {
       const payload = {
         ...form,
+        breakTimeMinutes: Number(form.breakTimeMinutes) || 45,
         personalAccounts: form.personalAccounts.filter((a) => a.receiverName || a.bankName || a.bankAccountNumber),
       }
       if (payload.personalAccounts.length === 0) payload.personalAccounts = []
@@ -299,6 +309,20 @@ const CompanyProfilePage = () => {
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>Working Hours</label>
                   <input name='workingHours' value={form.workingHours} onChange={handleChange} className={inputClass} placeholder='e.g. 9 AM - 6 PM' />
+                </div>
+                <div>
+                  <label className='block text-sm font-medium text-gray-700'>Break Time (minutes)</label>
+                  <input
+                    name='breakTimeMinutes'
+                    type='number'
+                    min='0'
+                    step='1'
+                    value={form.breakTimeMinutes}
+                    onChange={handleNumberChange}
+                    className={inputClass}
+                    placeholder='e.g. 45'
+                  />
+                  <p className='text-xs text-gray-500 mt-1'>Allowed break duration in minutes (e.g. 30, 45, 60).</p>
                 </div>
                 <div className='sm:col-span-2'>
                   <label className='block text-sm font-medium text-gray-700'>Address</label>

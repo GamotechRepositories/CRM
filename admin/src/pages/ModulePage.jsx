@@ -747,6 +747,8 @@ const ModulePage = ({ moduleId }) => {
                 ['Phone', data.company.phone],
                 ['Website', data.company.website],
                 ['Address', data.company.address],
+                ['Working hours', data.company.workingHours],
+                ['Break time (minutes)', data.company.breakTimeMinutes ?? data.company.breakTime],
                 ['PAN', data.company.pan],
                 ['GSTIN', data.company.gstin],
                 ['State', data.company.state],
