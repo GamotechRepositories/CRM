@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import { getReporteesWithMeta, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const initials = (name = '') =>
   name
@@ -72,7 +73,7 @@ const MyTeamView = () => {
     const now = new Date()
     const perMember = {}
     tasks.forEach((t) => {
-      const id = String(t.assignedTo?._id || t.assignedTo || '')
+      const id = refEmployeeId(t.assignedTo)
       if (!id) return
       if (!perMember[id]) perMember[id] = { total: 0, completed: 0, inProgress: 0 }
       perMember[id].total += 1
@@ -80,17 +81,13 @@ const MyTeamView = () => {
       if (t.status === 'In Progress') perMember[id].inProgress += 1
     })
 
-    return employees
-      .filter(
-        (e) =>
-          e.status === 'Active' &&
-          String(e.reportingManager?._id || e.reportingManager || '') === String(user?._id)
-      )
-      .map((e) => {
-        const att = attendance.find((a) => String(a.employee?._id || a.employee) === String(e._id))
+    return getReporteesWithMeta(employees, user?._id)
+      .filter(({ employee }) => employee.status === 'Active')
+      .map(({ id, depth, employee, leadsTeam, childCount, isTeamLeader, isManager, reportsTo }) => {
+        const att = attendance.find((a) => refEmployeeId(a.employee) === id)
         const onLeave = leaves.some(
           (l) =>
-            String(l.employee?._id || l.employee) === String(e._id) &&
+            refEmployeeId(l.employee) === id &&
             l.status === 'Approved' &&
             new Date(l.startDate) <= now &&
             new Date(l.endDate) >= new Date(now.toDateString())
@@ -99,14 +96,19 @@ const MyTeamView = () => {
         if (onLeave) status = 'On Leave'
         else if (att?.checkOut) status = 'Away'
         else if (att?.checkIn) status = 'Online'
-        const m = perMember[String(e._id)] || { total: 0, completed: 0, inProgress: 0 }
+        const m = perMember[id] || { total: 0, completed: 0, inProgress: 0 }
         return {
-          id: e._id,
-          name: e.name,
-          email: e.email,
-          phone: e.phone,
-          role: e.designation?.title || '—',
-          department: e.department || e.designation?.department || '—',
+          id,
+          depth,
+          reportsTo,
+          leadsTeam,
+          childCount,
+          leaderBadge: isTeamLeader ? 'Team Leader' : isManager ? 'Manager' : null,
+          name: employee.name,
+          email: employee.email,
+          phone: employee.phone,
+          role: employee.designation?.title || '—',
+          department: employee.department || employee.designation?.department || '—',
           status,
           openTasks: m.total - m.completed,
           inProgress: m.inProgress,
@@ -114,7 +116,7 @@ const MyTeamView = () => {
           progress: m.total ? Math.round((m.completed / m.total) * 100) : 0,
         }
       })
-  }, [employees, tasks, attendance, leaves, user])
+  }, [employees, tasks, attendance, leaves, user?._id])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -152,7 +154,9 @@ const MyTeamView = () => {
       <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
         <div>
           <h1 className='text-xl font-bold text-gray-900'>My Team</h1>
-          <p className='text-sm text-gray-500'>Overview of your team members and their workload</p>
+          <p className='text-sm text-gray-500'>
+            Direct reports and their teams — team leaders and managers include everyone reporting to them
+          </p>
         </div>
         <button
           type='button'
@@ -209,6 +213,7 @@ const MyTeamView = () => {
             <thead>
               <tr className='text-left text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100'>
                 <th className='px-4 py-3 font-medium'>Member</th>
+                <th className='px-4 py-3 font-medium'>Reports To</th>
                 <th className='px-4 py-3 font-medium'>Department</th>
                 <th className='px-4 py-3 font-medium'>Status</th>
                 <th className='px-4 py-3 font-medium text-center'>Open</th>
@@ -221,18 +226,34 @@ const MyTeamView = () => {
               {filtered.map((m, i) => (
                 <tr key={m.id} className='hover:bg-gray-50/60'>
                   <td className='px-4 py-3'>
-                    <div className='flex items-center gap-3'>
+                    <div
+                      className='flex items-center gap-3'
+                      style={{ paddingLeft: `${Math.max(0, m.depth - 1) * 16}px` }}
+                    >
                       <div
                         className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
                       >
                         {initials(m.name)}
                       </div>
                       <div className='min-w-0'>
-                        <p className='font-medium text-gray-900 truncate'>{m.name}</p>
+                        <div className='flex flex-wrap items-center gap-1.5'>
+                          <p className='font-medium text-gray-900 truncate'>{m.name}</p>
+                          {m.leaderBadge && (
+                            <span className='inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700'>
+                              {m.leaderBadge}
+                            </span>
+                          )}
+                          {m.leadsTeam && (
+                            <span className='inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600'>
+                              {m.childCount} report{m.childCount === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </div>
                         <p className='text-xs text-gray-500 truncate'>{m.role}</p>
                       </div>
                     </div>
                   </td>
+                  <td className='px-4 py-3 text-gray-600 whitespace-nowrap'>{m.reportsTo}</td>
                   <td className='px-4 py-3 text-gray-600'>{m.department}</td>
                   <td className='px-4 py-3'>
                     <span
@@ -260,7 +281,7 @@ const MyTeamView = () => {
               ))}
               {!filtered.length && (
                 <tr>
-                  <td colSpan={7} className='px-4 py-10 text-center text-sm text-gray-400'>
+                  <td colSpan={8} className='px-4 py-10 text-center text-sm text-gray-400'>
                     No team members found
                   </td>
                 </tr>

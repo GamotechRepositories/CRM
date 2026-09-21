@@ -54,6 +54,7 @@ const DESIGNATION_TITLES = [
   'Data Scientist',
   'Business Analyst',
   'Sales Manager',
+  'Senior Sales Manager',
   'Tele Caller',
   'Site Co-ordinator',
   'Site Coordinator',

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import { getSidebarNav } from '../config/sidebarNav'
 import { getDashboardKind } from '../config/dashboardRoutes'
+import { showsMyTeamForUser } from '../config/authPermissions'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
 import {
@@ -46,6 +47,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   const allowedSections = getSidebarSections()
   const dashboardPath = getDashboardPath()
   const isTeamLeader = getDashboardKind(user) === 'team_leader'
+  const showsMyTeam = showsMyTeamForUser(user)
 
   const sections = useMemo(
     () => getSidebarNav({
@@ -55,8 +57,9 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       allowedSections,
       dashboardPath,
       isTeamLeader,
+      showsMyTeam,
     }),
-    [fullAccess, canViewProjectsValue, canManageClientsValue, allowedSections, dashboardPath, isTeamLeader],
+    [fullAccess, canViewProjectsValue, canManageClientsValue, allowedSections, dashboardPath, isTeamLeader, showsMyTeam],
   )
 
   const defaultExpanded = useMemo(() => {

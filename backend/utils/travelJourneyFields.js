@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 
 /**
- * Per-employee daily travel journey.
- * Distance is only calculated after the coordinator starts a journey.
+ * Per-employee travel journey (multiple allowed per business day).
+ * Distance is calculated after the coordinator starts each journey.
  */
 export const getTravelJourneySchemaFields = ({ employeeRef }) => ({
   employee: {
@@ -30,4 +30,19 @@ export const getTravelJourneySchemaFields = ({ employeeRef }) => ({
   endLatitude: { type: Number, default: null },
   endLongitude: { type: Number, default: null },
   endAddress: { type: String, default: '' },
+  /** GPS breadcrumbs recorded while journey is active (actual path travelled). */
+  trackPoints: [
+    {
+      latitude: { type: Number, required: true },
+      longitude: { type: Number, required: true },
+      recordedAt: { type: Date, default: Date.now },
+      source: {
+        type: String,
+        enum: ['track', 'journey_start', 'check_in', 'check_out', 'journey_end'],
+        default: 'track',
+      },
+      siteVisitId: { type: mongoose.Schema.Types.ObjectId, default: null },
+      address: { type: String, default: '' },
+    },
+  ],
 });

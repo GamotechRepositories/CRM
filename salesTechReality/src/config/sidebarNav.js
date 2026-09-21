@@ -2,7 +2,15 @@
  * Sidebar navigation structure.
  * Items support: requiresFullAccess, requiresProjectAccess, employeeOnly (hidden from full-access-only sections when false - N/A)
  */
-export const getSidebarNav = ({ fullAccess, canViewProjects, canManageClients, allowedSections, dashboardPath = '/dashboard', isTeamLeader = false }) => {
+export const getSidebarNav = ({
+  fullAccess,
+  canViewProjects,
+  canManageClients,
+  allowedSections,
+  dashboardPath = '/dashboard',
+  isTeamLeader = false,
+  showsMyTeam = false,
+}) => {
   const useSectionFilter = Array.isArray(allowedSections) && allowedSections.length > 0 && !fullAccess
   const isSectionAllowed = (section) => !useSectionFilter || allowedSections.includes(section.id)
 
@@ -28,7 +36,7 @@ export const getSidebarNav = ({ fullAccess, canViewProjects, canManageClients, a
       type: 'link',
       path: dashboardPath,
     },
-    ...(isTeamLeader
+    ...(showsMyTeam
       ? [
           {
             id: 'my-team',

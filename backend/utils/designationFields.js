@@ -175,7 +175,30 @@ export const getDefaultDesignationMeta = (title) => {
       accessRole: 'manager',
       sortOrder: 9,
       permissions: {
-        hasFullAccess: false,
+        hasFullAccess: true,
+        canAddProject: true,
+        canEditProject: true,
+        canViewProjects: true,
+        canAssignTask: true,
+        canApproveLeave: true,
+        canManageEmployees: true,
+        canManageSocialCalendar: true,
+      },
+    };
+  }
+
+  // Sales Manager, Senior Sales Manager, Regional Sales Manager, etc.
+  if (t.includes('sales') && t.includes('manager')) {
+    return {
+      ...base,
+      code: toSlugCode(title),
+      description: 'Sales leadership — full CRM access and team management',
+      department: 'Sales',
+      level: t.includes('senior') ? 'Senior' : 'Manager',
+      accessRole: 'manager',
+      sortOrder: 10,
+      permissions: {
+        hasFullAccess: true,
         canAddProject: true,
         canEditProject: true,
         canViewProjects: true,
@@ -219,11 +242,13 @@ export const getDefaultDesignationMeta = (title) => {
       sortOrder: 15,
       permissions: {
         hasFullAccess: false,
-        canAddProject: ['program manager', 'sales manager', 'account manager'].includes(t),
+        canAddProject: ['program manager', 'sales manager', 'account manager'].includes(t)
+          || (t.includes('sales') && t.includes('manager')),
         canEditProject: true,
         canViewProjects: true,
         canAssignTask: true,
-        canApproveLeave: ['program manager', 'sales manager', 'account manager', 'customer success manager'].includes(t),
+        canApproveLeave: ['program manager', 'sales manager', 'account manager', 'customer success manager'].includes(t)
+          || (t.includes('sales') && t.includes('manager')),
         canManageEmployees: false,
         canManageSocialCalendar: true,
       },

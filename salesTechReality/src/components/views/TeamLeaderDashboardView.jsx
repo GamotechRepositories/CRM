@@ -16,6 +16,7 @@ import {
 } from 'recharts'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import { getAllReporteeIds, isInReporteeTree, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const TASK_COLORS = {
   Completed: '#10b981',
@@ -140,19 +141,13 @@ const TeamLeaderDashboardView = () => {
         ])
         const list = (res) => (Array.isArray(res.data) ? res.data : res.data?.data || [])
 
-        // Scope everything to the leader's team: employees whose reportingManager is this user.
         const allEmployees = list(empRes)
-        const leaderId = String(user._id)
-        const teamIds = new Set(
-          allEmployees
-            .filter((e) => String(e.reportingManager?._id || e.reportingManager || '') === leaderId)
-            .map((e) => String(e._id))
-        )
-        const refId = (v) => String(v?._id || v || '')
-        const inTeam = (v) => teamIds.has(refId(v))
-        const inTeamOrSelf = (v) => inTeam(v) || refId(v) === leaderId
+        const leaderId = refEmployeeId(user._id)
+        const teamIds = getAllReporteeIds(allEmployees, leaderId)
+        const inTeam = (v) => isInReporteeTree(v, teamIds)
+        const inTeamOrSelf = (v) => inTeam(v) || refEmployeeId(v) === leaderId
 
-        setEmployees(allEmployees.filter((e) => teamIds.has(String(e._id))))
+        setEmployees(allEmployees.filter((e) => teamIds.has(refEmployeeId(e))))
         setTasks(list(taskRes).filter((t) => inTeam(t.assignedTo)))
         setProjects(
           list(projRes).filter(

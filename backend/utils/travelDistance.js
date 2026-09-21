@@ -18,6 +18,88 @@ export const roundKm = (km, digits = 2) => {
   return Math.round(n * f) / f;
 };
 
+const toCoord = (point) => ({
+  latitude: Number(point?.latitude ?? point?.lat),
+  longitude: Number(point?.longitude ?? point?.lng ?? point?.lon),
+});
+
+/** Sum of haversine legs along a ordered path (actual GPS trail). */
+export const pathDistanceKm = (points = []) => {
+  const coords = (Array.isArray(points) ? points : [])
+    .map(toCoord)
+    .filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+  if (coords.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < coords.length; i += 1) {
+    total += haversineKm(
+      coords[i - 1].latitude,
+      coords[i - 1].longitude,
+      coords[i].latitude,
+      coords[i].longitude
+    );
+  }
+  return roundKm(total);
+};
+
+/** Total km along all GPS track points for a journey day. */
+export const totalTrackedDistanceKm = (trackPoints = []) => {
+  const sorted = (Array.isArray(trackPoints) ? trackPoints : [])
+    .slice()
+    .sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
+  return pathDistanceKm(sorted);
+};
+
+/**
+ * Path km between two timestamps using GPS breadcrumbs (not straight-line).
+ * Falls back to haversine between fallbackFrom/fallbackTo when trail is sparse.
+ */
+export const pathDistanceBetweenTimes = (
+  trackPoints = [],
+  fromTime,
+  toTime,
+  fallbackFrom = null,
+  fallbackTo = null
+) => {
+  const fromMs = new Date(fromTime).getTime();
+  const toMs = new Date(toTime).getTime();
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return 0;
+
+  const mid = (Array.isArray(trackPoints) ? trackPoints : [])
+    .filter((p) => {
+      const t = new Date(p.recordedAt).getTime();
+      return t >= fromMs && t <= toMs;
+    })
+    .sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt))
+    .map(toCoord);
+
+  const chain = [];
+  const from = toCoord(fallbackFrom);
+  const to = toCoord(fallbackTo);
+  if (Number.isFinite(from.latitude) && Number.isFinite(from.longitude)) chain.push(from);
+  chain.push(...mid);
+  if (Number.isFinite(to.latitude) && Number.isFinite(to.longitude)) {
+    const last = chain[chain.length - 1];
+    if (
+      !last
+      || last.latitude !== to.latitude
+      || last.longitude !== to.longitude
+    ) {
+      chain.push(to);
+    }
+  }
+
+  if (chain.length >= 2) return pathDistanceKm(chain);
+  if (
+    Number.isFinite(from.latitude)
+    && Number.isFinite(from.longitude)
+    && Number.isFinite(to.latitude)
+    && Number.isFinite(to.longitude)
+  ) {
+    return roundKm(haversineKm(from.latitude, from.longitude, to.latitude, to.longitude));
+  }
+  return 0;
+};
+
 /** Default reimbursement rate (INR per km). Override with TRAVEL_RATE_PER_KM. */
 export const getTravelRatePerKm = () => {
   const fromEnv = Number(process.env.TRAVEL_RATE_PER_KM);

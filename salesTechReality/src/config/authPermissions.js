@@ -1,4 +1,5 @@
 import { SIDEBAR_PARENT_SECTIONS } from './sidebarParentSections'
+import { getDashboardKind } from './dashboardRoutes'
 
 const ALL_SECTION_IDS = SIDEBAR_PARENT_SECTIONS.map((section) => section.id)
 const EMPTY_SECTION_IDS = []
@@ -8,12 +9,19 @@ export const getDesignationTitle = (user) =>
 
 const MANAGER_ADD_PROJECT_DENY = new Set(['engineering manager', 'social media manager'])
 
+export const isSalesManagerTitle = (title = '') => {
+  const t = String(title || '').trim().toLowerCase()
+  return t.includes('sales') && t.includes('manager')
+}
+
 /** Manager / operations roles (excludes HR). Mirrors dashboardRoutes manager detection. */
 export const isOperationalManagerUser = (user) => {
   if (!user || isAdminUser(user)) return false
   const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
   const title = getDesignationTitle(user)
   if (title === 'hr manager' || accessRole === 'hr') return false
+  if (isSalesManagerTitle(title)) return true
+  if (getDashboardKind(user) === 'manager') return true
   if (accessRole === 'manager') return true
   if (title === 'manager') return true
   if (title.includes('manager')) return true
@@ -35,6 +43,8 @@ export const getDesignationPermission = (user, key) => {
 
 export const hasFullAccessForUser = (user) => {
   if (isAdminUser(user)) return true
+  // Managers always get full CRM access; do not let designation.hasFullAccess: false block them.
+  if (isOperationalManagerUser(user)) return true
   const fromDesignation = user?.designation?.permissions?.hasFullAccess
   if (typeof fromDesignation === 'boolean') return fromDesignation
   const title = getDesignationTitle(user)
@@ -138,6 +148,7 @@ export const canApproveLeaveForUser = (user) => {
 
 export const canManageEmployeesForUser = (user) => {
   if (isAdminUser(user)) return true
+  if (isOperationalManagerUser(user)) return true
   const fromDesignation = getDesignationPermission(user, 'canManageEmployees')
   if (fromDesignation !== null) return fromDesignation
   const title = getDesignationTitle(user)
@@ -155,7 +166,7 @@ export const canManageLeadsForUser = (user) => {
   const inSales = /sales/i.test(department)
 
   // Title can identify sales roles even if department field is empty
-  if (title.includes('sales manager')) return true
+  if (isSalesManagerTitle(title)) return true
   if (
     title.includes('sales team lead') ||
     (inSales && (title.includes('team leader') || title.includes('team lead')))
@@ -171,6 +182,18 @@ export const canManageLeadsForUser = (user) => {
 
 export const getSidebarSectionsForUser = (user) => {
   if (isAdminUser(user)) return ALL_SECTION_IDS
+  if (isOperationalManagerUser(user)) return ALL_SECTION_IDS
   const sections = user?.access?.sidebarSections
   return sections?.length ? sections : EMPTY_SECTION_IDS
+}
+
+/** Team leaders and operational managers see the My Team sidebar section. */
+export const showsMyTeamForUser = (user) => {
+  if (!user?._id) return false
+  const accessRole = String(user?.designation?.accessRole || '').trim().toLowerCase()
+  if (accessRole === 'team_leader') return true
+  if (isOperationalManagerUser(user)) return true
+  const title = getDesignationTitle(user)
+  if (title.includes('team lead') || title === 'team leader') return true
+  return false
 }

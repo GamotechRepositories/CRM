@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import { getAllReporteeIds, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const PROJECT_COLORS = {
   'In Progress': '#3b82f6',
@@ -172,6 +173,11 @@ const ManagerDashboardView = () => {
     load()
   }, [user?._id])
 
+  const reporteeIds = useMemo(
+    () => getAllReporteeIds(employees, user?._id),
+    [employees, user?._id]
+  )
+
   const stats = useMemo(() => {
     const leadsThisMonth = leads.filter((l) => isThisMonth(l.createdAt)).length
     const leadsLastMonth = leads.filter((l) => isLastMonth(l.createdAt)).length
@@ -226,12 +232,11 @@ const ManagerDashboardView = () => {
 
     const taskCountByEmployee = {}
     tasks.forEach((t) => {
-      const id = t.assignedTo?._id || t.assignedTo
-      if (!id) return
-      const key = String(id)
+      const key = refEmployeeId(t.assignedTo)
+      if (!key || !reporteeIds.has(key)) return
       if (!taskCountByEmployee[key]) {
         taskCountByEmployee[key] = {
-          employee: typeof t.assignedTo === 'object' ? t.assignedTo : employees.find((e) => String(e._id) === key),
+          employee: typeof t.assignedTo === 'object' ? t.assignedTo : employees.find((e) => refEmployeeId(e) === key),
           completed: 0,
           total: 0,
         }
@@ -310,7 +315,7 @@ const ManagerDashboardView = () => {
       activities,
       upcomingEvents,
     }
-  }, [clients, projects, leads, tasks, employees, billings])
+  }, [clients, projects, leads, tasks, employees, billings, reporteeIds])
 
   if (loading) {
     return <div className='p-8 text-sm text-gray-600'>Loading dashboard...</div>

@@ -123,6 +123,12 @@ export const getSiteVisitSchemaFields = ({ employeeRef, propertyRef, leadRef }) 
    * to this visit's check-in (haversine approximation).
    */
   travelFromPreviousKm: { type: Number, default: null },
+  /** Travel journey this check-in belongs to (supports multiple journeys per day). */
+  travelJourneyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    index: true,
+  },
   /** Allocated travel expense record id (tenant Expense collection). */
   travelExpenseId: {
     type: mongoose.Schema.Types.ObjectId,

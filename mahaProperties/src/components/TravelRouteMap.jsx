@@ -9,7 +9,17 @@ const toValidPoints = (points = []) =>
       lat: Number(p.latitude ?? p.lat),
       lng: Number(p.longitude ?? p.lng ?? p.lon),
       label: p.label || p.visitorName || p.address || `Stop ${idx + 1}`,
-      type: p.type || 'check_in',
+      type: p.type || p.source || 'check_in',
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+
+const toTrackPath = (trackPoints = []) =>
+  (Array.isArray(trackPoints) ? trackPoints : [])
+    .map((p) => ({
+      lat: Number(p.latitude ?? p.lat),
+      lng: Number(p.longitude ?? p.lng ?? p.lon),
+      source: p.source || 'track',
+      recordedAt: p.recordedAt,
     }))
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
 
@@ -25,7 +35,6 @@ export const buildGoogleMapsEmbedUrl = (points = [], apiKey = GOOGLE_MAPS_KEY) =
 
   const origin = `${valid[0].lat},${valid[0].lng}`
   const destination = `${valid[valid.length - 1].lat},${valid[valid.length - 1].lng}`
-  // Embed API allows up to 10 intermediate waypoints
   const mid = valid.slice(1, -1).slice(0, 10)
   const waypoints = mid.map((p) => `${p.lat},${p.lng}`).join('|')
 
@@ -70,20 +79,38 @@ const loadLeaflet = () => {
   return leafletLoader
 }
 
+const markerLabel = (p, idx, total) => {
+  if (p.type === 'journey_start' || p.source === 'journey_start') return 'Journey start'
+  if (p.type === 'journey_end' || p.source === 'journey_end') return 'Journey end'
+  if (idx === 0) return 'Start'
+  if (idx === total - 1 && total > 1) return 'Last stop'
+  return p.label || `Stop ${idx + 1}`
+}
+
 /**
- * In-dashboard route map.
- * Uses Google Maps Embed when VITE_GOOGLE_MAPS_API_KEY is set;
- * otherwise shows an OSM route map with the same stops.
+ * Route map: draws the actual GPS trail when trackPoints exist.
+ * Important stops (journey start, check-ins, journey end) show as markers on the timeline.
  */
-const TravelRouteMap = ({ points = [], routeUrl = null, height = 360, emptyMessage = 'No route points yet.' }) => {
+const TravelRouteMap = ({
+  points = [],
+  trackPoints = [],
+  routeUrl = null,
+  height = 360,
+  emptyMessage = 'No route points yet.',
+}) => {
   const mapHostId = useId().replace(/:/g, '')
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const valid = useMemo(() => toValidPoints(points), [points])
-  const embedUrl = useMemo(() => buildGoogleMapsEmbedUrl(valid), [valid])
+  const trail = useMemo(() => toTrackPath(trackPoints), [trackPoints])
+  const hasGpsTrail = trail.length >= 2
+  const embedUrl = useMemo(
+    () => (hasGpsTrail ? null : buildGoogleMapsEmbedUrl(valid)),
+    [hasGpsTrail, valid]
+  )
 
   useEffect(() => {
-    if (embedUrl || !valid.length || !mapRef.current) return undefined
+    if (embedUrl || (!valid.length && !trail.length) || !mapRef.current) return undefined
 
     let cancelled = false
 
@@ -107,13 +134,24 @@ const TravelRouteMap = ({ points = [], routeUrl = null, height = 360, emptyMessa
           maxZoom: 19,
         }).addTo(map)
 
-        const latLngs = valid.map((p) => [p.lat, p.lng])
-        const bounds = L.latLngBounds(latLngs)
+        const allLatLngs = []
+
+        if (hasGpsTrail) {
+          const path = trail.map((p) => [p.lat, p.lng])
+          allLatLngs.push(...path)
+          L.polyline(path, { color: '#2563eb', weight: 5, opacity: 0.9 }).addTo(map)
+        } else if (valid.length > 1) {
+          const path = valid.map((p) => [p.lat, p.lng])
+          allLatLngs.push(...path)
+          L.polyline(path, { color: '#94a3b8', weight: 3, opacity: 0.6, dashArray: '6 8' }).addTo(map)
+        }
 
         valid.forEach((p, idx) => {
-          const isEnd = idx === valid.length - 1
-          const isStart = idx === 0
-          const color = isStart || isEnd ? '#0f172a' : '#4f46e5'
+          allLatLngs.push([p.lat, p.lng])
+          const isStart = p.type === 'journey_start'
+          const isEnd = p.type === 'journey_end'
+          const isCheckIn = p.type === 'check_in'
+          const color = isStart || isEnd ? '#0f172a' : isCheckIn ? '#4f46e5' : '#64748b'
           const marker = L.circleMarker([p.lat, p.lng], {
             radius: isStart || isEnd ? 9 : 7,
             color: '#fff',
@@ -122,18 +160,16 @@ const TravelRouteMap = ({ points = [], routeUrl = null, height = 360, emptyMessa
             fillOpacity: 1,
           }).addTo(map)
           marker.bindPopup(
-            `<strong>${isStart ? 'Start' : isEnd && valid.length > 1 ? 'End / last stop' : `Stop ${idx}`}</strong><br/>${p.label || ''}`
+            `<strong>${markerLabel(p, idx, valid.length)}</strong><br/>${p.label || ''}`
           )
         })
 
-        if (latLngs.length > 1) {
-          L.polyline(latLngs, { color: '#4f46e5', weight: 4, opacity: 0.85 }).addTo(map)
-        }
+        if (!allLatLngs.length) return
 
-        if (latLngs.length === 1) {
-          map.setView(latLngs[0], 14)
+        if (allLatLngs.length === 1) {
+          map.setView(allLatLngs[0], 14)
         } else {
-          map.fitBounds(bounds.pad(0.2))
+          map.fitBounds(L.latLngBounds(allLatLngs).pad(0.2))
         }
 
         setTimeout(() => map.invalidateSize(), 80)
@@ -149,9 +185,9 @@ const TravelRouteMap = ({ points = [], routeUrl = null, height = 360, emptyMessa
         mapInstanceRef.current = null
       }
     }
-  }, [embedUrl, valid, mapHostId])
+  }, [embedUrl, valid, trail, hasGpsTrail, mapHostId])
 
-  if (!valid.length) {
+  if (!valid.length && !trail.length) {
     return (
       <div
         className='flex items-center justify-center bg-slate-50 text-sm text-gray-500 rounded-b-xl'
@@ -190,14 +226,15 @@ const TravelRouteMap = ({ points = [], routeUrl = null, height = 360, emptyMessa
             rel='noopener noreferrer'
             className='rounded-lg bg-white/95 border border-gray-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-white'
           >
-            Open in Google Maps
+            Open stops in Google Maps
           </a>
         ) : null}
       </div>
       {!embedUrl ? (
         <p className='px-4 py-2 text-[11px] text-gray-500 border-t border-gray-100 bg-white'>
-          Showing route stops on the map. Add <code className='text-gray-700'>VITE_GOOGLE_MAPS_API_KEY</code> (Maps
-          Embed API) to display the Google Maps driving route here.
+          {hasGpsTrail
+            ? 'Blue line = your actual GPS path while journey is active. Markers = important stops on the timeline.'
+            : 'GPS trail will appear here once you start moving. Markers show journey start and check-ins.'}
         </p>
       ) : null}
     </div>

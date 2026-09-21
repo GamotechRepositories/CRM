@@ -15,35 +15,65 @@ import {
   canManageClientsForUser,
   getSidebarSectionsForUser,
   isAdminUser,
+  isOperationalManagerUser,
   getDesignationTitle as getUserDesignationTitle,
 } from '../config/authPermissions'
 
 const AUTH_KEY = 'crm_user'
 
+const MANAGER_PERMISSIONS = {
+  hasFullAccess: true,
+  canAddProject: true,
+  canEditProject: true,
+  canViewProjects: true,
+  canAssignTask: true,
+  canApproveLeave: true,
+  canManageEmployees: true,
+  canManageSocialCalendar: true,
+}
+
 const normalizeStoredUser = (user) => {
-  if (!user || !isAdminUser(user)) return user
-  return {
-    ...user,
-    designation: {
-      ...user.designation,
-      accessRole: 'admin',
-      permissions: {
-        hasFullAccess: true,
-        canAddProject: true,
-        canEditProject: true,
-        canViewProjects: true,
-        canAssignTask: true,
-        canApproveLeave: true,
-        canManageEmployees: true,
-        canManageSocialCalendar: true,
-        ...(user.designation?.permissions || {}),
+  if (!user) return user
+
+  if (isAdminUser(user)) {
+    return {
+      ...user,
+      designation: {
+        ...user.designation,
+        accessRole: 'admin',
+        permissions: {
+          ...MANAGER_PERMISSIONS,
+          ...(user.designation?.permissions || {}),
+          hasFullAccess: true,
+        },
       },
-    },
-    access: {
-      ...(user.access || {}),
-      sidebarSections: getSidebarSectionsForUser(user),
-    },
+      access: {
+        ...(user.access || {}),
+        sidebarSections: getSidebarSectionsForUser(user),
+      },
+    }
   }
+
+  if (isOperationalManagerUser(user)) {
+    return {
+      ...user,
+      designation: {
+        ...user.designation,
+        accessRole: user.designation?.accessRole || 'manager',
+        permissions: {
+          ...MANAGER_PERMISSIONS,
+          ...(user.designation?.permissions || {}),
+          hasFullAccess: true,
+        },
+      },
+      access: {
+        ...(user.access || {}),
+        sidebarSections: getSidebarSectionsForUser(user),
+      },
+    }
+  }
+
+  return user
 }
 
 const AuthContext = createContext(null)

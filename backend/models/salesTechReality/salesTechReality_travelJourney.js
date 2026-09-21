@@ -6,7 +6,7 @@ const travelJourneySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-travelJourneySchema.index({ employee: 1, date: 1 }, { unique: true });
+travelJourneySchema.index({ employee: 1, date: 1, startedAt: -1 });
 
 const TravelJourney = mongoose.model('salesTechReality_TravelJourney', travelJourneySchema);
 export default TravelJourney;
