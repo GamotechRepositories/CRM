@@ -13,6 +13,7 @@ import {
   canManageEmployeesForUser,
   canManageLeadsForUser,
   canManageClientsForUser,
+  canViewAllSalarySlipsForUser,
   getSidebarSectionsForUser,
   isAdminUser,
   isOperationalManagerUser,
@@ -156,6 +157,8 @@ export const AuthProvider = ({ children }) => {
 
   const canManageEmployees = () => canManageEmployeesForUser(user)
 
+  const canViewAllSalarySlips = () => canViewAllSalarySlipsForUser(user)
+
   const canManageLeads = () => canManageLeadsForUser(user)
 
   const canManageClients = () => canManageClientsForUser(user)
@@ -182,6 +185,7 @@ export const AuthProvider = ({ children }) => {
         canRateTask,
         canApproveLeave,
         canManageEmployees,
+        canViewAllSalarySlips,
         canManageLeads,
         canManageClients,
         getSidebarSections,

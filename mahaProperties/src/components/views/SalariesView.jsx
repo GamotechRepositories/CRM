@@ -116,7 +116,14 @@ const SalariesView = () => {
                         </button>
                         {s.status === 'Paid' && (
                           <button
-                            onClick={() => navigate('/salary-slips')}
+                            onClick={() => {
+                              const employeeId = s.employee?._id || s.employee
+                              const qs = new URLSearchParams({
+                                salaryId: String(s._id),
+                                ...(employeeId ? { employeeId: String(employeeId) } : {}),
+                              })
+                              navigate(`/salary-slips?${qs.toString()}`)
+                            }}
                             className='px-2 py-1 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 text-xs font-medium hover:bg-blue-100'
                           >
                             View Slip

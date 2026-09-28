@@ -115,6 +115,22 @@ export const canManageEmployeesForUser = (user) => {
   return ['admin', 'hr manager'].includes(title)
 }
 
+/** HR / leadership can open any employee's paid salary slip (not just their own). */
+export const canViewAllSalarySlipsForUser = (user) => {
+  if (!user) return false
+  if (isAdminUser(user)) return true
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  const title = getDesignationTitle(user)
+  if (accessRole === 'hr' || title === 'hr manager') return true
+  if (accessRole === 'technical_lead' || title === 'technical lead') return true
+  if (
+    ['chief executive officer', 'chief operating officer', 'chief financial officer'].includes(title)
+  ) {
+    return true
+  }
+  return false
+}
+
 /** Admin, Sales Manager, or Sales Team Lead — upload/distribute leads & view all. */
 export const canManageLeadsForUser = (user) => {
   if (!user) return false

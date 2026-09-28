@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
 import html2canvas from 'html2canvas'
@@ -11,23 +12,35 @@ const MONTH_NAMES = [
 ]
 
 const SalarySlipPage = () => {
-  const { user } = useAuth()
+  const { user, canViewAllSalarySlips } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const printRef = useRef(null)
   const slipRef = useRef(null)
 
+  const viewAll = canViewAllSalarySlips()
+  const urlEmployeeId = searchParams.get('employeeId') || ''
+  const urlSalaryId = searchParams.get('salaryId') || ''
+
   const [company, setCompany] = useState(null)
   const [salaries, setSalaries] = useState([])
+  const [employees, setEmployees] = useState([])
   const [designations, setDesignations] = useState([])
   const [selectedSalary, setSelectedSalary] = useState(null)
+  const [employeeFilter, setEmployeeFilter] = useState(urlEmployeeId || 'all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(null)
 
   useEffect(() => {
+    if (urlEmployeeId) setEmployeeFilter(urlEmployeeId)
+  }, [urlEmployeeId])
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
+        setError(null)
         const compRes = await api.get('/company-profile').catch(() => ({ data: {} }))
         setCompany(compRes.data || {})
 
@@ -37,22 +50,44 @@ const SalarySlipPage = () => {
           : desigRes.data?.designations || desigRes.data?.data || []
         setDesignations(desigList)
 
+        if (viewAll) {
+          const empRes = await api.get('/employees').catch(() => ({ data: [] }))
+          const empList = Array.isArray(empRes.data) ? empRes.data : empRes.data?.data || []
+          setEmployees(empList.filter((e) => e.status !== 'Inactive'))
+        } else {
+          setEmployees([])
+        }
+
         const empId = user?._id || user?.id
-        const endpoint = empId ? `/salaries?employee=${empId}` : '/salaries'
+        let endpoint = '/salaries'
+        if (viewAll) {
+          if (employeeFilter && employeeFilter !== 'all') {
+            endpoint = `/salaries?employee=${encodeURIComponent(employeeFilter)}`
+          }
+        } else if (empId) {
+          endpoint = `/salaries?employee=${encodeURIComponent(empId)}`
+        }
+
         const salRes = await api.get(endpoint).catch(() => ({ data: [] }))
         const list = Array.isArray(salRes.data)
           ? salRes.data
           : salRes.data?.data || salRes.data?.salaries || []
-        
+
         const sorted = (Array.isArray(list) ? list : []).sort((a, b) => {
           if (b.year !== a.year) return b.year - a.year
           return b.month - a.month
         })
-        
+
         setSalaries(sorted)
-        const firstPaid = sorted.find((s) => s.status === 'Paid')
-        if (firstPaid) setSelectedSalary(firstPaid)
-        else if (sorted.length > 0) setSelectedSalary(sorted[0])
+
+        let pick = null
+        if (urlSalaryId) {
+          pick = sorted.find((s) => String(s._id) === String(urlSalaryId))
+        }
+        if (!pick) {
+          pick = sorted.find((s) => s.status === 'Paid') || sorted[0] || null
+        }
+        setSelectedSalary(pick)
       } catch (err) {
         setError(err.response?.data?.message || err.message || 'Error loading salary slips')
       } finally {
@@ -60,8 +95,33 @@ const SalarySlipPage = () => {
       }
     }
 
-    fetchData()
-  }, [user])
+    if (user?._id || user?.id) fetchData()
+  }, [user, viewAll, employeeFilter, urlSalaryId])
+
+  const visibleSalaries = useMemo(() => {
+    if (!viewAll || employeeFilter === 'all') return salaries
+    return salaries.filter(
+      (s) => String(s.employee?._id || s.employee) === String(employeeFilter)
+    )
+  }, [salaries, viewAll, employeeFilter])
+
+  const onEmployeeFilterChange = (value) => {
+    setEmployeeFilter(value)
+    const next = new URLSearchParams(searchParams)
+    if (value && value !== 'all') next.set('employeeId', value)
+    else next.delete('employeeId')
+    next.delete('salaryId')
+    setSearchParams(next, { replace: true })
+  }
+
+  const onSelectSalary = (salary) => {
+    setSelectedSalary(salary)
+    const next = new URLSearchParams(searchParams)
+    next.set('salaryId', String(salary._id))
+    const empRef = salary.employee?._id || salary.employee
+    if (empRef) next.set('employeeId', String(empRef))
+    setSearchParams(next, { replace: true })
+  }
 
   const getDesignationTitle = (desig) => {
     if (!desig) return '—'
@@ -224,7 +284,9 @@ const SalarySlipPage = () => {
           </nav>
           <h1 className='text-2xl font-bold text-gray-900'>Salary Slips</h1>
           <p className='text-sm text-gray-500 mt-1'>
-            View and download your monthly salary slips once approved and marked as paid by HR.
+            {viewAll
+              ? 'View and download salary slips for all employees after HR marks payments as Paid.'
+              : 'View and download your monthly salary slips once HR marks the payment as Paid.'}
           </p>
         </div>
 
@@ -238,18 +300,39 @@ const SalarySlipPage = () => {
           {/* Left Column: Month Selector List */}
           <div className='lg:col-span-4 print:hidden space-y-4'>
             <div className='bg-white rounded-xl shadow-sm border border-gray-200 p-5'>
+              {viewAll ? (
+                <div className='mb-4'>
+                  <label className='block text-xs font-semibold text-gray-500 mb-1.5' htmlFor='slip-employee'>
+                    Employee
+                  </label>
+                  <select
+                    id='slip-employee'
+                    value={employeeFilter}
+                    onChange={(e) => onEmployeeFilterChange(e.target.value)}
+                    className='w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  >
+                    <option value='all'>All employees</option>
+                    {employees.map((emp) => (
+                      <option key={emp._id} value={emp._id}>
+                        {emp.name}
+                        {emp.employeeCode ? ` (${emp.employeeCode})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
               <h2 className='text-base font-semibold text-gray-800 mb-3'>Payment Records</h2>
-              {salaries.length === 0 ? (
+              {visibleSalaries.length === 0 ? (
                 <p className='text-sm text-gray-500 py-4 text-center'>No salary records found.</p>
               ) : (
                 <div className='space-y-2 max-h-[500px] overflow-y-auto pr-1'>
-                  {salaries.map((s) => {
+                  {visibleSalaries.map((s) => {
                     const isSelected = selectedSalary?._id === s._id
                     const sPaid = s.status === 'Paid'
                     return (
                       <button
                         key={s._id}
-                        onClick={() => setSelectedSalary(s)}
+                        onClick={() => onSelectSalary(s)}
                         className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between ${
                           isSelected
                             ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600'
