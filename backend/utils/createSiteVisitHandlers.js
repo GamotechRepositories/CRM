@@ -265,6 +265,16 @@ const totalDistanceForJourneys = (journeys = []) => {
   return tracked;
 };
 
+const dayKeyToYmd = (dayStart) => {
+  const d = dayStart instanceof Date ? dayStart : new Date(dayStart);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+};
+
 const sortTrackPoints = (trackPoints = []) =>
   (Array.isArray(trackPoints) ? trackPoints : [])
     .slice()
@@ -883,6 +893,76 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
     }
   };
 
+  const getTravelHistory = async (req, res) => {
+    try {
+      if (!TravelJourney) {
+        return res.status(500).json({ message: 'Travel journey model is not configured for this tenant' });
+      }
+
+      const employeeId = String(req.query.employeeId || '').trim();
+      if (!employeeId) {
+        return res.status(400).json({ message: 'employeeId is required' });
+      }
+
+      const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
+      const ratePerKm = getTravelRatePerKm();
+
+      const journeys = await TravelJourney.find({
+        employee: employeeId,
+        startedAt: { $ne: null },
+      })
+        .sort({ date: -1, startedAt: -1 })
+        .lean();
+
+      const dayMap = new Map();
+      journeys.forEach((journey) => {
+        const dayStart = startOfBusinessDay(journey.date || journey.startedAt);
+        const key = dayStart.toISOString();
+        if (!dayMap.has(key)) {
+          dayMap.set(key, {
+            date: key,
+            dateYmd: dayKeyToYmd(dayStart),
+            journeysRaw: [],
+          });
+        }
+        dayMap.get(key).journeysRaw.push(journey);
+      });
+
+      const days = [...dayMap.values()]
+        .map((bucket) => {
+          const sorted = bucket.journeysRaw
+            .slice()
+            .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+          const serialized = sorted.map((j, idx) => serializeJourney(j, idx + 1));
+          const totalDistanceKm = roundKm(
+            sorted.reduce((sum, j) => sum + totalTrackedDistanceKm(j.trackPoints || []), 0)
+          );
+          const activeCount = sorted.filter((j) => j.status === 'active').length;
+          const endedCount = sorted.filter((j) => j.status === 'ended').length;
+          return {
+            date: bucket.date,
+            dateYmd: bucket.dateYmd,
+            journeyCount: sorted.length,
+            activeCount,
+            endedCount,
+            totalDistanceKm,
+            estimatedExpense: roundKm(totalDistanceKm * ratePerKm, 0),
+            journeys: serialized,
+          };
+        })
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, limit);
+
+      return res.status(200).json({
+        employeeId,
+        ratePerKm,
+        days,
+      });
+    } catch (error) {
+      return res.status(500).json({ message: 'Error fetching travel history', error: error?.message || error });
+    }
+  };
+
   const recordJourneyTrack = async (req, res) => {
     try {
       if (!TravelJourney) {
@@ -940,6 +1020,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
     endTravelJourney,
     recordJourneyTrack,
     getTravelTimeline,
+    getTravelHistory,
     allocateTravelExpense,
   };
 };

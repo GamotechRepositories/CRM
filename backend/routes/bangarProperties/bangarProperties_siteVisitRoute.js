@@ -14,12 +14,14 @@ const {
   endTravelJourney,
   recordJourneyTrack,
   getTravelTimeline,
+  getTravelHistory,
   allocateTravelExpense,
 } = siteVisitHandlers;
 
 router.get('/site-visits', getSiteVisits);
 router.post('/site-visits', createSiteVisit);
 router.get('/site-visits/travel-timeline', getTravelTimeline);
+router.get('/site-visits/travel-history', getTravelHistory);
 router.post('/site-visits/start-journey', startTravelJourney);
 router.post('/site-visits/end-journey', endTravelJourney);
 router.post('/site-visits/record-track', recordJourneyTrack);
