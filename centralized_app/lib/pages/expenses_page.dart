@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kExpenseCategories = ['Office', 'Marketing', 'Utilities', 'Travel', 'Software', 'Other'];
 
@@ -153,7 +154,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchExpenses,
+        onRefresh: () => ApiCache.fresh(_fetchExpenses),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

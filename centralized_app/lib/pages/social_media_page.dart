@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kPlatforms = ['All', 'Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other'];
 const kContentTypes = ['Reel', 'Feed Post', 'Carousel', 'Story'];
@@ -156,7 +157,7 @@ class _SocialMediaPageState extends State<SocialMediaPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchPosts,
+        onRefresh: () => ApiCache.fresh(_fetchPosts),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

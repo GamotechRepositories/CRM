@@ -45,6 +45,7 @@ import 'reports_page.dart';
 import 'revenue_page.dart';
 import 'settings_page.dart';
 import 'timesheets_page.dart';
+import '../api/api_cache.dart';
 
 
 
@@ -125,7 +126,7 @@ class _ModuleListPageState extends State<ModuleListPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => ApiCache.fresh(_load),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
         itemCount: _items.length,

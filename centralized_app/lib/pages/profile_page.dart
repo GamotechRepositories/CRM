@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/salary_calculator.dart';
+import '../api/api_cache.dart';
 
 /// `/my-profile` — fetches `GET /employees/:id/profile` for the logged-in user.
 class ProfilePage extends StatefulWidget {
@@ -91,7 +92,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => ApiCache.fresh(_load),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
         children: [

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/company_config.dart';
+import 'api_cache.dart';
 
 /// Shared HTTP client — base URL switches with the selected company.
 class ApiClient {
@@ -31,22 +32,29 @@ class ApiClient {
       },
       body: jsonEncode(body ?? {}),
     );
-    return _decode(res);
+    return _decodeMutation(res);
   }
 
   Future<Map<String, dynamic>> getJson(
     String path, {
     Map<String, String>? query,
     Map<String, String>? headers,
-  }) async {
-    final res = await http.get(
-      _uri(path, query),
-      headers: {
-        'Accept': 'application/json',
-        ...?headers,
-      },
-    );
-    return _decode(res);
+    bool useCache = true,
+  }) {
+    final uri = _uri(path, query);
+    Future<Map<String, dynamic>> fetch() async {
+      final res = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          ...?headers,
+        },
+      );
+      return _decode(res);
+    }
+
+    if (!useCache || !ApiCache.isCacheable(path)) return fetch();
+    return ApiCache.getOrFetch(uri.toString(), fetch);
   }
 
   Future<Map<String, dynamic>> patchJson(
@@ -63,7 +71,7 @@ class ApiClient {
       },
       body: jsonEncode(body ?? {}),
     );
-    return _decode(res);
+    return _decodeMutation(res);
   }
 
   Future<Map<String, dynamic>> putJson(
@@ -80,7 +88,7 @@ class ApiClient {
       },
       body: jsonEncode(body ?? {}),
     );
-    return _decode(res);
+    return _decodeMutation(res);
   }
 
   Future<Map<String, dynamic>> deleteJson(
@@ -94,6 +102,11 @@ class ApiClient {
         ...?headers,
       },
     );
+    return _decodeMutation(res);
+  }
+
+  Map<String, dynamic> _decodeMutation(http.Response res) {
+    ApiCache.clear();
     return _decode(res);
   }
 

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
+import '../api/api_cache.dart';
 
 class ManagerDashboardPage extends StatefulWidget {
   const ManagerDashboardPage({super.key});
@@ -217,7 +218,7 @@ class _ManagerDashboardPageState extends State<ManagerDashboardPage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchDashboardData,
+        onRefresh: () => ApiCache.fresh(_fetchDashboardData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

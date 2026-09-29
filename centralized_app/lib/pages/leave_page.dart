@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/leave_helpers.dart';
+import '../api/api_cache.dart';
 
 enum _LeaveTab { my, list, calendar, settings }
 
@@ -137,7 +138,7 @@ class _LeavePageState extends State<LeavePage> {
     if (!isApprover && _tab == _LeaveTab.list) _tab = _LeaveTab.my;
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => ApiCache.fresh(_load),
       child: Stack(
         children: [
           ListView(

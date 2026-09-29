@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../utils/project_helpers.dart';
 import '../utils/task_status.dart';
+import '../api/api_cache.dart';
 
 class TimesheetsPage extends StatefulWidget {
   const TimesheetsPage({super.key});
@@ -160,7 +161,7 @@ class _TimesheetsPageState extends State<TimesheetsPage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../navigation/app_nav.dart';
 import '../utils/task_status.dart';
+import '../api/api_cache.dart';
 
 /// Tasks Page — supports all company tasks (`/tasks`) or user tasks (`/my-tasks`).
 class MyTasksPage extends StatefulWidget {
@@ -184,7 +185,7 @@ class _MyTasksPageState extends State<MyTasksPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => ApiCache.fresh(_load),
         child: Stack(
           children: [
             ListView(

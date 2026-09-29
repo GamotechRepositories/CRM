@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kAccessRoles = ['employee', 'manager', 'admin'];
 
@@ -138,7 +139,7 @@ class _DesignationsPageState extends State<DesignationsPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

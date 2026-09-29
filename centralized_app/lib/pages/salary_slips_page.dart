@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/salary_calculator.dart';
+import '../api/api_cache.dart';
 
 const _monthNames = [
   '',
@@ -134,7 +135,7 @@ class _SalarySlipsPageState extends State<SalarySlipsPage> {
     final isPaid = (selected?['status'] ?? '').toString() == 'Paid';
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => ApiCache.fresh(_load),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
         children: [

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../api/api_cache.dart';
 
 const List<String> kLeadStatusOptions = [
   'Call not Received',
@@ -207,7 +208,7 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: RefreshIndicator(
-        onRefresh: _fetchLeads,
+        onRefresh: () => ApiCache.fresh(_fetchLeads),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16.0),

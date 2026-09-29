@@ -7,6 +7,7 @@ import '../utils/attendance_helpers.dart';
 import '../utils/geocode_helpers.dart';
 import '../utils/ist_time.dart';
 import '../widgets/travel_route_map.dart';
+import '../api/api_cache.dart';
 
 /// Travel dashboard for site coordinators (mirrors web `SiteCoordinatorDashboardView.jsx`).
 class SiteCoordinatorDashboardBody extends StatefulWidget {
@@ -395,7 +396,7 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
       }
 
       return RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => ApiCache.fresh(_load),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),

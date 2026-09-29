@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../navigation/app_nav.dart';
 import '../utils/project_helpers.dart';
+import '../api/api_cache.dart';
 
 /// Projects Page — supports all projects (`/projects`) or user projects (`/my-projects`).
 class MyProjectsPage extends StatefulWidget {
@@ -126,7 +127,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
     final filtered = _filteredProjects;
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => ApiCache.fresh(_load),
       child: Stack(
         children: [
           ListView(

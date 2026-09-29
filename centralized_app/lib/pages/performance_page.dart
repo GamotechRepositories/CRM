@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/task_status.dart';
+import '../api/api_cache.dart';
 
 class PerformancePage extends StatefulWidget {
   const PerformancePage({super.key});
@@ -139,7 +140,7 @@ class _PerformancePageState extends State<PerformancePage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

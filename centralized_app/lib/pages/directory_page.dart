@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../api/api_cache.dart';
 
 class DirectoryPage extends StatefulWidget {
   const DirectoryPage({super.key});
@@ -269,7 +270,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

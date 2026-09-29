@@ -11,6 +11,7 @@ import 'hr_dashboard_page.dart';
 import 'manager_dashboard_page.dart';
 import 'site_coordinator_dashboard_body.dart';
 import 'team_leader_dashboard_page.dart';
+import '../api/api_cache.dart';
 
 /// Dashboard body — role-specific KPIs (admin, site coordinator, employee, …).
 class DashboardPage extends StatefulWidget {
@@ -143,7 +144,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     if (!isAdmin) {
       return RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => ApiCache.fresh(_load),
         child: _loading
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -180,7 +181,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () => ApiCache.fresh(_load),
         child: _loading
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),

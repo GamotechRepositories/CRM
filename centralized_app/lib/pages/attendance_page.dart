@@ -8,6 +8,7 @@ import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../utils/attendance_helpers.dart';
 import '../utils/geocode_helpers.dart';
+import '../api/api_cache.dart';
 
 enum _ViewMode { live, monthly }
 
@@ -443,7 +444,7 @@ class _AttendancePageState extends State<AttendancePage> {
     final meetingMinutes = AttendanceHelpers.trackedMinutes(myAtt, 'meetingStartedAt', 'meetingDurationMinutes', _liveClock);
 
     return RefreshIndicator(
-      onRefresh: _bootstrap,
+      onRefresh: () => ApiCache.fresh(_bootstrap),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
         children: [

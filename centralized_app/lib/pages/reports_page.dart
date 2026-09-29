@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../api/api_cache.dart';
 
 const kMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -219,7 +220,7 @@ class _ReportsPageState extends State<ReportsPage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

@@ -14,10 +14,14 @@ class ChatRealtimeService {
   final _messages = StreamController<Map<String, dynamic>>.broadcast();
   final _messageUpdates = StreamController<Map<String, dynamic>>.broadcast();
   final _conversationUpdates = StreamController<Map<String, dynamic>>.broadcast();
+  final _taskChanges = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get messages => _messages.stream;
   Stream<Map<String, dynamic>> get messageUpdates => _messageUpdates.stream;
   Stream<Map<String, dynamic>> get conversationUpdates => _conversationUpdates.stream;
+
+  /// Backend `task:changed` events for the connected user (assigned, status, …).
+  Stream<Map<String, dynamic>> get taskChanges => _taskChanges.stream;
 
   bool get isConnected => _socket?.connected == true;
 
@@ -63,12 +67,15 @@ class ChatRealtimeService {
           _messageUpdates.add(map);
         case 'chat:conversation:updated':
           _conversationUpdates.add(map);
+        case 'task:changed':
+          _taskChanges.add(map);
       }
     }
 
     socket.on('chat:message', (payload) => emitMap('chat:message', payload));
     socket.on('chat:message:updated', (payload) => emitMap('chat:message:updated', payload));
     socket.on('chat:conversation:updated', (payload) => emitMap('chat:conversation:updated', payload));
+    socket.on('task:changed', (payload) => emitMap('task:changed', payload));
 
     _socket = socket;
     socket.connect();

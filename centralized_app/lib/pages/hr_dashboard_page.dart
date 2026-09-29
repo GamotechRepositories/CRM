@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
+import '../api/api_cache.dart';
 
 const kDeptColors = [
   Color(0xFF3B82F6),
@@ -197,7 +198,7 @@ class _HrDashboardPageState extends State<HrDashboardPage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchDashboardData,
+        onRefresh: () => ApiCache.fresh(_fetchDashboardData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

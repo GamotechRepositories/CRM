@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kAssetTypes = ['Laptop', 'Desktop', 'Mobile Phone', 'SIM Card', 'Access Card', 'Monitor', 'Other'];
 const kAssetStatuses = ['Available', 'Assigned', 'Maintenance', 'Retired'];
@@ -200,7 +201,7 @@ class _AssetsPageState extends State<AssetsPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

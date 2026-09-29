@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
 import '../utils/project_helpers.dart';
+import '../api/api_cache.dart';
 
 class MilestonesPage extends StatefulWidget {
   const MilestonesPage({super.key});
@@ -115,7 +116,7 @@ class _MilestonesPageState extends State<MilestonesPage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchProjects,
+        onRefresh: () => ApiCache.fresh(_fetchProjects),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

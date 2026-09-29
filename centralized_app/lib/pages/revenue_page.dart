@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 class RevenuePage extends StatefulWidget {
   const RevenuePage({super.key});
@@ -145,7 +146,7 @@ class _RevenuePageState extends State<RevenuePage> {
         elevation: 0,
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchData,
+        onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

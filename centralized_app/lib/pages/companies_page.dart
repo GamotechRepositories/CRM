@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 class CompaniesPage extends StatefulWidget {
   const CompaniesPage({super.key});
@@ -143,7 +144,7 @@ class _CompaniesPageState extends State<CompaniesPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchCompanies,
+        onRefresh: () => ApiCache.fresh(_fetchCompanies),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

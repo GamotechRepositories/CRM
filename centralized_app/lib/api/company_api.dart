@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import '../config/company_config.dart';
 import '../dashboard/dashboard_stats.dart';
+import '../services/work_reminder_service.dart';
 import '../dashboard/employee_dashboard_stats.dart';
 import 'ads_research_global_api.dart';
 import 'api_client.dart';
@@ -393,32 +396,47 @@ class CompanyApi {
     required double latitude,
     required double longitude,
     required String address,
-  }) =>
-      client.postJson(CrmPaths.attendanceCheckIn, body: {
-        'employee': employeeId,
-        'latitude': latitude,
-        'longitude': longitude,
-        'address': address,
-      });
+  }) async {
+    final res = await client.postJson(CrmPaths.attendanceCheckIn, body: {
+      'employee': employeeId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+    });
+    unawaited(WorkReminderService.instance.onCheckedIn());
+    return res;
+  }
 
   Future<Map<String, dynamic>> checkOut({
     required String employeeId,
     required double latitude,
     required double longitude,
     required String address,
-  }) =>
-      client.postJson(CrmPaths.attendanceCheckOut, body: {
-        'employee': employeeId,
-        'latitude': latitude,
-        'longitude': longitude,
-        'address': address,
-      });
+  }) async {
+    final res = await client.postJson(CrmPaths.attendanceCheckOut, body: {
+      'employee': employeeId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'address': address,
+    });
+    unawaited(WorkReminderService.instance.onCheckedOut());
+    return res;
+  }
 
-  Future<Map<String, dynamic>> startBreak({required String employeeId}) =>
-      client.postJson(CrmPaths.attendanceBreakStart, body: {'employee': employeeId});
+  Future<Map<String, dynamic>> startBreak({required String employeeId}) async {
+    final res = await client.postJson(CrmPaths.attendanceBreakStart, body: {'employee': employeeId});
+    final attendance = res['attendance'];
+    unawaited(WorkReminderService.instance.onBreakStarted(
+      attendance is Map ? Map<String, dynamic>.from(attendance) : null,
+    ));
+    return res;
+  }
 
-  Future<Map<String, dynamic>> endBreak({required String employeeId}) =>
-      client.postJson(CrmPaths.attendanceBreakEnd, body: {'employee': employeeId});
+  Future<Map<String, dynamic>> endBreak({required String employeeId}) async {
+    final res = await client.postJson(CrmPaths.attendanceBreakEnd, body: {'employee': employeeId});
+    unawaited(WorkReminderService.instance.onBreakEnded());
+    return res;
+  }
 
   Future<Map<String, dynamic>> startMeeting({required String employeeId}) =>
       client.postJson(CrmPaths.attendanceMeetingStart, body: {'employee': employeeId});

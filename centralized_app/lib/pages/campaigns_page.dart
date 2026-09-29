@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kCampaignTypes = ['Multi-Channel', 'SEO', 'Social Media', 'Content', 'Email Blast', 'PPC Ads'];
 const kCampaignStatuses = ['Active', 'Planning', 'Completed'];
@@ -194,7 +195,7 @@ class _CampaignsPageState extends State<CampaignsPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchCampaigns,
+        onRefresh: () => ApiCache.fresh(_fetchCampaigns),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),

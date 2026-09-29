@@ -8,6 +8,7 @@ import '../navigation/app_sidebar.dart';
 import '../navigation/sidebar_nav.dart';
 import '../pages/app_page_factory.dart';
 import '../screens/login_screen.dart';
+import '../services/work_reminder_service.dart';
 
 /// Logged-in shell: compact drawer sidebar + company-scoped page content.
 class AppShell extends StatefulWidget {
@@ -17,7 +18,7 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   List<String> _pathHistory = [];
 
   String get _selectedPath {
@@ -39,6 +40,23 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _initPathHistoryIfNeeded();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) WorkReminderService.instance.start(context.read<AuthSession>());
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      WorkReminderService.instance.start(context.read<AuthSession>());
+    }
   }
 
   void _selectPath(String path) {
@@ -60,6 +78,8 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  /// Visited pages stay mounted so their state (and loaded data) survives
+  /// navigation; only the selected one is visible.
   final Map<String, Widget> _cachedPages = {};
 
   @override
@@ -67,10 +87,22 @@ class _AppShellState extends State<AppShell> {
     _initPathHistoryIfNeeded();
     final session = context.watch<AuthSession>();
     final nav = SidebarNav.build(sidebarContextForSession(session));
-    final pageTitle = SidebarNav.labelForPath(nav, _selectedPath) ?? 'CRM';
+    final selectedPath = _selectedPath;
+    final pageTitle = SidebarNav.labelForPath(nav, selectedPath) ?? 'CRM';
 
-    // Retrieve cached page or build a new one.
-    final page = _cachedPages[_selectedPath] ??= AppPageFactory.build(_selectedPath);
+    _cachedPages.putIfAbsent(selectedPath, () => AppPageFactory.build(selectedPath));
+    final paths = _cachedPages.keys.toList();
+    final page = IndexedStack(
+      index: paths.indexOf(selectedPath),
+      children: [
+        for (final path in paths)
+          TickerMode(
+            key: ValueKey(path),
+            enabled: path == selectedPath,
+            child: _cachedPages[path]!,
+          ),
+      ],
+    );
 
     return PopScope(
       canPop: _pathHistory.length <= 1,

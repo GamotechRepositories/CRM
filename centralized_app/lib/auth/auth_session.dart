@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/api_cache.dart';
 import '../api/company_api.dart';
 import '../config/company_config.dart';
+import '../services/work_reminder_service.dart';
 import 'role_access.dart';
 
 const _kCompanyKey = 'crm_selected_company';
@@ -103,6 +105,8 @@ class AuthSession extends ChangeNotifier {
 
   Future<void> logout() async {
     _user = null;
+    ApiCache.clear();
+    await WorkReminderService.instance.stop();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kUserKey);
     // Keep last company selection for convenience.

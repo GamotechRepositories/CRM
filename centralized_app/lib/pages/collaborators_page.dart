@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../auth/auth_session.dart';
+import '../api/api_cache.dart';
 
 const kCollaboratorRateTypes = ['Per Hour', 'Per Day', 'Per Project', 'Fixed'];
 const kCollaboratorIndividualTypes = [
@@ -187,7 +188,7 @@ class _CollaboratorsPageState extends State<CollaboratorsPage> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchCollaborators,
+        onRefresh: () => ApiCache.fresh(_fetchCollaborators),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(14.0),
