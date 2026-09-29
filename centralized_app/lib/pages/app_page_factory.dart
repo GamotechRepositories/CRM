@@ -128,7 +128,7 @@ class _ModuleListPageState extends State<ModuleListPage> {
     return RefreshIndicator(
       onRefresh: () => ApiCache.fresh(_load),
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+        padding: EdgeInsets.fromLTRB(10, 8, 10, 16 + MediaQuery.paddingOf(context).bottom),
         itemCount: _items.length,
         separatorBuilder: (context, _) => const SizedBox(height: 6),
         itemBuilder: (context, index) {

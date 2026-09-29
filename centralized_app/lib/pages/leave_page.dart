@@ -142,7 +142,7 @@ class _LeavePageState extends State<LeavePage> {
       child: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 72),
+            padding: EdgeInsets.fromLTRB(10, 8, 10, 72 + MediaQuery.paddingOf(context).bottom),
             children: [
               Text(
                 isApprover
@@ -231,7 +231,7 @@ class _LeavePageState extends State<LeavePage> {
           ),
           Positioned(
             right: 12,
-            bottom: 12,
+            bottom: 12 + MediaQuery.paddingOf(context).bottom,
             child: FloatingActionButton.extended(
               onPressed: _openApplyForm,
               backgroundColor: const Color(0xFF2563EB),

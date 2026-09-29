@@ -28,7 +28,6 @@ class _DashboardPageState extends State<DashboardPage> {
   EmployeeDashboardStats? _employeeStats;
   bool _loading = true;
   String? _error;
-  int _activeBottomTab = 0;
 
   @override
   void initState() {
@@ -38,7 +37,6 @@ class _DashboardPageState extends State<DashboardPage> {
       final canonical = RoleAccess.dashboardPath(session.user);
       if (widget.requestedPath != canonical && RoleAccess.isDashboardPath(widget.requestedPath)) {
         AppNavScope.navigate(context, canonical);
-        return;
       }
       _load();
     });
@@ -47,7 +45,11 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _load() async {
     final session = context.read<AuthSession>();
     final kind = RoleAccess.getDashboardKind(session.user);
-    if (kind == DashboardKind.siteCoordinator) {
+    // These dashboards fetch their own data in their own widgets.
+    if (kind == DashboardKind.siteCoordinator ||
+        kind == DashboardKind.hr ||
+        kind == DashboardKind.manager ||
+        kind == DashboardKind.teamLeader) {
       setState(() {
         _loading = false;
         _error = null;
@@ -165,7 +167,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   )
                 : ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+                    padding: EdgeInsets.fromLTRB(10, 8, 10, 20 + MediaQuery.paddingOf(context).bottom),
                     children: [
                       if (_employeeStats != null)
                         EmployeeDashboardBody(
@@ -202,26 +204,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   )
                 : ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 24 + MediaQuery.paddingOf(context).bottom),
                     children: [
                       _WelcomeRow(adminName: firstName.isEmpty ? 'Admin' : firstName),
                       const SizedBox(height: 16),
                       if (_stats != null) DashboardStatsBody(stats: _stats!),
                     ],
                   ),
-      ),
-      bottomNavigationBar: _AdminBottomNav(
-        currentIndex: _activeBottomTab,
-        onTap: (index) {
-          if (index == 4) {
-            Scaffold.of(context).openDrawer();
-            return;
-          }
-          setState(() => _activeBottomTab = index);
-          if (index == 1) AppNavScope.navigate(context, '/leads');
-          if (index == 2) AppNavScope.navigate(context, '/tasks');
-          if (index == 3) AppNavScope.navigate(context, '/reports');
-        },
       ),
     );
   }
@@ -1527,92 +1516,6 @@ class _MiniKpiCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Floating / Sleek Bottom Navigation Bar matching reference tab icons (Dashboard, Leads, Tasks, Reports, More).
-class _AdminBottomNav extends StatelessWidget {
-  const _AdminBottomNav({
-    required this.currentIndex,
-    required this.onTap,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = const [
-      ('Dashboard', Icons.grid_view_rounded),
-      ('Leads', Icons.person_search_outlined),
-      ('Tasks', Icons.assignment_outlined),
-      ('Reports', Icons.bar_chart_rounded),
-      ('More', Icons.more_horiz_rounded),
-    ];
-
-    return Container(
-      height: 68,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          for (int i = 0; i < items.length; i++)
-            if (i == currentIndex)
-              InkWell(
-                onTap: () => onTap(i),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDBEAFE),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(items[i].$2, color: const Color(0xFF2563EB), size: 18),
-                      const SizedBox(height: 2),
-                      Text(
-                        items[i].$1,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF2563EB),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              InkWell(
-                onTap: () => onTap(i),
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(items[i].$2, color: const Color(0xFF64748B), size: 20),
-                      const SizedBox(height: 2),
-                      Text(
-                        items[i].$1,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
         ],
       ),
     );

@@ -37,37 +37,39 @@ class WorkReminderService {
   ({int hour, int minute})? _shiftStart;
   ({int hour, int minute})? _shiftEnd;
 
-  /// Call once the user is logged in (and again on app resume).
+  /// Call once the user is logged in. Reuses cached / in-flight responses so it
+  /// never duplicates the dashboard's own requests.
   Future<void> start(AuthSession session) async {
     final api = session.api;
     final userId = session.userId;
     if (api == null || userId.isEmpty) return;
 
     final key = '${api.company.key}:$userId';
-    if (_sessionKey != key) {
-      _sessionKey = key;
-      _lastRefresh = null;
-      await NotificationService.instance.requestPermissions();
-      _listenForTasks(api, userId);
-    }
+    if (_sessionKey == key) return;
+    _sessionKey = key;
+    _lastRefresh = null;
+    _listenForTasks(api, userId);
     await refresh(session);
+    await NotificationService.instance.requestPermissions();
   }
 
   /// Re-syncs scheduled reminders and catches up on tasks assigned while the
   /// app was closed. Throttled so rapid resumes don't spam the API.
-  Future<void> refresh(AuthSession session, {bool force = false}) async {
+  /// [fresh] bypasses the API cache (used on app resume).
+  Future<void> refresh(AuthSession session, {bool fresh = false}) async {
     final api = session.api;
     final userId = session.userId;
-    if (api == null || userId.isEmpty) return;
+    if (api == null || userId.isEmpty || _sessionKey == null) return;
     final now = DateTime.now();
-    if (!force && _lastRefresh != null && now.difference(_lastRefresh!) < const Duration(minutes: 1)) {
+    if (_lastRefresh != null && now.difference(_lastRefresh!) < const Duration(minutes: 1)) {
       return;
     }
     _lastRefresh = now;
-    await Future.wait([
-      _catchUpOnTasks(api, userId),
-      _syncAttendanceReminders(api, userId, session.user),
-    ]);
+    Future<void> run() => Future.wait([
+          _catchUpOnTasks(api, userId),
+          _syncAttendanceReminders(api, userId, session.user),
+        ]);
+    await (fresh ? ApiCache.fresh(run) : run());
   }
 
   Future<void> stop() async {
@@ -105,9 +107,7 @@ class WorkReminderService {
 
   Future<void> _catchUpOnTasks(CompanyApi api, String userId) async {
     try {
-      final tasks = await ApiCache.fresh(
-        () => api.fetchTasks(query: {'employeeId': userId}),
-      );
+      final tasks = await api.fetchTasks(query: {'employeeId': userId});
       final mine = tasks.where((t) => _refId(t['assignedTo']) == userId).toList();
       final ids = mine.map((t) => '${t['_id'] ?? ''}').where((id) => id.isNotEmpty).toSet();
 
@@ -174,7 +174,7 @@ class WorkReminderService {
     try {
       final results = await Future.wait([
         api.fetchCompanyProfile(),
-        ApiCache.fresh(() => api.fetchAttendanceToday(employeeId: userId)),
+        api.fetchAttendanceToday(employeeId: userId),
       ]);
       final profile = results[0] as Map<String, dynamic>;
       final todayRows = results[1] as List<Map<String, dynamic>>;

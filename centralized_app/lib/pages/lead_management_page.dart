@@ -211,7 +211,7 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
         onRefresh: () => ApiCache.fresh(_fetchLeads),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

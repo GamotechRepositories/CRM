@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 enum NotificationChannel { tasks, attendance }
@@ -12,30 +11,38 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void>? _initFuture;
   bool _canScheduleExact = false;
-  late tz.Location _ist;
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
   bool get _supported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  Future<void> init() async {
-    if (_initialized || !_supported) return;
-    tz_data.initializeTimeZones();
-    _ist = tz.getLocation('Asia/Kolkata');
-    await _plugin.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-      ),
-    );
-    _initialized = true;
+  Future<void> init() {
+    if (_initialized || !_supported) return Future.value();
+    return _initFuture ??= _doInit();
+  }
+
+  Future<void> _doInit() async {
+    try {
+      await _plugin.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        ),
+      );
+      _initialized = true;
+    } catch (e) {
+      _initFuture = null;
+      debugPrint('Notification init failed: $e');
+    }
   }
 
   /// Android 13+ runtime notification permission.
   Future<void> requestPermissions() async {
     if (!_supported) return;
     await init();
+    if (!_initialized) return;
     try {
       await _android?.requestNotificationsPermission();
       _canScheduleExact = await _android?.canScheduleExactNotifications() ?? false;
@@ -72,6 +79,7 @@ class NotificationService {
   }) async {
     if (!_supported) return;
     await init();
+    if (!_initialized) return;
     try {
       await _plugin.show(
         id: id,
@@ -84,7 +92,8 @@ class NotificationService {
     }
   }
 
-  /// Schedules a one-shot notification at [when] (any timezone; converted to IST).
+  /// Schedules a one-shot notification at the absolute instant [when].
+  /// Uses the built-in UTC location so the full tz database never has to load.
   Future<void> scheduleAt({
     required int id,
     required DateTime when,
@@ -94,8 +103,8 @@ class NotificationService {
   }) async {
     if (!_supported) return;
     await init();
-    if (!when.isAfter(DateTime.now())) return;
-    final at = tz.TZDateTime.from(when, _ist);
+    if (!_initialized || !when.isAfter(DateTime.now())) return;
+    final at = tz.TZDateTime.from(when, tz.UTC);
     Future<void> schedule(AndroidScheduleMode mode) => _plugin.zonedSchedule(
           id: id,
           scheduledDate: at,

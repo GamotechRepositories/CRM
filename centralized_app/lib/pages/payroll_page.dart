@@ -173,7 +173,7 @@ class _PayrollPageState extends State<PayrollPage> {
         onRefresh: () => ApiCache.fresh(_fetchData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(14.0),
+          padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.paddingOf(context).bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

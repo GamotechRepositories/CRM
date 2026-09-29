@@ -446,7 +446,7 @@ class _AttendancePageState extends State<AttendancePage> {
     return RefreshIndicator(
       onRefresh: () => ApiCache.fresh(_bootstrap),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+        padding: EdgeInsets.fromLTRB(10, 8, 10, 20 + MediaQuery.paddingOf(context).bottom),
         children: [
           Text(
             _canViewTeam ? 'Attendance Dashboard' : 'My Attendance',

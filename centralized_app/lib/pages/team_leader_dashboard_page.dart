@@ -226,7 +226,7 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
         onRefresh: () => ApiCache.fresh(_fetchDashboardData),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(14.0),
+          padding: EdgeInsets.fromLTRB(14, 14, 14, 14 + MediaQuery.paddingOf(context).bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

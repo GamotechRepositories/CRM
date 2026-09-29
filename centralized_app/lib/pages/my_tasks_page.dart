@@ -189,7 +189,7 @@ class _MyTasksPageState extends State<MyTasksPage> {
         child: Stack(
           children: [
             ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 80 + MediaQuery.paddingOf(context).bottom),
               children: [
                 Text(
                   widget.isAllTasks
@@ -236,7 +236,7 @@ class _MyTasksPageState extends State<MyTasksPage> {
             ),
             Positioned(
               right: 16,
-              bottom: 16,
+              bottom: 16 + MediaQuery.paddingOf(context).bottom,
               child: FloatingActionButton.extended(
                 onPressed: () => AppNavScope.navigate(context, '/assign-task-self'),
                 backgroundColor: const Color(0xFF2563EB),

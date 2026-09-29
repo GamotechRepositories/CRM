@@ -2,16 +2,17 @@ import 'dart:async';
 
 /// In-memory GET response cache shared by every [ApiClient] instance.
 ///
-/// Keys are full request URLs (base URL + path + query), so entries are
-/// naturally scoped to the selected company. Any mutation clears the cache so
-/// the next read after a create/update/delete always hits the server.
+/// Stores raw response bodies keyed by full request URL (base URL + path +
+/// query), so entries are naturally scoped to the selected company and each
+/// caller decodes its own copy. Any mutation clears the cache so the next read
+/// after a create/update/delete always hits the server.
 class ApiCache {
   ApiCache._();
 
   static const Duration defaultTtl = Duration(minutes: 5);
 
   static final Map<String, _CacheEntry> _entries = {};
-  static final Map<String, Future<Map<String, dynamic>>> _inFlight = {};
+  static final Map<String, Future<String>> _inFlight = {};
 
   static const Object _freshZoneKey = #apiCacheFresh;
 
@@ -30,51 +31,41 @@ class ApiCache {
   static Future<T> fresh<T>(Future<T> Function() action) =>
       runZoned(action, zoneValues: {_freshZoneKey: true});
 
-  static Future<Map<String, dynamic>> getOrFetch(
+  static Future<String> getOrFetch(
     String key,
-    Future<Map<String, dynamic>> Function() fetch, {
+    Future<String> Function() fetch, {
     Duration ttl = defaultTtl,
   }) {
     if (!isFreshRequested) {
       final hit = _entries[key];
-      if (hit != null && !hit.isExpired) {
-        return Future.value(_clone(hit.data));
-      }
-      final pending = _inFlight[key];
-      if (pending != null) return pending.then(_clone);
+      if (hit != null && !hit.isExpired) return Future.value(hit.body);
     }
+    // Share an in-flight request for the same URL (fresh or not) instead of
+    // firing a duplicate.
+    final pending = _inFlight[key];
+    if (pending != null) return pending;
 
-    final future = fetch().then((data) {
-      _entries[key] = _CacheEntry(data, DateTime.now().add(ttl));
-      return data;
-    }).whenComplete(() => _inFlight.remove(key));
+    final future = fetch().then((body) {
+      _entries[key] = _CacheEntry(body, DateTime.now().add(ttl));
+      return body;
+    });
     _inFlight[key] = future;
-    return future.then(_clone);
+    future.whenComplete(() {
+      if (identical(_inFlight[key], future)) _inFlight.remove(key);
+    }).ignore();
+    return future;
   }
 
   static void clear() {
     _entries.clear();
     _inFlight.clear();
   }
-
-  static Map<String, dynamic> _clone(Map<String, dynamic> data) =>
-      _deepCopy(data) as Map<String, dynamic>;
-
-  static Object? _deepCopy(Object? value) {
-    if (value is Map) {
-      return <String, dynamic>{
-        for (final e in value.entries) e.key.toString(): _deepCopy(e.value),
-      };
-    }
-    if (value is List) return value.map(_deepCopy).toList();
-    return value;
-  }
 }
 
 class _CacheEntry {
-  _CacheEntry(this.data, this.expiresAt);
+  _CacheEntry(this.body, this.expiresAt);
 
-  final Map<String, dynamic> data;
+  final String body;
   final DateTime expiresAt;
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);

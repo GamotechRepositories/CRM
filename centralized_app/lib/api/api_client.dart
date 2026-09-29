@@ -40,9 +40,9 @@ class ApiClient {
     Map<String, String>? query,
     Map<String, String>? headers,
     bool useCache = true,
-  }) {
+  }) async {
     final uri = _uri(path, query);
-    Future<Map<String, dynamic>> fetch() async {
+    Future<String> fetchBody() async {
       final res = await http.get(
         uri,
         headers: {
@@ -50,11 +50,14 @@ class ApiClient {
           ...?headers,
         },
       );
-      return _decode(res);
+      if (res.statusCode < 200 || res.statusCode >= 300) _decode(res);
+      return res.body;
     }
 
-    if (!useCache || !ApiCache.isCacheable(path)) return fetch();
-    return ApiCache.getOrFetch(uri.toString(), fetch);
+    final body = (!useCache || !ApiCache.isCacheable(path))
+        ? await fetchBody()
+        : await ApiCache.getOrFetch(uri.toString(), fetchBody);
+    return _decodeBody(body);
   }
 
   Future<Map<String, dynamic>> patchJson(
@@ -110,17 +113,16 @@ class ApiClient {
     return _decode(res);
   }
 
-  Map<String, dynamic> _decode(http.Response res) {
+  static Map<String, dynamic> _decodeBody(String body) {
+    if (body.isEmpty) return {};
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is List) return {'data': decoded};
+    return {};
+  }
 
-    Map<String, dynamic> data = {};
-    if (res.body.isNotEmpty) {
-      final decoded = jsonDecode(res.body);
-      if (decoded is Map<String, dynamic>) {
-        data = decoded;
-      } else if (decoded is List) {
-        data = {'data': decoded};
-      }
-    }
+  Map<String, dynamic> _decode(http.Response res) {
+    final data = _decodeBody(res.body);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       final message = data['message']?.toString() ??
           'Request failed (${res.statusCode})';

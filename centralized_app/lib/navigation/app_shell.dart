@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
+import '../navigation/app_bottom_bar.dart';
 import '../navigation/app_nav.dart';
 import '../navigation/app_sidebar.dart';
 import '../navigation/sidebar_nav.dart';
@@ -41,13 +44,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     super.initState();
     _initPathHistoryIfNeeded();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Let the dashboard's own requests go first; reminders are not urgent.
+    _reminderStartTimer = Timer(const Duration(seconds: 4), () {
       if (mounted) WorkReminderService.instance.start(context.read<AuthSession>());
     });
   }
 
+  Timer? _reminderStartTimer;
+
   @override
   void dispose() {
+    _reminderStartTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -55,13 +62,20 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      WorkReminderService.instance.start(context.read<AuthSession>());
+      WorkReminderService.instance.refresh(context.read<AuthSession>(), fresh: true);
     }
   }
 
   void _selectPath(String path) {
     if (path == _selectedPath) return;
     setState(() => _pathHistory.add(path));
+  }
+
+  /// Tabs replace history instead of stacking, so Back from any tab goes Home.
+  void _selectTab(String path) {
+    final home = RoleAccess.dashboardPath(context.read<AuthSession>().user);
+    if (path == _selectedPath) return;
+    setState(() => _pathHistory = path == home ? [home] : [home, path]);
   }
 
   void _goBack() {
@@ -94,6 +108,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final paths = _cachedPages.keys.toList();
     final page = IndexedStack(
       index: paths.indexOf(selectedPath),
+      sizing: StackFit.expand,
       children: [
         for (final path in paths)
           TickerMode(
@@ -104,6 +119,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       ],
     );
 
+    final tabs = bottomTabsFor(
+      RoleAccess.getDashboardKind(session.user),
+      nav,
+      RoleAccess.dashboardPath(session.user),
+    );
+    final tabPaths = {for (final t in tabs) if (t.path != null) t.path!};
+    final onTabPage = tabPaths.contains(selectedPath);
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // Like iOS, the tab bar only shows on tab pages; pages opened from More
+    // get a back button instead.
+    final showBottomBar = onTabPage && !keyboardOpen;
+    // Chat pins a composer to the bottom, so it keeps the bar's space reserved.
+    final contentUnderBar = showBottomBar && selectedPath != '/module/chat';
+    final showBack = _pathHistory.length > 1 && !onTabPage;
+
     return PopScope(
       canPop: _pathHistory.length <= 1,
       onPopInvokedWithResult: (didPop, result) {
@@ -111,12 +141,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
+        extendBody: contentUnderBar,
         appBar: AppBar(
           toolbarHeight: 42,
           elevation: 0,
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF0F172A),
-          leading: _pathHistory.length > 1
+          automaticallyImplyLeading: false,
+          leading: showBack
               ? IconButton(
                   icon: const Icon(Icons.arrow_back_rounded, size: 20),
                   onPressed: _goBack,
@@ -136,18 +168,35 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             ],
           ),
         ),
-        drawer: AppSidebar(
-          nav: nav,
-          selectedPath: _selectedPath,
-          onSelect: _selectPath,
-          onSettings: () => _selectPath('/settings'),
-          onLogout: _logout,
-        ),
         body: AppNavScope(
           goTo: _selectPath,
           child: page,
         ),
+        bottomNavigationBar: showBottomBar
+            ? AppBottomBar(
+                tabs: tabs,
+                selectedIndex: tabs.indexWhere((t) => t.path == selectedPath),
+                onTap: (i) => _onTabTap(tabs[i], session, nav, tabPaths),
+              )
+            : null,
       ),
+    );
+  }
+
+  void _onTabTap(BottomTab tab, AuthSession session, List<SidebarEntry> nav, Set<String> tabPaths) {
+    if (!tab.isMore) {
+      _selectTab(tab.path!);
+      return;
+    }
+    showMoreSheet(
+      context: context,
+      session: session,
+      nav: nav,
+      tabPaths: tabPaths,
+      selectedPath: _selectedPath,
+      onSelect: _selectPath,
+      onSettings: () => _selectPath('/settings'),
+      onLogout: _logout,
     );
   }
 }

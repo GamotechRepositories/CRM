@@ -399,7 +399,7 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
         onRefresh: () => ApiCache.fresh(_load),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 20),
+          padding: EdgeInsets.fromLTRB(10, 8, 10, 20 + MediaQuery.paddingOf(context).bottom),
           children: children,
         ),
       );
