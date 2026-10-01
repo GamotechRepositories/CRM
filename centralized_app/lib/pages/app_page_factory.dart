@@ -239,6 +239,9 @@ class AppPageFactory {
         return const AssignTaskPage(selfMode: true);
       case '/leave':
         return const LeavePage();
+      case '/leave-calendar':
+      case '/calendar':
+        return const LeavePage(initialTab: LeaveTab.calendar);
       case '/attendance':
         return const AttendancePage();
       case '/my-attendance':

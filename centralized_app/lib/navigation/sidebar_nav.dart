@@ -129,7 +129,7 @@ class SidebarNav {
           SidebarChildItem(id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips'),
           SidebarChildItem(id: 'my-tasks', label: 'My Tasks', path: '/my-tasks'),
           SidebarChildItem(id: 'assign-task', label: 'Assign Task', path: '/assign-task'),
-          SidebarChildItem(id: 'my-calendar', label: 'My Calendar', path: '/calendar'),
+          SidebarChildItem(id: 'leave-calendar', label: 'Leave Calendar', path: '/leave-calendar'),
           SidebarChildItem(id: 'my-leaves', label: 'My Leaves', path: '/leave'),
           SidebarChildItem(id: 'my-attendance', label: 'My Attendance', path: '/my-attendance'),
           SidebarChildItem(id: 'my-projects', label: 'My Projects', path: '/my-projects'),

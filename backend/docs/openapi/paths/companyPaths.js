@@ -241,6 +241,19 @@ export function buildCompanyPaths() {
     },
   });
 
+  // Holidays & Leave Calendar
+  Object.assign(paths, {
+    '/api/v1/{company}/holidays': {
+      get: { tags: ['Company · Holidays'], summary: 'List holidays (supports ?year=&month=&upcoming=true)', security: sec(), parameters: companyParams, responses: { 200: { description: 'Holiday list' } } },
+      post: { tags: ['Company · Holidays'], summary: 'Create holiday (higher position only)', security: sec(), parameters: companyParams, requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/GenericResource' } } } }, responses: { 201: { description: 'Created' } } },
+    },
+    '/api/v1/{company}/holidays/{id}': {
+      get: { tags: ['Company · Holidays'], summary: 'Get holiday by ID', security: sec(), parameters: [...companyParams, { $ref: '#/components/parameters/MongoId' }], responses: { 200: { description: 'Holiday details' } } },
+      put: { tags: ['Company · Holidays'], summary: 'Update holiday (higher position only)', security: sec(), parameters: [...companyParams, { $ref: '#/components/parameters/MongoId' }], responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Company · Holidays'], summary: 'Delete holiday (higher position only)', security: sec(), parameters: [...companyParams, { $ref: '#/components/parameters/MongoId' }], responses: { 200: { description: 'Deleted' } } },
+    },
+  });
+
   // Billing tracking
   Object.assign(paths, {
     '/api/v1/{company}/billing/tracking/{clientId}': {

@@ -130,6 +130,7 @@ const routeFiles = [
   'taskRoute',
   'collaboratorRoute',
   'leaveRoute',
+  'holidayRoute',
   'billingRoute',
   'quotationRoute',
   'documentRoute',

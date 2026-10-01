@@ -213,7 +213,7 @@ export const getSidebarNav = ({
         { id: 'my-profile', label: 'My Profile', path: '/my-profile' },
         { id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips' },
         { id: 'my-tasks', label: 'My Tasks', path: '/my-tasks' },
-        { id: 'my-calendar', label: 'My Calendar', path: '/calendar' },
+        { id: 'leave-calendar', label: 'Leave Calendar', path: '/leave-calendar' },
         { id: 'my-leaves', label: 'My Leaves', path: '/leave' },
         { id: 'my-attendance', label: 'My Attendance', path: '/attendance' },
         { id: 'my-projects', label: 'My Projects', path: '/my-projects' },

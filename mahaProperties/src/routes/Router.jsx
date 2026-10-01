@@ -31,6 +31,7 @@ import TaskDetailPage from '../pages/TaskDetailPage'
 import CollaboratorsView from '../components/views/CollaboratorsView'
 import AddCollaborator from '../pages/AddCollaborator'
 import LeaveView from '../components/views/LeaveView'
+import LeaveCalendarView from '../components/views/LeaveCalendarView'
 import BillingView from '../components/views/BillingView'
 import RevenueView from '../components/views/RevenueView'
 import ExpensesView from '../components/views/ExpensesView'
@@ -141,6 +142,8 @@ const router = createBrowserRouter([
             { path: 'policies/edit/:id', element: <AddDocument documentType='Policy' /> },
             { path: 'attendance', element: <AttendanceView /> },
             { path: 'leave', element: <LeaveView /> },
+            { path: 'leave-calendar', element: <LeaveCalendarView /> },
+            { path: 'calendar', element: <LeaveCalendarView /> },
             { path: 'lead-management', element: <LeadsView /> },
             { path: 'my-profile', element: <MyProfilePage /> },
             { path: 'salary-slips', element: <SalarySlipPage /> },

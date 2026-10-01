@@ -12,6 +12,19 @@ export const isAdminUser = (user) => {
   return title === 'admin' || accessRole === 'admin'
 }
 
+/** Manager / operations roles (excludes HR). Mirrors dashboardRoutes manager detection. */
+export const isOperationalManagerUser = (user) => {
+  if (!user || isAdminUser(user)) return false
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+  const title = getDesignationTitle(user)
+  if (title === 'hr manager' || accessRole === 'hr') return false
+  if (accessRole === 'manager') return true
+  if (title === 'manager') return true
+  if (title.includes('manager')) return true
+  if (title.includes('operations')) return true
+  return false
+}
+
 export const getDesignationPermission = (user, key) => {
   if (isAdminUser(user)) return true
   const val = user?.designation?.permissions?.[key]
@@ -65,6 +78,13 @@ export const canEditProjectForUser = (user) => {
   if (canAddProjectForUser(user)) return true
   const title = getDesignationTitle(user)
   return ['engineering manager', 'project manager'].includes(title)
+}
+
+/** Managers who can create projects can also add clients needed for those projects. */
+export const canManageClientsForUser = (user) => {
+  if (isAdminUser(user)) return true
+  if (hasFullAccessForUser(user)) return true
+  return canAddProjectForUser(user)
 }
 
 /** Any logged-in employee can assign tasks to other employees. */

@@ -6,11 +6,14 @@ import '../auth/role_access.dart';
 import '../utils/leave_helpers.dart';
 import '../api/api_cache.dart';
 
-enum _LeaveTab { my, list, calendar, settings }
+enum LeaveTab { my, list, calendar, settings }
+typedef _LeaveTab = LeaveTab;
 
 /// `/leave` — apply, track, and approve leave (mirrors web `LeaveView.jsx`).
 class LeavePage extends StatefulWidget {
-  const LeavePage({super.key});
+  final LeaveTab? initialTab;
+
+  const LeavePage({super.key, this.initialTab});
 
   @override
   State<LeavePage> createState() => _LeavePageState();
@@ -21,7 +24,7 @@ class _LeavePageState extends State<LeavePage> {
   bool _loading = true;
   String? _error;
 
-  _LeaveTab _tab = _LeaveTab.my;
+  LeaveTab _tab = LeaveTab.my;
   String _searchQuery = '';
   String _filterLeaveType = '';
   String _filterStatus = '';
@@ -36,10 +39,17 @@ class _LeavePageState extends State<LeavePage> {
     _dateFrom = LeaveHelpers.monthStart(now);
     _dateTo = LeaveHelpers.monthEnd(now);
     _calendarMonth = DateTime(now.year, now.month);
+    if (widget.initialTab != null) {
+      _tab = widget.initialTab!;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final isApprover = RoleAccess.canApproveLeave(context.read<AuthSession>().user);
-      if (isApprover) setState(() => _tab = _LeaveTab.list);
-      _load(isApprover: isApprover);
+      if (widget.initialTab != null) {
+        setState(() => _tab = widget.initialTab!);
+      } else if (isApprover) {
+        setState(() => _tab = LeaveTab.list);
+      }
+      _load(isApprover: isApprover || widget.initialTab == LeaveTab.calendar);
     });
   }
 
