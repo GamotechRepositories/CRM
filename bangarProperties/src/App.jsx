@@ -9,10 +9,10 @@ const App = () => {
   const location = useLocation()
 
   return (
-    <div className='flex h-screen bg-gray-50'>
+    <div className='flex h-screen bg-gray-50 print:block print:h-auto print:bg-white'>
       <LocationPromptModal />
       <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
-      <main className='flex-1 overflow-auto min-w-0 w-full'>
+      <main className='flex-1 overflow-auto min-w-0 w-full print:block print:overflow-visible print:w-full print:p-0'>
         <RoleGuard>
           <Outlet key={location.pathname} />
         </RoleGuard>

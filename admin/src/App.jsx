@@ -16,6 +16,8 @@ import InvoiceOverviewPage from './pages/InvoiceOverviewPage'
 import PerformancePage from './pages/PerformancePage'
 import AttendancePage from './pages/AttendancePage'
 import TasksPage from './pages/TasksPage'
+import CompanyLeadsPage from './pages/CompanyLeadsPage'
+import CompanyAddLeadPage from './pages/CompanyAddLeadPage'
 
 const withAuth = (element) => <RequireAuth>{element}</RequireAuth>
 
@@ -36,7 +38,12 @@ function App() {
           <Route path='/company/:tenantId/clients/:clientId' element={withAuth(<ClientOverviewPage />)} />
           <Route path='/company/:tenantId/projects' element={withAuth(<ModulePage moduleId='projects' />)} />
           <Route path='/company/:tenantId/projects/:projectId' element={withAuth(<ProjectOverviewPage />)} />
-          <Route path='/company/:tenantId/leads' element={withAuth(<ModulePage moduleId='leads' />)} />
+          <Route path='/company/:tenantId/leads' element={withAuth(<CompanyLeadsPage />)} />
+          <Route path='/company/:tenantId/add-lead' element={withAuth(<CompanyAddLeadPage />)} />
+          <Route path='/company/:tenantId/leads/add' element={withAuth(<CompanyAddLeadPage />)} />
+          <Route path='/company/:tenantId/leads/view/:leadId' element={withAuth(<CompanyAddLeadPage readOnly />)} />
+          <Route path='/company/:tenantId/leads/edit/:leadId' element={withAuth(<CompanyAddLeadPage />)} />
+          <Route path='/company/:tenantId/leads/:leadId' element={withAuth(<CompanyAddLeadPage readOnly />)} />
           <Route path='/company/:tenantId/tasks' element={withAuth(<TasksPage />)} />
           <Route path='/company/:tenantId/tasks/:taskId' element={withAuth(<TaskOverviewPage />)} />
           <Route path='/company/:tenantId/invoices' element={withAuth(<ModulePage moduleId='invoices' />)} />

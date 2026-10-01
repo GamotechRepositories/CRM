@@ -3,6 +3,7 @@ import api from '../api/axios'
 import { useParams, useNavigate } from 'react-router-dom'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import companyLogoFallback from '../assets/log.png'
 
 const InvoicePage = () => {
   const { id } = useParams()
@@ -14,6 +15,17 @@ const InvoicePage = () => {
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(null)
+  const [logoSrc, setLogoSrc] = useState(companyLogoFallback)
+
+  const getBackendOrigin = () => {
+    const base = api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5014'
+    try {
+      const u = new URL(base)
+      return `${u.protocol}//${u.host}`
+    } catch {
+      return 'http://localhost:5014'
+    }
+  }
 
   useEffect(() => {
     if (!id) return
@@ -30,11 +42,70 @@ const InvoicePage = () => {
     fetchBilling()
   }, [id])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadLogo = async () => {
+      const raw = billing?.companyLogo || billing?.company?.companyLogo || companyLogoFallback
+      if (!raw) return
+
+      if (typeof raw === 'string' && raw.startsWith('data:image')) {
+        if (isMounted) setLogoSrc(raw)
+        return
+      }
+
+      // If remote URL, fetch via backend proxy to guarantee CORS headers
+      let targetUrl = raw
+      if (typeof raw === 'string' && raw.startsWith('http')) {
+        targetUrl = `${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(raw)}`
+      }
+
+      try {
+        const res = await fetch(targetUrl)
+        if (res.ok) {
+          const blob = await res.blob()
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            if (isMounted && reader.result) {
+              setLogoSrc(reader.result)
+            }
+          }
+          reader.readAsDataURL(blob)
+          return
+        }
+      } catch (err) {
+        console.warn('Failed to load logo via proxy, trying fallback:', err)
+      }
+
+      // Try local fallback logo as base64
+      try {
+        const res = await fetch(companyLogoFallback)
+        if (res.ok) {
+          const blob = await res.blob()
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            if (isMounted && reader.result) {
+              setLogoSrc(reader.result)
+            }
+          }
+          reader.readAsDataURL(blob)
+        }
+      } catch (e) {
+        if (isMounted) setLogoSrc(companyLogoFallback)
+      }
+    }
+
+    loadLogo()
+    return () => {
+      isMounted = false
+    }
+  }, [billing])
+
   const handlePrint = () => {
     window.print()
   }
 
-  /** Replace oklch() and other unsupported color functions so html2canvas can parse CSS (case-insensitive for production builds) */
+  /** Replace oklch() and other unsupported color functions so html2canvas can parse CSS */
   const stripUnsupportedColors = (cssText) => {
     if (!cssText || typeof cssText !== 'string') return cssText
     let out = cssText
@@ -55,9 +126,9 @@ const InvoicePage = () => {
         re.lastIndex = 0
       }
     }
-    replaceParenFunc('oklch', 'rgb(128,128,128)')
-    replaceParenFunc('oklab', 'rgb(128,128,128)')
-    replaceParenFunc('color-mix', 'rgb(128,128,128)')
+    replaceParenFunc('oklch', 'transparent')
+    replaceParenFunc('oklab', 'transparent')
+    replaceParenFunc('color-mix', 'transparent')
     return out
   }
 
@@ -67,7 +138,38 @@ const InvoicePage = () => {
     setDownloading(true)
     setDownloadError(null)
     try {
-      // In production, CSS is often loaded via <link>; fetch and strip oklch so the clone never parses it
+      // Ensure logo is base64 before capturing so html2canvas never drops it
+      let activeLogo = logoSrc
+      if (!activeLogo || !activeLogo.startsWith('data:image')) {
+        const raw = billing?.companyLogo || billing?.company?.companyLogo || companyLogoFallback
+        if (raw && typeof raw === 'string' && raw.startsWith('http')) {
+          try {
+            const res = await fetch(`${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(raw)}`)
+            if (res.ok) {
+              const blob = await res.blob()
+              activeLogo = await new Promise((resolve) => {
+                const r = new FileReader()
+                r.onloadend = () => resolve(r.result)
+                r.readAsDataURL(blob)
+              })
+            }
+          } catch {}
+        }
+        if (!activeLogo || !activeLogo.startsWith('data:image')) {
+          try {
+            const res = await fetch(companyLogoFallback)
+            if (res.ok) {
+              const blob = await res.blob()
+              activeLogo = await new Promise((resolve) => {
+                const r = new FileReader()
+                r.onloadend = () => resolve(r.result)
+                r.readAsDataURL(blob)
+              })
+            }
+          } catch {}
+        }
+      }
+
       let strippedLinkedCss = ''
       const links = document.querySelectorAll('link[rel="stylesheet"]')
       if (links.length > 0) {
@@ -85,13 +187,11 @@ const InvoicePage = () => {
         backgroundColor: '#ffffff',
         logging: false,
         onclone: (clonedDoc, clonedElement) => {
-          // Strip oklch from inline <style> tags
           clonedDoc.querySelectorAll('style').forEach((style) => {
             if (style.textContent) {
               style.textContent = stripUnsupportedColors(style.textContent)
             }
           })
-          // Replace linked stylesheets with one stripped <style> so parser never sees oklch
           clonedDoc.querySelectorAll('link[rel="stylesheet"]').forEach((l) => l.remove())
           if (strippedLinkedCss) {
             const style = clonedDoc.createElement('style')
@@ -104,25 +204,59 @@ const InvoicePage = () => {
               el.setAttribute('style', stripUnsupportedColors(s))
             }
           })
+
+          // Set clean A4 printable width without forced stretch
+          clonedElement.style.width = '794px'
+          clonedElement.style.maxWidth = '794px'
+          clonedElement.style.height = 'auto'
+          clonedElement.style.minHeight = 'auto'
+          clonedElement.style.display = 'block'
+          clonedElement.style.margin = '0 auto'
+          clonedElement.style.boxShadow = 'none'
+          clonedElement.style.borderRadius = '0px'
+          clonedElement.style.border = 'none'
+          clonedElement.style.padding = '32px 36px'
+          clonedElement.style.backgroundColor = '#ffffff'
+
+          // Ensure logo uses base64 data url
+          const logoEl = clonedElement.querySelector('.company-logo-img')
+          if (logoEl && activeLogo) {
+            logoEl.src = activeLogo
+          }
         },
       })
-      const imgWidth = 210
+
+      // Standard A4 dimensions in mm
+      const pageWidth = 210
       const pageHeight = 297
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
+
+      // Side margins: 10mm left and right, 10mm top and bottom
+      const marginX = 10
+      const marginY = 10
+      const contentWidth = pageWidth - marginX * 2 // 190mm
+      const contentHeight = (canvas.height * contentWidth) / canvas.width
+      const availableHeight = pageHeight - marginY * 2 // 277mm
+
       const pdf = new jsPDF('p', 'mm', 'a4')
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
-      if (heightLeft <= pageHeight) {
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
+      const imgData = canvas.toDataURL('image/jpeg', 0.98)
+
+      if (contentHeight <= availableHeight) {
+        pdf.addImage(imgData, 'JPEG', marginX, marginY, contentWidth, contentHeight)
       } else {
+        let heightLeft = contentHeight
+        let position = marginY
+
+        pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
+        heightLeft -= availableHeight
+
         while (heightLeft > 0) {
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight)
-          heightLeft -= pageHeight
-          position = heightLeft - imgHeight
-          if (heightLeft > 0) pdf.addPage()
+          position = marginY - (contentHeight - heightLeft)
+          pdf.addPage()
+          pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
+          heightLeft -= availableHeight
         }
       }
+
       const filename = `invoice-${(billing?.company?.name || 'bill').replace(/\s+/g, '-')}-${id}.pdf`
       pdf.save(filename)
     } catch (err) {
@@ -133,7 +267,6 @@ const InvoicePage = () => {
     }
   }
 
-  /** Indian number format e.g. 150000 -> 1,50,000 */
   const formatINR = (num) => {
     if (num == null || num === '' || isNaN(num)) return '—'
     const n = Number(num)
@@ -146,7 +279,6 @@ const InvoicePage = () => {
     return `₹${n < 0 ? '-' : ''}${withCommas}`
   }
 
-  /** Financial year (India) for display e.g. 2025-26 */
   const getFYDisplay = (dateStr) => {
     const d = dateStr ? new Date(dateStr) : new Date()
     const y = d.getFullYear()
@@ -172,27 +304,72 @@ const InvoicePage = () => {
   const sgstAmount = taxableValue != null ? taxableValue * 0.09 : null
 
   return (
-    <div className='min-h-screen bg-white'>
+    <div className='min-h-screen bg-slate-100/80 print:bg-white print:min-h-0'>
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          aside, nav, header, [role="navigation"], .sidebar, .print\\:hidden {
+            display: none !important;
+            visibility: hidden !important;
+            width: 0 !important;
+            height: 0 !important;
+          }
+          body, html, #root, main {
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            overflow: visible !important;
+          }
+          .invoice-sheet-container {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            display: block !important;
+            width: 100% !important;
+          }
+          .invoice-a4-sheet {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
+            box-shadow: none !important;
+            border: 1px solid #d1d5db !important;
+            margin: 0 !important;
+            padding: 8mm 10mm !important;
+            background: #ffffff !important;
+          }
+        }
+      `}</style>
+
       {/* Non-printable header with actions */}
-      <div className='print:hidden sticky top-0 z-10 bg-gray-100 border-b border-gray-200 px-4 py-3 flex items-center justify-between'>
+      <div className='print:hidden sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200 px-4 sm:px-8 py-3 flex items-center justify-between shadow-xs'>
         <button
           onClick={() => navigate('/billings')}
-          className='text-gray-700 hover:text-gray-900 text-sm font-medium'
+          className='inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors'
         >
-          ← Back to Billing
+          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M10 19l-7-7m0 0l7-7m-7 7h18' /></svg>
+          Back to Billing
         </button>
-        <div className='flex gap-2'>
+        <div className='flex items-center gap-3'>
+          <span className='hidden sm:inline-block text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200'>
+            A4 Standard Page (210 × 297 mm)
+          </span>
           <button
             onClick={handlePrint}
-            className='bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 inline-flex items-center gap-2'
+            className='bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors inline-flex items-center gap-2 shadow-xs'
           >
-            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z' /></svg>
+            <svg className='w-4 h-4 text-gray-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z' /></svg>
             Print
           </button>
           <button
             onClick={handleDownload}
             disabled={downloading}
-            className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2'
+            className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors inline-flex items-center gap-2 shadow-sm'
           >
             <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' /></svg>
             {downloading ? 'Downloading...' : 'Download PDF'}
@@ -201,52 +378,64 @@ const InvoicePage = () => {
       </div>
 
       {downloadError && (
-        <div className='print:hidden mx-4 mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2'>
-          <p className='text-amber-800 text-sm'>{downloadError}</p>
+        <div className='print:hidden mx-auto max-w-4xl mt-3 px-4'>
+          <div className='rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5'>
+            <p className='text-amber-800 text-sm font-medium'>{downloadError}</p>
+          </div>
         </div>
       )}
 
-      <div ref={printRef} className='p-6 md:p-10 w-full'>
-        {/* Invoice content - printable and for PDF */}
-        <div ref={invoiceRef} className='border border-gray-200 rounded-lg overflow-hidden bg-white'>
+      {/* A4 Sheet Desk Container */}
+      <div ref={printRef} className='invoice-sheet-container py-8 px-4 sm:px-6 w-full flex justify-center print:p-0 print:block'>
+        {/* Invoice content - exact A4 sheet proportions on screen */}
+        <div
+          ref={invoiceRef}
+          className='invoice-a4-sheet bg-white border border-gray-200 shadow-xl rounded-sm w-[210mm] max-w-full min-h-[297mm] p-8 sm:p-12 mx-auto text-black'
+        >
           {/* Company logo at top center */}
-          {billing.companyLogo && (
-            <div className='flex justify-center pt-6 pb-2'>
-              <img src={billing.companyLogo} alt='Company logo' className='h-20 w-auto max-w-[200px] object-contain' />
-            </div>
-          )}
-          <div className='px-6 py-4 border-b border-gray-200'>
+          <div className='flex justify-center pt-2 pb-4 border-b border-gray-200'>
+            <img
+              src={logoSrc}
+              alt={company.name || 'Company logo'}
+              crossOrigin='anonymous'
+              className='company-logo-img h-16 sm:h-20 w-auto max-w-[220px] object-contain'
+            />
+          </div>
+
+          {/* Header: Title and Invoice No */}
+          <div className='py-4 border-b border-gray-200'>
             <div className='flex flex-wrap items-baseline justify-between gap-4'>
               <div>
-                <h1 className='text-2xl font-bold text-black'>INVOICE</h1>
-                <p className='text-sm text-black mt-1'>
+                <h1 className='text-2xl font-bold tracking-tight text-black'>INVOICE</h1>
+                <p className='text-sm text-gray-700 mt-1 font-medium'>
                   {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
                 </p>
               </div>
               <div className='text-right'>
                 <p className='text-sm text-black'><span className='font-semibold'>Invoice No:</span> {billing.invoiceNumber || `Gamo-${getFYDisplay(billing.createdAt)}-001`}</p>
-                <p className='text-sm text-black mt-0.5'><span className='font-semibold'>Financial Year:</span> {getFYDisplay(billing.createdAt)}</p>
+                <p className='text-sm text-gray-700 mt-0.5'><span className='font-semibold text-black'>Financial Year:</span> {getFYDisplay(billing.createdAt)}</p>
               </div>
             </div>
           </div>
 
-          <div className='p-6 grid grid-cols-1 md:grid-cols-2 gap-8'>
+          {/* From & Bill To */}
+          <div className='py-6 grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-gray-200'>
             {/* From / Company */}
             <div>
               <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>From</h2>
               <div>
                 <p className='font-semibold text-black'>{company.name || '—'}</p>
-                  {company.address && <p className='text-sm text-black mt-1'>{company.address}</p>}
-                  {company.email && <p className='text-sm text-black'>{company.email}</p>}
-                  {company.phone && <p className='text-sm text-black'>{company.phone}</p>}
-                  {company.pan && <p className='text-sm text-black'>PAN: {company.pan}</p>}
-                  {company.website && <p className='text-sm text-black'>Website: {company.website}</p>}
-                  {isGst && billing.companyGst?.gstin && (
-                    <p className='text-sm text-black mt-2'>
-                      GSTIN: {billing.companyGst.gstin}
-                      {billing.companyGst.state && ` • State: ${billing.companyGst.state} (${billing.companyGst.stateCode || ''})`}
-                    </p>
-                  )}
+                {company.address && <p className='text-sm text-black mt-1'>{company.address}</p>}
+                {company.email && <p className='text-sm text-black'>{company.email}</p>}
+                {company.phone && <p className='text-sm text-black'>{company.phone}</p>}
+                {company.pan && <p className='text-sm text-black'>PAN: {company.pan}</p>}
+                {company.website && <p className='text-sm text-black'>Website: {company.website}</p>}
+                {isGst && billing.companyGst?.gstin && (
+                  <p className='text-sm text-black mt-2'>
+                    GSTIN: {billing.companyGst.gstin}
+                    {billing.companyGst.state && ` • State: ${billing.companyGst.state} (${billing.companyGst.stateCode || ''})`}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -258,25 +447,29 @@ const InvoicePage = () => {
               {client.mailId && <p className='text-sm text-black'>{client.mailId}</p>}
               {client.clientNumber && <p className='text-sm text-black'>{client.clientNumber}</p>}
               {isGst && (billing.clientGst?.gstin || billing.clientGst?.billingAddress) && (
-                <div className='mt-2 text-sm text-black'>
-                  {billing.clientGst.gstin && <p>GSTIN: {billing.clientGst.gstin}</p>}
-                  {billing.clientGst.state && <p>State: {billing.clientGst.state}</p>}
-                  {billing.clientGst.billingAddress && <p>{billing.clientGst.billingAddress}</p>}
-                </div>
+                <p className='text-sm text-black mt-2'>
+                  {billing.clientGst.gstin && `GSTIN: ${billing.clientGst.gstin}`}
+                  {billing.clientGst.billingAddress && ` • ${billing.clientGst.billingAddress}`}
+                </p>
+              )}
+              {payment.method && (
+                <p className='text-sm text-black mt-2'>
+                  <span className='font-semibold'>Payment Mode:</span> {payment.method}
+                </p>
               )}
             </div>
           </div>
 
-          {/* Projects / Items */}
-          <div className='px-6 pb-6'>
-            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Project Details</h2>
-            <table className='w-full text-sm border border-gray-400'>
+          {/* Projects / Items table */}
+          <div className='py-6'>
+            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Invoice Items</h2>
+            <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
               <thead>
-                <tr className='border-b border-gray-400'>
+                <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
                   <th className='text-left py-2 px-3 font-semibold text-black'>#</th>
-                  <th className='text-left py-2 px-3 font-semibold text-black'>Project</th>
+                  <th className='text-left py-2 px-3 font-semibold text-black'>Project / Description</th>
                   <th className='text-right py-2 px-3 font-semibold text-black'>Project Cost</th>
-                  <th className='text-right py-2 px-3 font-semibold text-black'>Amount Paid</th>
+                  <th className='text-right py-2 px-3 font-semibold text-black'>Amount (INR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,7 +483,7 @@ const InvoicePage = () => {
                     const rem = Number(item.remainingCost) || 0
                     const paid = cost - rem
                     return (
-                      <tr key={i} className='border-b border-gray-300'>
+                      <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
                         <td className='py-2 px-3 text-black'>{i + 1}</td>
                         <td className='py-2 px-3 text-black'>{item.project?.projectName || '—'}</td>
                         <td className='py-2 px-3 text-right text-black'>{formatINR(item.projectCost)}</td>
@@ -306,18 +499,18 @@ const InvoicePage = () => {
               const totalRemaining = projects.reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
               const amountPaid = totalProjectCost - totalRemaining
               return (
-                <div className='mt-3 pt-3 border-t border-gray-400 flex flex-wrap gap-6 text-sm'>
+                <div className='mt-3 pt-3 border-t border-gray-300 flex flex-wrap gap-6 text-sm'>
                   <span className='text-black'><span className='font-semibold'>Total Project Cost:</span> {formatINR(totalProjectCost)}</span>
                   <span className='text-black'><span className='font-semibold'>Amount (this payment):</span> {formatINR(amountPaid)}</span>
                 </div>
               )
             })()}
             {billing.tracking && billing.tracking.length > 0 && (
-              <div className='mt-4 pt-4 border-t border-gray-400'>
+              <div className='mt-6 pt-4 border-t border-gray-300'>
                 <h3 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>Payment tracking (all bills for this client)</h3>
-                <table className='w-full text-sm border border-gray-400'>
+                <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
                   <thead>
-                    <tr className='border-b border-gray-400'>
+                    <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
                       <th className='text-left py-2 px-3 font-semibold text-black'>Project</th>
                       <th className='text-right py-2 px-3 font-semibold text-black'>Project Cost</th>
                       <th className='text-right py-2 px-3 font-semibold text-black'>Total Paid</th>
@@ -326,7 +519,7 @@ const InvoicePage = () => {
                   </thead>
                   <tbody>
                     {billing.tracking.map((t, i) => (
-                      <tr key={i} className='border-b border-gray-300'>
+                      <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
                         <td className='py-2 px-3 text-black'>{t.project?.projectName || '—'}</td>
                         <td className='py-2 px-3 text-right text-black'>{formatINR(t.projectCost)}</td>
                         <td className='py-2 px-3 text-right text-black'>{formatINR(t.totalPaid)}</td>
@@ -341,70 +534,53 @@ const InvoicePage = () => {
 
           {/* GST breakdown (when GST bill) */}
           {isGst && (taxableValue != null || invoiceAmount != null) && (
-            <div className='px-6 pb-4'>
+            <div className='py-4'>
               <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>GST Breakdown</h2>
-              <table className='w-full max-w-xs text-sm border border-gray-400'>
+              <table className='w-full max-w-xs text-sm border' style={{ borderColor: '#d1d5db' }}>
                 <tbody>
                   {taxableValue != null && (
-                    <tr className='border-b border-gray-300'><td className='py-1.5 px-3 text-black'>Taxable Value</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(taxableValue).replace('₹', '')}</td></tr>
+                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>Taxable Value</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(taxableValue).replace('₹', '')}</td></tr>
                   )}
                   {cgstAmount != null && (
-                    <tr className='border-b border-gray-300'><td className='py-1.5 px-3 text-black'>CGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(cgstAmount).replace('₹', '')}</td></tr>
+                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>CGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(cgstAmount).replace('₹', '')}</td></tr>
                   )}
                   {sgstAmount != null && (
-                    <tr className='border-b border-gray-300'><td className='py-1.5 px-3 text-black'>SGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(sgstAmount).replace('₹', '')}</td></tr>
+                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>SGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(sgstAmount).replace('₹', '')}</td></tr>
                   )}
                   {invoiceAmount != null && (
-                    <tr><td className='py-1.5 px-3 text-black font-semibold'>Total</td><td className='py-1.5 px-3 text-right text-black font-semibold'>{formatINR(invoiceAmount).replace('₹', '')}</td></tr>
+                    <tr style={{ backgroundColor: '#f8fafc' }}><td className='py-1.5 px-3 text-black font-semibold'>Total</td><td className='py-1.5 px-3 text-right text-black font-semibold'>{formatINR(invoiceAmount).replace('₹', '')}</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* Payment / Amount */}
-          <div className='px-6 pb-6'>
-            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Payment Details</h2>
-            <div className='flex flex-wrap items-end justify-between gap-4'>
-              <div className='space-y-1 text-sm'>
-                {payment.paymentDate && (
-                  <p className='text-black'><span className='font-medium'>Payment Date:</span> {new Date(payment.paymentDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                )}
-                {payment.amount != null && (
-                  <p className='text-lg font-bold text-black'>Amount: {formatINR(payment.amount)}</p>
-                )}
-                {payment.receiverName && <p className='text-black'><span className='font-medium'>Receiver:</span> {payment.receiverName}</p>}
-                {payment.receiverBankName && <p className='text-black'><span className='font-medium'>Bank:</span> {payment.receiverBankName}</p>}
-                {payment.receiverBankAccount && <p className='text-black'><span className='font-medium'>Account:</span> {payment.receiverBankAccount}</p>}
-                {payment.modeOfTransaction && <p className='text-black'><span className='font-medium'>Mode:</span> {payment.modeOfTransaction}</p>}
-              </div>
-            </div>
-          </div>
-
           {billing.termsAndConditions && (
-            <div className='px-6 pb-4'>
+            <div className='py-4'>
               <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>Terms & Conditions</h2>
               <p className='text-sm text-black whitespace-pre-wrap'>{billing.termsAndConditions}</p>
             </div>
           )}
 
-          <div className='px-6 pb-6 flex justify-end'>
+          {/* Authorized Signature */}
+          <div className='mt-8 pt-4 flex justify-end'>
             <div className='text-center'>
               {billing.authorizedSignature ? (
                 <>
-                  <img src={billing.authorizedSignature} alt='Authorized Signature' className='h-16 max-w-[220px] object-contain mx-auto' />
+                  <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
                   <p className='text-sm font-semibold text-black mt-1'>Authorized Signature</p>
                 </>
               ) : (
                 <>
-                  <div className='border-t-2 border-black w-40 mt-8 mb-1' />
+                  <div className='border-t-2 border-black w-44 mt-6 mb-1 mx-auto' />
                   <p className='text-sm font-semibold text-black'>Authorized Signature</p>
                 </>
               )}
             </div>
           </div>
 
-          <div className='px-6 py-4 border-t border-gray-300 text-center text-sm text-black font-medium'>
+          {/* Footer */}
+          <div className='mt-6 pt-4 border-t border-gray-200 text-center text-sm text-gray-700 font-medium'>
             Thank you for your business.
           </div>
         </div>

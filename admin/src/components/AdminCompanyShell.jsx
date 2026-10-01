@@ -161,11 +161,11 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
   }
 
   return (
-    <div className='h-screen overflow-hidden bg-[#F5F7FB] flex'>
+    <div className='h-screen overflow-hidden bg-[#F5F7FB] flex print:block print:h-auto print:bg-white print:overflow-visible'>
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } h-full bg-[#0F172A] text-white flex flex-col shrink-0 transition-all duration-200`}
+        } h-full bg-[#0F172A] text-white flex flex-col shrink-0 transition-all duration-200 print:hidden`}
       >
         <div className='px-4 py-5 border-b border-white/10'>
           <div className='flex items-center gap-3'>
@@ -253,8 +253,8 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
         </div>
       </aside>
 
-      <div className='flex-1 min-w-0 min-h-0 flex flex-col'>
-        <header className='bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-3 shrink-0'>
+      <div className='flex-1 min-w-0 min-h-0 flex flex-col print:block print:h-auto print:overflow-visible'>
+        <header className='bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-3 shrink-0 print:hidden'>
           <button
             type='button'
             onClick={() => setSidebarOpen((v) => !v)}
@@ -304,7 +304,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
           </div>
         </header>
 
-        <main className='flex-1 min-h-0 overflow-y-auto p-4 sm:p-6'>{children}</main>
+        <main className='flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 print:block print:p-0 print:overflow-visible'>{children}</main>
       </div>
     </div>
   )

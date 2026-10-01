@@ -214,7 +214,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   }
 
   return (
-    <aside className={`bg-[#0F172A] text-[#E5E7EB] text-sm h-screen flex flex-col shadow-2xl border-r border-[#1E293B] transition-all duration-200 flex-shrink-0 ${isOpen ? 'w-64' : 'w-16'}`}>
+    <aside className={`bg-[#0F172A] text-[#E5E7EB] text-sm h-screen flex flex-col shadow-2xl border-r border-[#1E293B] transition-all duration-200 flex-shrink-0 print:hidden ${isOpen ? 'w-64' : 'w-16'}`}>
       <div className='px-3 py-4 border-b border-[#1E293B] flex items-center justify-center shrink-0'>
         {isOpen ? (
           <div className='w-full flex items-center justify-between px-2'>

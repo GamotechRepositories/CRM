@@ -1002,6 +1002,260 @@ export const updateTenantLead = async (req, res) => {
   }
 };
 
+export const getTenantLead = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const leadId = String(req.params.leadId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const Lead = await importTenantModel(tenantId, 'lead');
+    if (!Lead) return res.status(404).json({ message: 'Leads not available for this company' });
+
+    let query = Lead.findById(leadId)
+      .populate('generatedBy', 'name email department designation profilePhoto');
+    if (['bangarProperties', 'mahaProperties', 'salesTechReality'].includes(tenantId)) {
+      query = query
+        .populate('assignedTo', 'name email department designation profilePhoto')
+        .populate('siteCoordinator', 'name email department designation profilePhoto');
+    }
+    const lead = await query.lean();
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    return res.status(200).json(lead);
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error fetching lead' });
+  }
+};
+
+export const deleteTenantLead = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    const leadId = String(req.params.leadId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const Lead = await importTenantModel(tenantId, 'lead');
+    if (!Lead) return res.status(404).json({ message: 'Leads not available for this company' });
+
+    const deleted = await Lead.findByIdAndDelete(leadId);
+    if (!deleted) return res.status(404).json({ message: 'Lead not found' });
+    return res.status(200).json({ message: 'Lead deleted successfully' });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error deleting lead' });
+  }
+};
+
+export const importTenantLeadCsv = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const SheetLead = await importTenantModel(tenantId, 'sheetLead');
+    const Lead = await importTenantModel(tenantId, 'lead');
+    const Employee = await importTenantModel(tenantId, 'employee');
+    if (!Lead) return res.status(404).json({ message: 'Leads not available for this company' });
+
+    const { createSheetLeadImportHandlers } = await import('../utils/createSheetLeadImportHandlers.js');
+    const handlers = createSheetLeadImportHandlers({
+      SheetLead,
+      Lead,
+      Employee,
+      tenantKey: tenantId,
+    });
+    return handlers.importCsv(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error importing CSV' });
+  }
+};
+
+export const getTenantDistributionPreview = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const Lead = await importTenantModel(tenantId, 'lead');
+    const Employee = await importTenantModel(tenantId, 'employee');
+    if (!Lead || !Employee) return res.status(404).json({ message: 'Leads or employees not available' });
+
+    const { buildLeadDistributionPlan } = await import('../utils/distributeSalesLeads.js');
+    const date = req.query.date || new Date();
+    const plan = await buildLeadDistributionPlan({
+      Lead,
+      Employee,
+      date,
+    });
+    return res.status(200).json({
+      message: 'Lead distribution preview',
+      totalLeads: plan.totalLeads,
+      teamLeaderCount: plan.teamLeaderCount,
+      dayStart: plan.dayStart,
+      dayEnd: plan.dayEnd,
+      plan: plan.plan,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error previewing distribution' });
+  }
+};
+
+export const distributeTenantLeads = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const Lead = await importTenantModel(tenantId, 'lead');
+    const Employee = await importTenantModel(tenantId, 'employee');
+    if (!Lead || !Employee) return res.status(404).json({ message: 'Leads or employees not available' });
+
+    const { buildLeadDistributionPlan, applyLeadDistribution } = await import('../utils/distributeSalesLeads.js');
+    const date = req.body?.date || new Date();
+    const built = await buildLeadDistributionPlan({
+      Lead,
+      Employee,
+      date,
+    });
+    if (!built.totalLeads) {
+      return res.status(200).json({
+        message: 'No unassigned leads to distribute for the selected day',
+        totalLeads: 0,
+        updated: 0,
+        plan: built.plan,
+      });
+    }
+    const result = await applyLeadDistribution({
+      Lead,
+      plan: built.plan,
+    });
+    return res.status(200).json({
+      message: 'Leads distributed successfully',
+      totalLeads: built.totalLeads,
+      teamLeaderCount: built.teamLeaderCount,
+      updated: result.updated,
+      errors: result.errors,
+      plan: built.plan,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({ message: error.message || 'Error distributing leads' });
+  }
+};
+
+export const createTenantPresignedUpload = async (req, res) => {
+  try {
+    const tenantId = String(req.params.tenantId || '').trim();
+    if (!resolveTenant(tenantId)) return res.status(404).json({ message: 'Company tenant not found' });
+    const { createUploadHandlers } = await import('../utils/createUploadHandlers.js');
+    const handlers = createUploadHandlers({ tenantKey: tenantId });
+    return handlers.createPresignedUpload(req, res);
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Error generating presigned upload URL' });
+  }
+};
+
+const DEFAULT_INDIAN_STATES = [
+  { name: 'Andhra Pradesh', iso2: 'AP' },
+  { name: 'Arunachal Pradesh', iso2: 'AR' },
+  { name: 'Assam', iso2: 'AS' },
+  { name: 'Bihar', iso2: 'BR' },
+  { name: 'Chhattisgarh', iso2: 'CG' },
+  { name: 'Goa', iso2: 'GA' },
+  { name: 'Gujarat', iso2: 'GJ' },
+  { name: 'Haryana', iso2: 'HR' },
+  { name: 'Himachal Pradesh', iso2: 'HP' },
+  { name: 'Jharkhand', iso2: 'JH' },
+  { name: 'Karnataka', iso2: 'KA' },
+  { name: 'Kerala', iso2: 'KL' },
+  { name: 'Madhya Pradesh', iso2: 'MP' },
+  { name: 'Maharashtra', iso2: 'MH' },
+  { name: 'Manipur', iso2: 'MN' },
+  { name: 'Meghalaya', iso2: 'ML' },
+  { name: 'Mizoram', iso2: 'MZ' },
+  { name: 'Nagaland', iso2: 'NL' },
+  { name: 'Odisha', iso2: 'OR' },
+  { name: 'Punjab', iso2: 'PB' },
+  { name: 'Rajasthan', iso2: 'RJ' },
+  { name: 'Sikkim', iso2: 'SK' },
+  { name: 'Tamil Nadu', iso2: 'TN' },
+  { name: 'Telangana', iso2: 'TG' },
+  { name: 'Tripura', iso2: 'TR' },
+  { name: 'Uttar Pradesh', iso2: 'UP' },
+  { name: 'Uttarakhand', iso2: 'UK' },
+  { name: 'West Bengal', iso2: 'WB' },
+  { name: 'Delhi', iso2: 'DL' },
+  { name: 'Chandigarh', iso2: 'CH' },
+  { name: 'Jammu and Kashmir', iso2: 'JK' },
+  { name: 'Ladakh', iso2: 'LA' },
+  { name: 'Puducherry', iso2: 'PY' },
+];
+
+const DEFAULT_POPULAR_CITIES = {
+  MH: [{ name: 'Mumbai' }, { name: 'Pune' }, { name: 'Nagpur' }, { name: 'Nashik' }, { name: 'Thane' }, { name: 'Aurangabad' }, { name: 'Solapur' }, { name: 'Kolhapur' }, { name: 'Navi Mumbai' }, { name: 'Amravati' }],
+  DL: [{ name: 'New Delhi' }, { name: 'Central Delhi' }, { name: 'East Delhi' }, { name: 'North Delhi' }, { name: 'South Delhi' }, { name: 'West Delhi' }, { name: 'Dwarka' }, { name: 'Rohini' }],
+  KA: [{ name: 'Bengaluru' }, { name: 'Mysuru' }, { name: 'Hubballi' }, { name: 'Mangaluru' }, { name: 'Belagavi' }, { name: 'Dharwad' }, { name: 'Kalaburagi' }],
+  GJ: [{ name: 'Ahmedabad' }, { name: 'Surat' }, { name: 'Vadodara' }, { name: 'Rajkot' }, { name: 'Bhavnagar' }, { name: 'Jamnagar' }, { name: 'Gandhinagar' }],
+  TG: [{ name: 'Hyderabad' }, { name: 'Warangal' }, { name: 'Nizamabad' }, { name: 'Karimnagar' }, { name: 'Khammam' }],
+  TN: [{ name: 'Chennai' }, { name: 'Coimbatore' }, { name: 'Madurai' }, { name: 'Tiruchirappalli' }, { name: 'Salem' }, { name: 'Tirunelveli' }],
+  UP: [{ name: 'Lucknow' }, { name: 'Kanpur' }, { name: 'Noida' }, { name: 'Greater Noida' }, { name: 'Ghaziabad' }, { name: 'Varanasi' }, { name: 'Agra' }, { name: 'Prayagraj' }],
+  RJ: [{ name: 'Jaipur' }, { name: 'Jodhpur' }, { name: 'Kota' }, { name: 'Bikaner' }, { name: 'Ajmer' }, { name: 'Udaipur' }],
+  WB: [{ name: 'Kolkata' }, { name: 'Howrah' }, { name: 'Durgapur' }, { name: 'Asansol' }, { name: 'Siliguri' }],
+  MP: [{ name: 'Bhopal' }, { name: 'Indore' }, { name: 'Jabalpur' }, { name: 'Gwalior' }, { name: 'Ujjain' }],
+  HR: [{ name: 'Gurugram' }, { name: 'Faridabad' }, { name: 'Panipat' }, { name: 'Ambala' }, { name: 'Karnal' }],
+  PB: [{ name: 'Ludhiana' }, { name: 'Amritsar' }, { name: 'Jalandhar' }, { name: 'Patiala' }, { name: 'Bathinda' }, { name: 'Mohali' }],
+  KL: [{ name: 'Thiruvananthapuram' }, { name: 'Kochi' }, { name: 'Kozhikode' }, { name: 'Thrissur' }, { name: 'Kollam' }],
+  BR: [{ name: 'Patna' }, { name: 'Gaya' }, { name: 'Bhagalpur' }, { name: 'Muzaffarpur' }],
+  AP: [{ name: 'Visakhapatnam' }, { name: 'Vijayawada' }, { name: 'Guntur' }, { name: 'Nellore' }, { name: 'Kurnool' }],
+  GA: [{ name: 'Panaji' }, { name: 'Margao' }, { name: 'Vasco da Gama' }, { name: 'Mapusa' }],
+};
+
+export const getTenantStates = async (req, res) => {
+  try {
+    const CSC_BASE_URL = 'https://api.countrystatecity.in/v1';
+    const apiKey = process.env.STATEANDCITY_API_KEY || '';
+    if (apiKey) {
+      let response = await fetch(`${CSC_BASE_URL}/countries/IN/states`, {
+        headers: { 'X-CSCAPI-KEY': apiKey },
+      });
+      if (!response.ok) {
+        response = await fetch(`${CSC_BASE_URL}/states`, {
+          headers: { 'X-CSCAPI-KEY': apiKey },
+        });
+      }
+      if (response.ok) {
+        const states = await response.json();
+        const normalized = Array.isArray(states)
+          ? states.map((s) => ({ name: s.name, iso2: s.iso2 || s.state_code || '' }))
+          : [];
+        if (normalized.length) return res.status(200).json(normalized);
+      }
+    }
+  } catch {
+    // fallback below
+  }
+  return res.status(200).json(DEFAULT_INDIAN_STATES);
+};
+
+export const getTenantCities = async (req, res) => {
+  try {
+    const stateCode = String(req.query.stateCode || req.query.state || '').trim();
+    const CSC_BASE_URL = 'https://api.countrystatecity.in/v1';
+    const apiKey = process.env.STATEANDCITY_API_KEY || '';
+    if (apiKey && stateCode) {
+      let response = await fetch(`${CSC_BASE_URL}/countries/IN/states/${stateCode}/cities`, {
+        headers: { 'X-CSCAPI-KEY': apiKey },
+      });
+      if (!response.ok) {
+        response = await fetch(`${CSC_BASE_URL}/states/${stateCode}/cities`, {
+          headers: { 'X-CSCAPI-KEY': apiKey },
+        });
+      }
+      if (response.ok) {
+        const cities = await response.json();
+        const normalized = Array.isArray(cities)
+          ? cities.map((c) => ({ name: c.name }))
+          : [];
+        if (normalized.length) return res.status(200).json(normalized);
+      }
+    }
+    if (stateCode && DEFAULT_POPULAR_CITIES[stateCode]) {
+      return res.status(200).json(DEFAULT_POPULAR_CITIES[stateCode]);
+    }
+  } catch {
+    // fallback below
+  }
+  return res.status(200).json([]);
+};
+
 
 const importTenantModel = async (tenantId, suffix) => {
   try {
@@ -1160,8 +1414,53 @@ export const getTenantModuleList = async (req, res) => {
       const createdDate = String(req.query.createdAt || req.query.date || '').trim();
 
       const filter = {};
-      if (statusFilter) filter.status = statusFilter;
+      if (statusFilter && statusFilter !== 'All') filter.status = statusFilter;
       if (sourceFilter) filter.leadSource = new RegExp(sourceFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      const search = String(req.query.search || '').trim();
+      if (search) {
+        const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const rx = new RegExp(safeSearch, 'i');
+        filter.$or = [
+          { name: rx },
+          { businessName: rx },
+          { contactNumber: rx },
+          { leadSource: rx },
+          { city: rx },
+          { state: rx },
+          { businessType: rx },
+        ];
+      }
+
+      const businessType = String(req.query.businessType || '').trim();
+      if (businessType) {
+        filter.businessType = new RegExp(businessType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      }
+
+      const cityFilter = String(req.query.city || '').trim();
+      if (cityFilter) {
+        filter.city = new RegExp(cityFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      }
+
+      const stateFilter = String(req.query.state || '').trim();
+      if (stateFilter) {
+        filter.state = new RegExp(stateFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      }
+
+      const employeeFilter = String(req.query.employee || req.query.generatedBy || '').trim();
+      if (employeeFilter) {
+        filter.generatedBy = employeeFilter;
+      }
+
+      const assignedToFilter = String(req.query.assignedTo || '').trim();
+      if (assignedToFilter) {
+        filter.assignedTo = assignedToFilter;
+      }
+
+      const unassignedFilter = String(req.query.unassigned || '').trim();
+      if (unassignedFilter === 'true' || unassignedFilter === '1') {
+        filter.assignedTo = null;
+      }
 
       if (createdDate || dateFrom || dateTo) {
         filter.createdAt = {};
@@ -1187,25 +1486,39 @@ export const getTenantModuleList = async (req, res) => {
       else if (sortBy === 'createdat' || sortBy === 'date') sort = { createdAt: sortDir };
 
       const hasSalesAssignment = ['bangarProperties', 'mahaProperties', 'salesTechReality'].includes(tenantId);
-      let leadQuery = Lead.find(filter).populate('generatedBy', 'name email');
+      let leadQuery = Lead.find(filter).populate('generatedBy', 'name email department designation profilePhoto');
       if (hasSalesAssignment) {
         leadQuery = leadQuery
-          .populate('assignedTo', 'name email')
-          .populate('siteCoordinator', 'name email');
+          .populate('assignedTo', 'name email department designation profilePhoto')
+          .populate('siteCoordinator', 'name email department designation profilePhoto');
       }
       const items = await leadQuery.sort(sort).lean();
 
-      const statuses = await Lead.distinct('status');
-      const sources = (await Lead.distinct('leadSource')).filter((s) => String(s || '').trim());
+      const [statuses, sources, businessTypes, totalCount, interestedCount, meetingCount, notInterestedCount] = await Promise.all([
+        Lead.distinct('status'),
+        Lead.distinct('leadSource'),
+        Lead.distinct('businessType'),
+        Lead.countDocuments({}),
+        Lead.countDocuments({ status: 'Interested' }),
+        Lead.countDocuments({ status: 'Meeting Schedule' }),
+        Lead.countDocuments({ status: 'Not Interested' }),
+      ]);
 
       return res.status(200).json({
         tenantId,
         tenantLabel: tenant.label,
         module,
         items,
+        stats: {
+          total: totalCount,
+          interested: interestedCount,
+          meetingSchedule: meetingCount,
+          notInterested: notInterestedCount,
+        },
         filters: {
           statuses: statuses.filter(Boolean).sort(),
-          sources: sources.sort((a, b) => String(a).localeCompare(String(b))),
+          sources: (sources || []).filter((s) => String(s || '').trim()).sort((a, b) => String(a).localeCompare(String(b))),
+          businessTypes: (businessTypes || []).filter((b) => String(b || '').trim()).sort((a, b) => String(a).localeCompare(String(b))),
         },
       });
     }

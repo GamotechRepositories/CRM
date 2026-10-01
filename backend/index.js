@@ -116,6 +116,28 @@ app.get('/', (req, res) => {
   res.send('Welcome to the CRM API');
 });
 
+// Image proxy route to bypass CORS for HTML2Canvas / PDF export
+app.get('/api/proxy-image', async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).send('URL query parameter required');
+  }
+  try {
+    const upstream = await fetch(url);
+    if (!upstream.ok) {
+      return res.status(upstream.status).send('Failed to fetch upstream image');
+    }
+    const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    return res.send(buffer);
+  } catch (err) {
+    return res.status(500).send(err?.message || 'Proxy error');
+  }
+});
+
 // Company-specific routes mounted as: /api/v1/<company>/*
 const routeFiles = [
   'designationRoute',

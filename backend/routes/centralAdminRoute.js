@@ -20,6 +20,14 @@ import {
   updateTenantProject,
   createTenantLead,
   updateTenantLead,
+  getTenantLead,
+  deleteTenantLead,
+  importTenantLeadCsv,
+  getTenantDistributionPreview,
+  distributeTenantLeads,
+  createTenantPresignedUpload,
+  getTenantStates,
+  getTenantCities,
   getTenantModuleList,
   getTenantClientDashboard,
   getTenantProjectDashboard,
@@ -60,6 +68,16 @@ router.post('/companies/:tenantId/projects', createTenantProject);
 router.put('/companies/:tenantId/projects/:projectId', updateTenantProject);
 router.post('/companies/:tenantId/leads', createTenantLead);
 router.put('/companies/:tenantId/leads/:leadId', updateTenantLead);
+router.get('/companies/:tenantId/leads/:leadId', getTenantLead);
+router.delete('/companies/:tenantId/leads/:leadId', deleteTenantLead);
+router.post('/companies/:tenantId/leads/import-csv', importTenantLeadCsv);
+router.get('/companies/:tenantId/leads/distribution-preview', getTenantDistributionPreview);
+router.post('/companies/:tenantId/leads/distribute', distributeTenantLeads);
+router.post('/companies/:tenantId/uploads/presign', createTenantPresignedUpload);
+router.get('/companies/:tenantId/locations/states', getTenantStates);
+router.get('/companies/:tenantId/locations/cities', getTenantCities);
+router.get('/locations/states', getTenantStates);
+router.get('/locations/cities', getTenantCities);
 router.get('/companies/:tenantId/modules/:module', getTenantModuleList);
 router.get('/companies/:tenantId/clients/:clientId/dashboard', getTenantClientDashboard);
 router.get('/companies/:tenantId/projects/:projectId/dashboard', getTenantProjectDashboard);
