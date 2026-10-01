@@ -126,9 +126,9 @@ const InvoicePage = () => {
         re.lastIndex = 0
       }
     }
-    replaceParenFunc('oklch', 'transparent')
-    replaceParenFunc('oklab', 'transparent')
-    replaceParenFunc('color-mix', 'transparent')
+    replaceParenFunc('oklch', 'inherit')
+    replaceParenFunc('oklab', 'inherit')
+    replaceParenFunc('color-mix', 'inherit')
     return out
   }
 
@@ -205,17 +205,19 @@ const InvoicePage = () => {
             }
           })
 
-          // Set clean A4 printable width without forced stretch
+          // Configure exact A4 sheet proportions for clone (794px x 1123px = 210mm x 297mm at 96 DPI)
           clonedElement.style.width = '794px'
           clonedElement.style.maxWidth = '794px'
-          clonedElement.style.height = 'auto'
-          clonedElement.style.minHeight = 'auto'
-          clonedElement.style.display = 'block'
+          clonedElement.style.minHeight = '1123px'
+          clonedElement.style.boxSizing = 'border-box'
+          clonedElement.style.display = 'flex'
+          clonedElement.style.flexDirection = 'column'
+          clonedElement.style.justifyContent = 'space-between'
           clonedElement.style.margin = '0 auto'
           clonedElement.style.boxShadow = 'none'
           clonedElement.style.borderRadius = '0px'
           clonedElement.style.border = 'none'
-          clonedElement.style.padding = '32px 36px'
+          clonedElement.style.padding = '36px 44px'
           clonedElement.style.backgroundColor = '#ffffff'
 
           // Ensure logo uses base64 data url
@@ -223,37 +225,55 @@ const InvoicePage = () => {
           if (logoEl && activeLogo) {
             logoEl.src = activeLogo
           }
+
+          // Ensure all text elements have opaque non-transparent color
+          clonedElement.querySelectorAll('*').forEach((node) => {
+            if (node.style && (!node.style.color || node.style.color === 'transparent')) {
+              try {
+                const comp = (clonedDoc.defaultView || window).getComputedStyle(node)
+                if (comp.color && comp.color.startsWith('rgb') && comp.color !== 'rgba(0, 0, 0, 0)') {
+                  node.style.color = comp.color
+                } else {
+                  node.style.color = '#000000'
+                }
+              } catch {
+                node.style.color = '#000000'
+              }
+            }
+          })
         },
       })
 
-      // Standard A4 dimensions in mm
+      // Standard A4 dimensions in mm: 210 x 297
       const pageWidth = 210
       const pageHeight = 297
 
-      // Side margins: 10mm left and right, 10mm top and bottom
-      const marginX = 10
-      const marginY = 10
-      const contentWidth = pageWidth - marginX * 2 // 190mm
-      const contentHeight = (canvas.height * contentWidth) / canvas.width
-      const availableHeight = pageHeight - marginY * 2 // 277mm
-
-      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
       const imgData = canvas.toDataURL('image/jpeg', 0.98)
 
-      if (contentHeight <= availableHeight) {
-        pdf.addImage(imgData, 'JPEG', marginX, marginY, contentWidth, contentHeight)
-      } else {
-        let heightLeft = contentHeight
-        let position = marginY
+      // Calculate rendered content height in mm for a 210mm width
+      const contentHeight = (canvas.height * pageWidth) / canvas.width
 
-        pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
-        heightLeft -= availableHeight
+      if (contentHeight <= pageHeight + 5) {
+        // Fits on a single A4 page: fill exact 210mm x 297mm A4 sheet
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight)
+      } else {
+        // Multi-page handling with full A4 width
+        let heightLeft = contentHeight
+        let position = 0
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+        heightLeft -= pageHeight
 
         while (heightLeft > 0) {
-          position = marginY - (contentHeight - heightLeft)
+          position = -(contentHeight - heightLeft)
           pdf.addPage()
-          pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
-          heightLeft -= availableHeight
+          pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+          heightLeft -= pageHeight
         }
       }
 
@@ -390,33 +410,41 @@ const InvoicePage = () => {
         {/* Invoice content - exact A4 sheet proportions on screen */}
         <div
           ref={invoiceRef}
-          className='invoice-a4-sheet bg-white border border-gray-200 shadow-xl rounded-sm w-[210mm] max-w-full min-h-[297mm] p-8 sm:p-12 mx-auto text-black'
+          className='invoice-a4-sheet bg-white border border-gray-200 shadow-xl rounded-sm w-[210mm] max-w-full min-h-[297mm] p-8 sm:p-12 mx-auto text-black flex flex-col justify-between'
+          style={{ boxSizing: 'border-box' }}
         >
-          {/* Company logo at top center */}
-          <div className='flex justify-center pt-2 pb-4 border-b border-gray-200'>
-            <img
-              src={logoSrc}
-              alt={company.name || 'Company logo'}
-              crossOrigin='anonymous'
-              className='company-logo-img h-16 sm:h-20 w-auto max-w-[220px] object-contain'
-            />
-          </div>
+          <div className='invoice-main-content flex-1'>
+            {/* Company logo at top center */}
+            <div className='flex justify-center pt-2 pb-4 border-b' style={{ borderColor: '#e5e7eb' }}>
+              <img
+                src={logoSrc}
+                alt={company.name || 'Company logo'}
+                crossOrigin='anonymous'
+                className='company-logo-img h-16 sm:h-20 w-auto max-w-[220px] object-contain'
+              />
+            </div>
 
-          {/* Header: Title and Invoice No */}
-          <div className='py-4 border-b border-gray-200'>
-            <div className='flex flex-wrap items-baseline justify-between gap-4'>
-              <div>
-                <h1 className='text-2xl font-bold tracking-tight text-black'>INVOICE</h1>
-                <p className='text-sm text-gray-700 mt-1 font-medium'>
-                  {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
-                </p>
-              </div>
-              <div className='text-right'>
-                <p className='text-sm text-black'><span className='font-semibold'>Invoice No:</span> {billing.invoiceNumber || `Gamo-${getFYDisplay(billing.createdAt)}-001`}</p>
-                <p className='text-sm text-gray-700 mt-0.5'><span className='font-semibold text-black'>Financial Year:</span> {getFYDisplay(billing.createdAt)}</p>
+            {/* Header: Title and Invoice No */}
+            <div className='py-4 border-b' style={{ borderColor: '#e5e7eb' }}>
+              <div className='flex flex-wrap items-baseline justify-between gap-4'>
+                <div>
+                  <h1 className='text-2xl font-bold tracking-tight' style={{ color: '#000000' }}>INVOICE</h1>
+                  <p className='text-sm mt-1 font-medium' style={{ color: '#374151' }}>
+                    {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
+                  </p>
+                </div>
+                <div className='text-right'>
+                  <p className='text-sm' style={{ color: '#000000' }}>
+                    <span className='font-semibold' style={{ color: '#000000' }}>Invoice No:</span>{' '}
+                    {billing.invoiceNumber ? billing.invoiceNumber.replace(/^Gamo-/, 'MHP-') : `MHP-${getFYDisplay(billing.createdAt)}-001`}
+                  </p>
+                  <p className='text-sm mt-1' style={{ color: '#000000' }}>
+                    <span className='font-semibold' style={{ color: '#000000' }}>Financial Year:</span>{' '}
+                    <span className='font-semibold' style={{ color: '#000000' }}>{getFYDisplay(billing.createdAt)}</span>
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
           {/* From & Bill To */}
           <div className='py-6 grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-gray-200'>
@@ -562,26 +590,31 @@ const InvoicePage = () => {
             </div>
           )}
 
-          {/* Authorized Signature */}
-          <div className='mt-8 pt-4 flex justify-end'>
-            <div className='text-center'>
-              {billing.authorizedSignature ? (
-                <>
-                  <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
-                  <p className='text-sm font-semibold text-black mt-1'>Authorized Signature</p>
-                </>
-              ) : (
-                <>
-                  <div className='border-t-2 border-black w-44 mt-6 mb-1 mx-auto' />
-                  <p className='text-sm font-semibold text-black'>Authorized Signature</p>
-                </>
-              )}
-            </div>
           </div>
 
-          {/* Footer */}
-          <div className='mt-6 pt-4 border-t border-gray-200 text-center text-sm text-gray-700 font-medium'>
-            Thank you for your business.
+          {/* Bottom aligned signature and footer */}
+          <div className='invoice-footer-content mt-auto pt-6'>
+            {/* Authorized Signature */}
+            <div className='flex justify-end'>
+              <div className='text-center'>
+                {billing.authorizedSignature ? (
+                  <>
+                    <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
+                    <p className='text-sm font-semibold text-black mt-1'>Authorized Signature</p>
+                  </>
+                ) : (
+                  <>
+                    <div className='border-t-2 border-black w-44 mt-6 mb-1 mx-auto' />
+                    <p className='text-sm font-semibold text-black'>Authorized Signature</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className='mt-6 pt-4 border-t border-gray-200 text-center text-sm font-medium' style={{ color: '#374151' }}>
+              Thank you for your business.
+            </div>
           </div>
         </div>
       </div>

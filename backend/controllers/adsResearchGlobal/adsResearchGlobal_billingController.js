@@ -66,8 +66,8 @@ export function computeTracking(billings) {
 export const createBilling = async (req, res) => {
   try {
     const fy = getFinancialYearEnd();
-    const prefix = `Gamo-${fy}-`;
-    const count = await Billing.countDocuments({ invoiceNumber: new RegExp(`^${prefix}`) });
+    const prefix = `ARG-${fy}-`;
+    const count = await Billing.countDocuments({ invoiceNumber: new RegExp(`^(?:ARG|Gamo)-${fy}-`) });
     const seq = count + 1;
     const invoiceNumber = `${prefix}${String(seq).padStart(3, '0')}`;
     const billing = new Billing({ ...req.body, invoiceNumber });

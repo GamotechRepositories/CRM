@@ -126,9 +126,9 @@ const InvoicePage = () => {
         re.lastIndex = 0
       }
     }
-    replaceParenFunc('oklch', 'transparent')
-    replaceParenFunc('oklab', 'transparent')
-    replaceParenFunc('color-mix', 'transparent')
+    replaceParenFunc('oklch', 'inherit')
+    replaceParenFunc('oklab', 'inherit')
+    replaceParenFunc('color-mix', 'inherit')
     return out
   }
 
@@ -205,17 +205,19 @@ const InvoicePage = () => {
             }
           })
 
-          // Set clean A4 printable width without forced stretch
+          // Configure exact A4 sheet proportions for clone (794px x 1123px = 210mm x 297mm at 96 DPI)
           clonedElement.style.width = '794px'
           clonedElement.style.maxWidth = '794px'
-          clonedElement.style.height = 'auto'
-          clonedElement.style.minHeight = 'auto'
-          clonedElement.style.display = 'block'
+          clonedElement.style.minHeight = '1123px'
+          clonedElement.style.boxSizing = 'border-box'
+          clonedElement.style.display = 'flex'
+          clonedElement.style.flexDirection = 'column'
+          clonedElement.style.justifyContent = 'space-between'
           clonedElement.style.margin = '0 auto'
           clonedElement.style.boxShadow = 'none'
           clonedElement.style.borderRadius = '0px'
           clonedElement.style.border = 'none'
-          clonedElement.style.padding = '32px 36px'
+          clonedElement.style.padding = '36px 44px'
           clonedElement.style.backgroundColor = '#ffffff'
 
           // Ensure logo uses base64 data url
@@ -223,37 +225,55 @@ const InvoicePage = () => {
           if (logoEl && activeLogo) {
             logoEl.src = activeLogo
           }
+
+          // Ensure all text elements have opaque non-transparent color
+          clonedElement.querySelectorAll('*').forEach((node) => {
+            if (node.style && (!node.style.color || node.style.color === 'transparent')) {
+              try {
+                const comp = (clonedDoc.defaultView || window).getComputedStyle(node)
+                if (comp.color && comp.color.startsWith('rgb') && comp.color !== 'rgba(0, 0, 0, 0)') {
+                  node.style.color = comp.color
+                } else {
+                  node.style.color = '#000000'
+                }
+              } catch {
+                node.style.color = '#000000'
+              }
+            }
+          })
         },
       })
 
-      // Standard A4 dimensions in mm
+      // Standard A4 dimensions in mm: 210 x 297
       const pageWidth = 210
       const pageHeight = 297
 
-      // Side margins: 10mm left and right, 10mm top and bottom
-      const marginX = 10
-      const marginY = 10
-      const contentWidth = pageWidth - marginX * 2 // 190mm
-      const contentHeight = (canvas.height * contentWidth) / canvas.width
-      const availableHeight = pageHeight - marginY * 2 // 277mm
-
-      const pdf = new jsPDF('p', 'mm', 'a4')
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
       const imgData = canvas.toDataURL('image/jpeg', 0.98)
 
-      if (contentHeight <= availableHeight) {
-        pdf.addImage(imgData, 'JPEG', marginX, marginY, contentWidth, contentHeight)
-      } else {
-        let heightLeft = contentHeight
-        let position = marginY
+      // Calculate rendered content height in mm for a 210mm width
+      const contentHeight = (canvas.height * pageWidth) / canvas.width
 
-        pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
-        heightLeft -= availableHeight
+      if (contentHeight <= pageHeight + 5) {
+        // Fits on a single A4 page: fill exact 210mm x 297mm A4 sheet
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight)
+      } else {
+        // Multi-page handling with full A4 width
+        let heightLeft = contentHeight
+        let position = 0
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+        heightLeft -= pageHeight
 
         while (heightLeft > 0) {
-          position = marginY - (contentHeight - heightLeft)
+          position = -(contentHeight - heightLeft)
           pdf.addPage()
-          pdf.addImage(imgData, 'JPEG', marginX, position, contentWidth, contentHeight)
-          heightLeft -= availableHeight
+          pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+          heightLeft -= pageHeight
         }
       }
 
@@ -390,198 +410,209 @@ const InvoicePage = () => {
         {/* Invoice content - exact A4 sheet proportions on screen */}
         <div
           ref={invoiceRef}
-          className='invoice-a4-sheet bg-white border border-gray-200 shadow-xl rounded-sm w-[210mm] max-w-full min-h-[297mm] p-8 sm:p-12 mx-auto text-black'
+          className='invoice-a4-sheet bg-white border border-gray-200 shadow-xl rounded-sm w-[210mm] max-w-full min-h-[297mm] p-8 sm:p-12 mx-auto text-black flex flex-col justify-between'
+          style={{ boxSizing: 'border-box' }}
         >
-          {/* Company logo at top center */}
-          <div className='flex justify-center pt-2 pb-4 border-b border-gray-200'>
-            <img
-              src={logoSrc}
-              alt={company.name || 'Company logo'}
-              crossOrigin='anonymous'
-              className='company-logo-img h-16 sm:h-20 w-auto max-w-[220px] object-contain'
-            />
-          </div>
+          <div className='invoice-main-content flex-1'>
+            {/* Company logo at top center */}
+            <div className='flex justify-center pt-2 pb-4 border-b' style={{ borderColor: '#e5e7eb' }}>
+              <img
+                src={logoSrc}
+                alt={company.name || 'Company logo'}
+                crossOrigin='anonymous'
+                className='company-logo-img h-16 sm:h-20 w-auto max-w-[220px] object-contain'
+              />
+            </div>
 
-          {/* Header: Title and Invoice No */}
-          <div className='py-4 border-b border-gray-200'>
-            <div className='flex flex-wrap items-baseline justify-between gap-4'>
-              <div>
-                <h1 className='text-2xl font-bold tracking-tight text-black'>INVOICE</h1>
-                <p className='text-sm text-gray-700 mt-1 font-medium'>
-                  {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
-                </p>
-              </div>
-              <div className='text-right'>
-                <p className='text-sm text-black'><span className='font-semibold'>Invoice No:</span> {billing.invoiceNumber || `Gamo-${getFYDisplay(billing.createdAt)}-001`}</p>
-                <p className='text-sm text-gray-700 mt-0.5'><span className='font-semibold text-black'>Financial Year:</span> {getFYDisplay(billing.createdAt)}</p>
+            {/* Header: Title and Invoice No */}
+            <div className='py-4 border-b' style={{ borderColor: '#e5e7eb' }}>
+              <div className='flex flex-wrap items-baseline justify-between gap-4'>
+                <div>
+                  <h1 className='text-2xl font-bold tracking-tight' style={{ color: '#000000' }}>INVOICE</h1>
+                  <p className='text-sm mt-1 font-medium' style={{ color: '#374151' }}>
+                    {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
+                  </p>
+                </div>
+                <div className='text-right'>
+                  <p className='text-sm' style={{ color: '#000000' }}>
+                    <span className='font-semibold' style={{ color: '#000000' }}>Invoice No:</span>{' '}
+                    {billing.invoiceNumber ? billing.invoiceNumber.replace(/^Gamo-/, 'BGP-') : `BGP-${getFYDisplay(billing.createdAt)}-001`}
+                  </p>
+                  <p className='text-sm mt-1' style={{ color: '#000000' }}>
+                    <span className='font-semibold' style={{ color: '#000000' }}>Financial Year:</span>{' '}
+                    <span className='font-semibold' style={{ color: '#000000' }}>{getFYDisplay(billing.createdAt)}</span>
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* From & Bill To */}
-          <div className='py-6 grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-gray-200'>
-            {/* From / Company */}
-            <div>
-              <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>From</h2>
+            {/* From & Bill To */}
+            <div className='py-6 grid grid-cols-1 md:grid-cols-2 gap-8 border-b' style={{ borderColor: '#e5e7eb' }}>
+              {/* From / Company */}
               <div>
-                <p className='font-semibold text-black'>{company.name || '—'}</p>
-                {company.address && <p className='text-sm text-black mt-1'>{company.address}</p>}
-                {company.email && <p className='text-sm text-black'>{company.email}</p>}
-                {company.phone && <p className='text-sm text-black'>{company.phone}</p>}
-                {company.pan && <p className='text-sm text-black'>PAN: {company.pan}</p>}
-                {company.website && <p className='text-sm text-black'>Website: {company.website}</p>}
-                {isGst && billing.companyGst?.gstin && (
-                  <p className='text-sm text-black mt-2'>
-                    GSTIN: {billing.companyGst.gstin}
-                    {billing.companyGst.state && ` • State: ${billing.companyGst.state} (${billing.companyGst.stateCode || ''})`}
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#000000' }}>From</h2>
+                <div>
+                  <p className='font-semibold' style={{ color: '#000000' }}>{company.name || '—'}</p>
+                  {company.address && <p className='text-sm mt-1' style={{ color: '#000000' }}>{company.address}</p>}
+                  {company.email && <p className='text-sm' style={{ color: '#000000' }}>{company.email}</p>}
+                  {company.phone && <p className='text-sm' style={{ color: '#000000' }}>{company.phone}</p>}
+                  {company.pan && <p className='text-sm' style={{ color: '#000000' }}>PAN: {company.pan}</p>}
+                  {company.website && <p className='text-sm' style={{ color: '#000000' }}>Website: {company.website}</p>}
+                  {isGst && billing.companyGst?.gstin && (
+                    <p className='text-sm mt-2' style={{ color: '#000000' }}>
+                      GSTIN: {billing.companyGst.gstin}
+                      {billing.companyGst.state && ` • State: ${billing.companyGst.state} (${billing.companyGst.stateCode || ''})`}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Bill To / Client */}
+              <div>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#000000' }}>Bill To</h2>
+                <p className='font-semibold' style={{ color: '#000000' }}>{client.clientName || '—'}</p>
+                {client.address && <p className='text-sm mt-1' style={{ color: '#000000' }}>{client.address}</p>}
+                {client.mailId && <p className='text-sm' style={{ color: '#000000' }}>{client.mailId}</p>}
+                {client.clientNumber && <p className='text-sm' style={{ color: '#000000' }}>{client.clientNumber}</p>}
+                {isGst && (billing.clientGst?.gstin || billing.clientGst?.billingAddress) && (
+                  <p className='text-sm mt-2' style={{ color: '#000000' }}>
+                    {billing.clientGst.gstin && `GSTIN: ${billing.clientGst.gstin}`}
+                    {billing.clientGst.billingAddress && ` • ${billing.clientGst.billingAddress}`}
+                  </p>
+                )}
+                {payment.method && (
+                  <p className='text-sm mt-2' style={{ color: '#000000' }}>
+                    <span className='font-semibold'>Payment Mode:</span> {payment.method}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Bill To / Client */}
-            <div>
-              <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>Bill To</h2>
-              <p className='font-semibold text-black'>{client.clientName || '—'}</p>
-              {client.address && <p className='text-sm text-black mt-1'>{client.address}</p>}
-              {client.mailId && <p className='text-sm text-black'>{client.mailId}</p>}
-              {client.clientNumber && <p className='text-sm text-black'>{client.clientNumber}</p>}
-              {isGst && (billing.clientGst?.gstin || billing.clientGst?.billingAddress) && (
-                <p className='text-sm text-black mt-2'>
-                  {billing.clientGst.gstin && `GSTIN: ${billing.clientGst.gstin}`}
-                  {billing.clientGst.billingAddress && ` • ${billing.clientGst.billingAddress}`}
-                </p>
-              )}
-              {payment.method && (
-                <p className='text-sm text-black mt-2'>
-                  <span className='font-semibold'>Payment Mode:</span> {payment.method}
-                </p>
+            {/* Projects / Items table */}
+            <div className='py-6'>
+              <h2 className='text-xs font-semibold uppercase tracking-wider mb-3' style={{ color: '#000000' }}>Invoice Items</h2>
+              <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
+                <thead>
+                  <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
+                    <th className='text-left py-2 px-3 font-semibold' style={{ color: '#000000' }}>#</th>
+                    <th className='text-left py-2 px-3 font-semibold' style={{ color: '#000000' }}>Project / Description</th>
+                    <th className='text-right py-2 px-3 font-semibold' style={{ color: '#000000' }}>Project Cost</th>
+                    <th className='text-right py-2 px-3 font-semibold' style={{ color: '#000000' }}>Amount (INR)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className='py-4 px-3 text-center' style={{ color: '#000000' }}>No projects</td>
+                    </tr>
+                  ) : (
+                    projects.map((item, i) => {
+                      const cost = Number(item.projectCost) || 0
+                      const rem = Number(item.remainingCost) || 0
+                      const paid = cost - rem
+                      return (
+                        <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
+                          <td className='py-2 px-3' style={{ color: '#000000' }}>{i + 1}</td>
+                          <td className='py-2 px-3' style={{ color: '#000000' }}>{item.project?.projectName || '—'}</td>
+                          <td className='py-2 px-3 text-right' style={{ color: '#000000' }}>{formatINR(item.projectCost)}</td>
+                          <td className='py-2 px-3 text-right' style={{ color: '#000000' }}>{formatINR(paid)}</td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+              {projects.length > 0 && (() => {
+                const totalProjectCost = projects.reduce((s, p) => s + (Number(p.projectCost) || 0), 0)
+                const totalRemaining = projects.reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
+                const amountPaid = totalProjectCost - totalRemaining
+                return (
+                  <div className='mt-3 pt-3 border-t flex flex-wrap gap-6 text-sm' style={{ borderColor: '#d1d5db' }}>
+                    <span style={{ color: '#000000' }}><span className='font-semibold'>Total Project Cost:</span> {formatINR(totalProjectCost)}</span>
+                    <span style={{ color: '#000000' }}><span className='font-semibold'>Amount (this payment):</span> {formatINR(amountPaid)}</span>
+                  </div>
+                )
+              })()}
+              {billing.tracking && billing.tracking.length > 0 && (
+                <div className='mt-6 pt-4 border-t' style={{ borderColor: '#d1d5db' }}>
+                  <h3 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#000000' }}>Payment tracking (all bills for this client)</h3>
+                  <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
+                    <thead>
+                      <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
+                        <th className='text-left py-2 px-3 font-semibold' style={{ color: '#000000' }}>Project</th>
+                        <th className='text-right py-2 px-3 font-semibold' style={{ color: '#000000' }}>Project Cost</th>
+                        <th className='text-right py-2 px-3 font-semibold' style={{ color: '#000000' }}>Total Paid</th>
+                        <th className='text-right py-2 px-3 font-semibold' style={{ color: '#000000' }}>Remaining</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {billing.tracking.map((t, i) => (
+                        <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
+                          <td className='py-2 px-3' style={{ color: '#000000' }}>{t.project?.projectName || '—'}</td>
+                          <td className='py-2 px-3 text-right' style={{ color: '#000000' }}>{formatINR(t.projectCost)}</td>
+                          <td className='py-2 px-3 text-right' style={{ color: '#000000' }}>{formatINR(t.totalPaid)}</td>
+                          <td className='py-2 px-3 text-right font-medium' style={{ color: '#000000' }}>{formatINR(t.remaining)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Projects / Items table */}
-          <div className='py-6'>
-            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Invoice Items</h2>
-            <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
-              <thead>
-                <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
-                  <th className='text-left py-2 px-3 font-semibold text-black'>#</th>
-                  <th className='text-left py-2 px-3 font-semibold text-black'>Project / Description</th>
-                  <th className='text-right py-2 px-3 font-semibold text-black'>Project Cost</th>
-                  <th className='text-right py-2 px-3 font-semibold text-black'>Amount (INR)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className='py-4 px-3 text-center text-black'>No projects</td>
-                  </tr>
-                ) : (
-                  projects.map((item, i) => {
-                    const cost = Number(item.projectCost) || 0
-                    const rem = Number(item.remainingCost) || 0
-                    const paid = cost - rem
-                    return (
-                      <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
-                        <td className='py-2 px-3 text-black'>{i + 1}</td>
-                        <td className='py-2 px-3 text-black'>{item.project?.projectName || '—'}</td>
-                        <td className='py-2 px-3 text-right text-black'>{formatINR(item.projectCost)}</td>
-                        <td className='py-2 px-3 text-right text-black'>{formatINR(paid)}</td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-            {projects.length > 0 && (() => {
-              const totalProjectCost = projects.reduce((s, p) => s + (Number(p.projectCost) || 0), 0)
-              const totalRemaining = projects.reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
-              const amountPaid = totalProjectCost - totalRemaining
-              return (
-                <div className='mt-3 pt-3 border-t border-gray-300 flex flex-wrap gap-6 text-sm'>
-                  <span className='text-black'><span className='font-semibold'>Total Project Cost:</span> {formatINR(totalProjectCost)}</span>
-                  <span className='text-black'><span className='font-semibold'>Amount (this payment):</span> {formatINR(amountPaid)}</span>
-                </div>
-              )
-            })()}
-            {billing.tracking && billing.tracking.length > 0 && (
-              <div className='mt-6 pt-4 border-t border-gray-300'>
-                <h3 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>Payment tracking (all bills for this client)</h3>
-                <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
-                  <thead>
-                    <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
-                      <th className='text-left py-2 px-3 font-semibold text-black'>Project</th>
-                      <th className='text-right py-2 px-3 font-semibold text-black'>Project Cost</th>
-                      <th className='text-right py-2 px-3 font-semibold text-black'>Total Paid</th>
-                      <th className='text-right py-2 px-3 font-semibold text-black'>Remaining</th>
-                    </tr>
-                  </thead>
+            {/* GST breakdown (when GST bill) */}
+            {isGst && (taxableValue != null || invoiceAmount != null) && (
+              <div className='py-4'>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#000000' }}>GST Breakdown</h2>
+                <table className='w-full max-w-xs text-sm border' style={{ borderColor: '#d1d5db' }}>
                   <tbody>
-                    {billing.tracking.map((t, i) => (
-                      <tr key={i} className='border-b' style={{ borderColor: '#e5e7eb' }}>
-                        <td className='py-2 px-3 text-black'>{t.project?.projectName || '—'}</td>
-                        <td className='py-2 px-3 text-right text-black'>{formatINR(t.projectCost)}</td>
-                        <td className='py-2 px-3 text-right text-black'>{formatINR(t.totalPaid)}</td>
-                        <td className='py-2 px-3 text-right text-black font-medium'>{formatINR(t.remaining)}</td>
-                      </tr>
-                    ))}
+                    {taxableValue != null && (
+                      <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3' style={{ color: '#000000' }}>Taxable Value</td><td className='py-1.5 px-3 text-right' style={{ color: '#000000' }}>{formatINR(taxableValue).replace('₹', '')}</td></tr>
+                    )}
+                    {cgstAmount != null && (
+                      <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3' style={{ color: '#000000' }}>CGST @ 9%</td><td className='py-1.5 px-3 text-right' style={{ color: '#000000' }}>{formatINR(cgstAmount).replace('₹', '')}</td></tr>
+                    )}
+                    {sgstAmount != null && (
+                      <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3' style={{ color: '#000000' }}>SGST @ 9%</td><td className='py-1.5 px-3 text-right' style={{ color: '#000000' }}>{formatINR(sgstAmount).replace('₹', '')}</td></tr>
+                    )}
+                    {invoiceAmount != null && (
+                      <tr style={{ backgroundColor: '#f8fafc' }}><td className='py-1.5 px-3 font-semibold' style={{ color: '#000000' }}>Total</td><td className='py-1.5 px-3 text-right font-semibold' style={{ color: '#000000' }}>{formatINR(invoiceAmount).replace('₹', '')}</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
+
+            {billing.termsAndConditions && (
+              <div className='py-4'>
+                <h2 className='text-xs font-semibold uppercase tracking-wider mb-2' style={{ color: '#000000' }}>Terms & Conditions</h2>
+                <p className='text-sm whitespace-pre-wrap' style={{ color: '#000000' }}>{billing.termsAndConditions}</p>
+              </div>
+            )}
           </div>
 
-          {/* GST breakdown (when GST bill) */}
-          {isGst && (taxableValue != null || invoiceAmount != null) && (
-            <div className='py-4'>
-              <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>GST Breakdown</h2>
-              <table className='w-full max-w-xs text-sm border' style={{ borderColor: '#d1d5db' }}>
-                <tbody>
-                  {taxableValue != null && (
-                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>Taxable Value</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(taxableValue).replace('₹', '')}</td></tr>
-                  )}
-                  {cgstAmount != null && (
-                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>CGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(cgstAmount).replace('₹', '')}</td></tr>
-                  )}
-                  {sgstAmount != null && (
-                    <tr className='border-b' style={{ borderColor: '#e5e7eb' }}><td className='py-1.5 px-3 text-black'>SGST @ 9%</td><td className='py-1.5 px-3 text-right text-black'>{formatINR(sgstAmount).replace('₹', '')}</td></tr>
-                  )}
-                  {invoiceAmount != null && (
-                    <tr style={{ backgroundColor: '#f8fafc' }}><td className='py-1.5 px-3 text-black font-semibold'>Total</td><td className='py-1.5 px-3 text-right text-black font-semibold'>{formatINR(invoiceAmount).replace('₹', '')}</td></tr>
-                  )}
-                </tbody>
-              </table>
+          <div className='invoice-footer-content mt-auto pt-6'>
+            {/* Authorized Signature */}
+            <div className='pt-4 flex justify-end'>
+              <div className='text-center'>
+                {billing.authorizedSignature ? (
+                  <>
+                    <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
+                    <p className='text-sm font-semibold mt-1' style={{ color: '#000000' }}>Authorized Signature</p>
+                  </>
+                ) : (
+                  <>
+                    <div className='border-t-2 w-44 mt-6 mb-1 mx-auto' style={{ borderColor: '#000000' }} />
+                    <p className='text-sm font-semibold' style={{ color: '#000000' }}>Authorized Signature</p>
+                  </>
+                )}
+              </div>
             </div>
-          )}
 
-          {billing.termsAndConditions && (
-            <div className='py-4'>
-              <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>Terms & Conditions</h2>
-              <p className='text-sm text-black whitespace-pre-wrap'>{billing.termsAndConditions}</p>
+            {/* Footer */}
+            <div className='mt-6 pt-4 border-t text-center text-sm font-medium' style={{ borderColor: '#e5e7eb', color: '#374151' }}>
+              Thank you for your business.
             </div>
-          )}
-
-          {/* Authorized Signature */}
-          <div className='mt-8 pt-4 flex justify-end'>
-            <div className='text-center'>
-              {billing.authorizedSignature ? (
-                <>
-                  <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
-                  <p className='text-sm font-semibold text-black mt-1'>Authorized Signature</p>
-                </>
-              ) : (
-                <>
-                  <div className='border-t-2 border-black w-44 mt-6 mb-1 mx-auto' />
-                  <p className='text-sm font-semibold text-black'>Authorized Signature</p>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className='mt-6 pt-4 border-t border-gray-200 text-center text-sm text-gray-700 font-medium'>
-            Thank you for your business.
           </div>
         </div>
       </div>
