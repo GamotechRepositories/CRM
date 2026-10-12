@@ -164,6 +164,7 @@ const routeFiles = [
   'assetRoute',
   'notificationRoute',
   'announcementRoute',
+  'campaignRoute',
 ];
 
 for (const company of companies) {

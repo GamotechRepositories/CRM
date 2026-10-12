@@ -8,7 +8,10 @@ export const adsLeadSchemaFields = {
     default: '',
   },
   campaignId: { type: String, default: '' },
+  campaignName: { type: String, default: '' },
   adId: { type: String, default: '' },
+  adName: { type: String, default: '' },
   formId: { type: String, default: '' },
+  formName: { type: String, default: '' },
   adsRawPayload: { type: Object, default: undefined },
 };
