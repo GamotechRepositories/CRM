@@ -115,7 +115,6 @@ const mapEmployeeToForm = (emp) => ({
   designation: emp.designation?._id ?? emp.designation ?? '',
   department: emp.department ?? '',
   dateOfJoining: toDateInput(emp.dateOfJoining),
-  salary: emp.salary ?? '',
   workingHours: emp.workingHours ?? '',
   status: emp.status ?? 'Active',
   employeeCode: emp.employeeCode ?? '',
