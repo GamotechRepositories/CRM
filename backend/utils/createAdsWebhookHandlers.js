@@ -27,6 +27,12 @@ const TENANT_ENV = {
     metaToken: 'SALESTECH_META_PAGE_ACCESS_TOKEN',
     googleKey: 'SALESTECH_GOOGLE_ADS_WEBHOOK_KEY',
   },
+  adsResearchGlobal: {
+    ownerEmail: 'ADSRESEARCH_ADS_LEAD_OWNER_EMAIL',
+    ownerId: 'ADSRESEARCH_ADS_LEAD_OWNER_ID',
+    metaToken: 'ADSRESEARCH_META_PAGE_ACCESS_TOKEN',
+    googleKey: 'ADSRESEARCH_GOOGLE_ADS_WEBHOOK_KEY',
+  },
 };
 
 const pick = (...values) => {

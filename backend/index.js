@@ -187,10 +187,12 @@ for (const company of PROPERTY_TENANTS) {
   app.use(`/api/v1/${company}`, sheetLeadRoute.default);
 }
 
-// Sheet lead CSV import for Ads Research Global as well
+// Sheet lead CSV import & Ads webhooks for Ads Research Global as well
 {
   const sheetLeadRoute = await import('./routes/adsResearchGlobal/adsResearchGlobal_sheetLeadRoute.js');
   app.use('/api/v1/adsResearchGlobal', sheetLeadRoute.default);
+  const adsWebhookRoute = await import('./routes/adsResearchGlobal/adsResearchGlobal_adsWebhookRoute.js');
+  app.use('/api/v1/adsResearchGlobal', adsWebhookRoute.default);
 }
 
 // Centralized admin panel: /api/v1/admin/*
