@@ -1,7 +1,7 @@
 name: centralized_app
 description: Satish Bangar Group employee app — select company, then use that tenant's APIs.
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+3
 
 environment:
   sdk: ^3.12.2
