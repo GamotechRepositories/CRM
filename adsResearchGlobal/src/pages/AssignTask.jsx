@@ -127,9 +127,9 @@ const AssignTask = () => {
 
   const isEditMode = Boolean(taskIdFromUrl)
   const availabilityDate = form.dueDate || form.recurrenceStartDate || localDateKey()
-  const isSelfTaskMode = !canAssignTask()
+  const isSelfTaskMode = false
   const restrictProjectsToMyMembership =
-    isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
+    scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -446,6 +446,27 @@ const AssignTask = () => {
 
   if (loadingTask) {
     return <div className='p-8 text-sm text-gray-600'>Loading task…</div>
+  }
+
+  if (!canAssignTask()) {
+    return (
+      <div className='max-w-xl mx-auto p-8 mt-12 bg-white rounded-2xl border border-gray-100 shadow-sm text-center'>
+        <div className='w-14 h-14 mx-auto rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl mb-4'>
+          ⚠️
+        </div>
+        <h2 className='text-lg font-bold text-gray-900'>Access Restricted</h2>
+        <p className='text-sm text-gray-600 mt-2'>
+          Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks.
+        </p>
+        <button
+          type='button'
+          onClick={() => navigate('/tasks')}
+          className='mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium'
+        >
+          Back to Tasks
+        </button>
+      </div>
+    )
   }
 
   return (

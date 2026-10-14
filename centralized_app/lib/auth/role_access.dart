@@ -253,4 +253,18 @@ class RoleAccess {
     if (isAdminUser(user) || isSiteCoordinatorUser(user) || isTeamLeader(user)) return true;
     return isSalesDepartment(user);
   }
+
+  /// Only Team Leaders (TLs), Managers, Admin, and Super Admin can assign tasks.
+  static bool canAssignTask(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    if (isAdminUser(user)) return true;
+    if (isManager(user)) return true;
+    if (isTeamLeader(user)) return true;
+    final d = user['designation'];
+    if (d is Map) {
+      final flag = d['permissions']?['canAssignTask'];
+      if (flag is bool) return flag;
+    }
+    return false;
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
 
 /// `/assign-task` — create or assign a task (mirrors web `AssignTask.jsx`).
@@ -214,6 +215,34 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
+    if (!RoleAccess.canAssignTask(session.user)) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_outline, size: 48, color: Color(0xFFF59E0B)),
+              const SizedBox(height: 12),
+              const Text('Access Restricted', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text(
+                'Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => AppNavScope.navigate(context, '/tasks'),
+                child: const Text('Back to Tasks'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_loadingData) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }

@@ -268,8 +268,19 @@ const TeamLeaderDashboardView = () => {
       .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
       .slice(0, 5)
 
-    // Team members table with attendance status + progress
-    const teamRows = activeEmployees.slice(0, 6).map((e) => {
+    // Team members table with attendance status, check-in, check-out, location + progress
+    const formatTime = (d) => {
+      if (!d) return null
+      try {
+        const dt = new Date(d)
+        if (isNaN(dt.getTime())) return null
+        return dt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+      } catch {
+        return null
+      }
+    }
+
+    const teamRows = activeEmployees.map((e) => {
       const att = attendance.find((a) => String(a.employee?._id || a.employee) === String(e._id))
       const onLeave = leaves.some(
         (l) =>
@@ -285,6 +296,22 @@ const TeamLeaderDashboardView = () => {
       const m = perMember[String(e._id)]
       const openCount = m ? m.total - m.completed : 0
       const progress = m?.total ? Math.round((m.completed / m.total) * 100) : 0
+
+      const checkInTime = formatTime(att?.checkIn)
+      const checkOutTime = formatTime(att?.checkOut)
+
+      const checkInAddress =
+        att?.checkInAddress ||
+        (att?.checkInLatitude != null && att?.checkInLongitude != null
+          ? `${Number(att.checkInLatitude).toFixed(4)}, ${Number(att.checkInLongitude).toFixed(4)}`
+          : '')
+
+      const checkOutAddress =
+        att?.checkOutAddress ||
+        (att?.checkOutLatitude != null && att?.checkOutLongitude != null
+          ? `${Number(att.checkOutLatitude).toFixed(4)}, ${Number(att.checkOutLongitude).toFixed(4)}`
+          : '')
+
       return {
         id: e._id,
         name: e.name,
@@ -292,6 +319,14 @@ const TeamLeaderDashboardView = () => {
         status,
         tasks: openCount,
         progress,
+        checkInTime,
+        checkOutTime,
+        checkInAddress,
+        checkOutAddress,
+        checkInLat: att?.checkInLatitude,
+        checkInLng: att?.checkInLongitude,
+        checkOutLat: att?.checkOutLatitude,
+        checkOutLng: att?.checkOutLongitude,
       }
     })
 
@@ -580,7 +615,166 @@ const TeamLeaderDashboardView = () => {
         </Panel>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6'>
+      {/* Team Members Attendance, Timings & Location */}
+      <div className='mb-6'>
+        <Panel
+          title='Team Members Attendance & Location'
+          action='View All Employees'
+          onAction={() => navigate('/employees')}
+        >
+          {stats.teamRows.length ? (
+            <div className='overflow-x-auto -mx-5 px-5'>
+              <table className='w-full text-sm'>
+                <thead>
+                  <tr className='text-[11px] uppercase tracking-wide text-gray-400 border-b border-gray-100'>
+                    <th className='text-left font-semibold py-3 px-3'>Member</th>
+                    <th className='text-left font-semibold py-3 px-3'>Status</th>
+                    <th className='text-left font-semibold py-3 px-3'>Check-In & Location</th>
+                    <th className='text-left font-semibold py-3 px-3'>Check-Out & Location</th>
+                    <th className='text-right font-semibold py-3 px-3'>Tasks</th>
+                    <th className='text-left font-semibold py-3 px-3 w-28'>Progress</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-50'>
+                  {stats.teamRows.map((m) => (
+                    <tr key={m.id} className='hover:bg-gray-50/60 transition-colors'>
+                      <td className='py-3 px-3'>
+                        <div className='flex items-center gap-2.5 min-w-[140px]'>
+                          <div className='w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-sm'>
+                            {initials(m.name)}
+                          </div>
+                          <div className='min-w-0'>
+                            <p className='font-semibold text-gray-900 truncate text-xs'>{m.name}</p>
+                            <p className='text-[11px] text-gray-500 truncate'>{m.role}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className='py-3 px-3 whitespace-nowrap'>
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
+                            m.status === 'Online'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                              : m.status === 'Away'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                : m.status === 'On Leave'
+                                  ? 'bg-red-50 text-red-600 border border-red-200/60'
+                                  : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              m.status === 'Online'
+                                ? 'bg-emerald-500 animate-pulse'
+                                : m.status === 'Away'
+                                  ? 'bg-amber-500'
+                                  : m.status === 'On Leave'
+                                    ? 'bg-red-500'
+                                    : 'bg-gray-400'
+                            }`}
+                          />
+                          {m.status}
+                        </span>
+                      </td>
+                      <td className='py-3 px-3 min-w-[200px]'>
+                        {m.checkInTime ? (
+                          <div className='space-y-1'>
+                            <div className='flex items-center gap-1.5 text-xs font-bold text-gray-900'>
+                              <span className='inline-block w-2 h-2 rounded-full bg-emerald-500'></span>
+                              {m.checkInTime}
+                            </div>
+                            {m.checkInAddress ? (
+                              m.checkInLat != null && m.checkInLng != null ? (
+                                <a
+                                  href={`https://www.google.com/maps?q=${m.checkInLat},${m.checkInLng}`}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  className='inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 hover:underline max-w-[260px] truncate'
+                                  title={`${m.checkInAddress} (Click to open map)`}
+                                >
+                                  <svg className='w-3.5 h-3.5 shrink-0 text-red-500' fill='currentColor' viewBox='0 0 20 20'>
+                                    <path fillRule='evenodd' d='M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z' clipRule='evenodd' />
+                                  </svg>
+                                  <span className='truncate'>{m.checkInAddress}</span>
+                                </a>
+                              ) : (
+                                <span className='inline-flex items-center gap-1 text-[11px] text-gray-600 max-w-[260px] truncate' title={m.checkInAddress}>
+                                  <svg className='w-3.5 h-3.5 shrink-0 text-gray-400' fill='currentColor' viewBox='0 0 20 20'>
+                                    <path fillRule='evenodd' d='M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z' clipRule='evenodd' />
+                                  </svg>
+                                  <span className='truncate'>{m.checkInAddress}</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className='text-[10px] text-gray-400 italic'>Location not captured</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className='text-xs text-gray-400 font-medium'>Not checked in</span>
+                        )}
+                      </td>
+                      <td className='py-3 px-3 min-w-[200px]'>
+                        {m.checkOutTime ? (
+                          <div className='space-y-1'>
+                            <div className='flex items-center gap-1.5 text-xs font-bold text-gray-900'>
+                              <span className='inline-block w-2 h-2 rounded-full bg-amber-500'></span>
+                              {m.checkOutTime}
+                            </div>
+                            {m.checkOutAddress ? (
+                              m.checkOutLat != null && m.checkOutLng != null ? (
+                                <a
+                                  href={`https://www.google.com/maps?q=${m.checkOutLat},${m.checkOutLng}`}
+                                  target='_blank'
+                                  rel='noopener noreferrer'
+                                  className='inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 hover:underline max-w-[260px] truncate'
+                                  title={`${m.checkOutAddress} (Click to open map)`}
+                                >
+                                  <svg className='w-3.5 h-3.5 shrink-0 text-red-500' fill='currentColor' viewBox='0 0 20 20'>
+                                    <path fillRule='evenodd' d='M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z' clipRule='evenodd' />
+                                  </svg>
+                                  <span className='truncate'>{m.checkOutAddress}</span>
+                                </a>
+                              ) : (
+                                <span className='inline-flex items-center gap-1 text-[11px] text-gray-600 max-w-[260px] truncate' title={m.checkOutAddress}>
+                                  <svg className='w-3.5 h-3.5 shrink-0 text-gray-400' fill='currentColor' viewBox='0 0 20 20'>
+                                    <path fillRule='evenodd' d='M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z' clipRule='evenodd' />
+                                  </svg>
+                                  <span className='truncate'>{m.checkOutAddress}</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className='text-[10px] text-gray-400 italic'>Location not captured</span>
+                            )}
+                          </div>
+                        ) : m.checkInTime ? (
+                          <span className='inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/50'>
+                            <span className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse'></span>
+                            Active Now
+                          </span>
+                        ) : (
+                          <span className='text-xs text-gray-400'>—</span>
+                        )}
+                      </td>
+                      <td className='py-3 px-3 text-right text-xs font-semibold text-gray-700'>{m.tasks}</td>
+                      <td className='py-3 px-3'>
+                        <div className='flex items-center gap-1.5'>
+                          <div className='h-1.5 flex-1 bg-gray-100 rounded-full overflow-hidden'>
+                            <div className='h-full bg-blue-500 rounded-full' style={{ width: `${m.progress}%` }} />
+                          </div>
+                          <span className='text-[10px] text-gray-500 w-7 text-right font-medium'>{m.progress}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className='text-sm text-gray-500 text-center py-12'>No team members</p>
+          )}
+        </Panel>
+      </div>
+
+      <div className='grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6'>
         <Panel title='Recent Tasks' action='View All' onAction={() => navigate('/tasks')}>
           {stats.recentTasks.length ? (
             <div className='space-y-4'>
@@ -613,66 +807,6 @@ const TeamLeaderDashboardView = () => {
             </div>
           ) : (
             <p className='text-sm text-gray-500 text-center py-12'>No tasks yet</p>
-          )}
-        </Panel>
-
-        <Panel title='Team Members' action='View All' onAction={() => navigate('/employees')}>
-          {stats.teamRows.length ? (
-            <div className='overflow-x-auto -mx-2'>
-              <table className='w-full text-sm'>
-                <thead>
-                  <tr className='text-[11px] uppercase tracking-wide text-gray-400'>
-                    <th className='text-left font-semibold px-2 pb-2'>Member</th>
-                    <th className='text-left font-semibold px-2 pb-2'>Status</th>
-                    <th className='text-right font-semibold px-2 pb-2'>Tasks</th>
-                    <th className='text-left font-semibold px-2 pb-2 w-24'>Progress</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.teamRows.map((m) => (
-                    <tr key={m.id} className='border-t border-gray-50'>
-                      <td className='px-2 py-2.5'>
-                        <div className='flex items-center gap-2 min-w-0'>
-                          <div className='w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0'>
-                            {initials(m.name)}
-                          </div>
-                          <div className='min-w-0'>
-                            <p className='font-medium text-gray-900 truncate text-xs'>{m.name}</p>
-                            <p className='text-[10px] text-gray-500 truncate'>{m.role}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className='px-2 py-2.5'>
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            m.status === 'Online'
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : m.status === 'Away'
-                                ? 'bg-amber-50 text-amber-700'
-                                : m.status === 'On Leave'
-                                  ? 'bg-red-50 text-red-600'
-                                  : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {m.status}
-                        </span>
-                      </td>
-                      <td className='px-2 py-2.5 text-right text-xs font-semibold text-gray-700'>{m.tasks}</td>
-                      <td className='px-2 py-2.5'>
-                        <div className='flex items-center gap-1.5'>
-                          <div className='h-1.5 flex-1 bg-gray-100 rounded-full overflow-hidden'>
-                            <div className='h-full bg-blue-500 rounded-full' style={{ width: `${m.progress}%` }} />
-                          </div>
-                          <span className='text-[10px] text-gray-500 w-7 text-right'>{m.progress}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className='text-sm text-gray-500 text-center py-12'>No team members</p>
           )}
         </Panel>
 

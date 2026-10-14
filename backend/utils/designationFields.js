@@ -265,7 +265,7 @@ export const getDefaultDesignationMeta = (title) => {
         canAddProject: t === 'senior software engineer',
         canEditProject: t === 'senior software engineer',
         canViewProjects: true,
-        canAssignTask: t === 'senior software engineer',
+        canAssignTask: false,
       },
     };
   }
@@ -391,3 +391,67 @@ export const buildDesignationPayload = (body = {}) => {
     sortOrder: body.sortOrder != null ? Number(body.sortOrder) : defaults.sortOrder,
   };
 };
+
+/**
+ * Validates whether an employee has authority to assign tasks.
+ * Authority is strictly limited to Team Leaders (TLs), Managers, Admin, and Super Admin.
+ */
+export const canEmployeeAssignTasks = (employee) => {
+  if (!employee) return false;
+  const desig = employee.designation;
+  const role = String(employee.role || employee.accessRole || desig?.accessRole || '').toLowerCase().trim();
+  const title = String(desig?.title || desig?.name || employee.designationTitle || '').toLowerCase().trim();
+
+  // Admin and Super Admin
+  if (
+    role === 'admin' ||
+    role === 'super_admin' ||
+    role === 'superadmin' ||
+    title === 'admin' ||
+    title.includes('admin') ||
+    title === 'super admin'
+  ) {
+    return true;
+  }
+
+  // Executive Leadership (COO, CEO, CTO, CFO, etc.)
+  if (
+    title.includes('chief executive') ||
+    title.includes('chief operating') ||
+    title.includes('coo') ||
+    title.includes('ceo')
+  ) {
+    return true;
+  }
+
+  // Managers
+  if (
+    role === 'manager' ||
+    title.includes('manager') ||
+    title.includes('operations head') ||
+    title.includes('head')
+  ) {
+    return true;
+  }
+
+  // Team Leaders (TLs)
+  if (
+    role === 'team_leader' ||
+    role === 'team_lead' ||
+    role === 'tl' ||
+    title.includes('team leader') ||
+    title.includes('team lead') ||
+    title === 'tl' ||
+    title.startsWith('tl ') ||
+    title.includes('technical lead')
+  ) {
+    return true;
+  }
+
+  if (desig && desig.permissions && typeof desig.permissions.canAssignTask === 'boolean') {
+    return desig.permissions.canAssignTask;
+  }
+
+  return false;
+};
+

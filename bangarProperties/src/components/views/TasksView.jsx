@@ -460,9 +460,9 @@ const TasksView = ({ isMyTasks = false }) => {
               : 'Tasks assigned to you by project managers and team leads.'}
           </p>
         </div>
-        {(canAssignTask() || isMyTasks) && (
+        {canAssignTask() && (
           <button
-            onClick={() => navigate(isMyTasks ? '/assign-task?self=1' : '/assign-task')}
+            onClick={() => navigate('/assign-task')}
             className='bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors'
           >
             + New Task

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
 import '../utils/task_status.dart';
 import '../api/api_cache.dart';
@@ -141,6 +142,8 @@ class _MyTasksPageState extends State<MyTasksPage> {
     final completionPct = total == 0 ? 0 : ((completed / total) * 100).round();
 
     final displayTasks = _filteredTasks;
+    final session = context.watch<AuthSession>();
+    final canAssign = RoleAccess.canAssignTask(session.user);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -236,21 +239,22 @@ class _MyTasksPageState extends State<MyTasksPage> {
                   ),
               ],
             ),
-            Positioned(
-              right: 16,
-              bottom: 16 + MediaQuery.paddingOf(context).bottom,
-              child: FloatingActionButton.extended(
-                onPressed: () => AppNavScope.navigate(context, '/assign-task-self'),
-                backgroundColor: const Color(0xFF2563EB),
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                icon: const Icon(Icons.add, size: 20, color: Colors.white),
-                label: const Text(
-                  'New Task',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+            if (canAssign)
+              Positioned(
+                right: 16,
+                bottom: 16 + MediaQuery.paddingOf(context).bottom,
+                child: FloatingActionButton.extended(
+                  onPressed: () => AppNavScope.navigate(context, '/assign-task'),
+                  backgroundColor: const Color(0xFF2563EB),
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  icon: const Icon(Icons.add, size: 20, color: Colors.white),
+                  label: const Text(
+                    'New Task',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

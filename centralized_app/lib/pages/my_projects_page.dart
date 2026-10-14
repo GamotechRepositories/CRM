@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_session.dart';
+import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
 import '../utils/project_helpers.dart';
 import '../api/api_cache.dart';
@@ -125,6 +126,8 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
     final upcoming = ProjectHelpers.upcomingDeadlines(_projects);
     final topClients = ProjectHelpers.topClients(_projects);
     final filtered = _filteredProjects;
+    final session = context.watch<AuthSession>();
+    final canAssign = RoleAccess.canAssignTask(session.user);
 
     return RefreshIndicator(
       onRefresh: () => ApiCache.fresh(_load),
@@ -243,7 +246,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
                       project: project,
                       index: idx,
                       onTap: () => _openProjectDetail(project, idx),
-                      onAssignTask: () => AppNavScope.navigate(context, '/assign-task-self'),
+                      onAssignTask: canAssign ? () => AppNavScope.navigate(context, '/assign-task') : null,
                     ),
                   );
                 }),
@@ -259,18 +262,19 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
               ],
             ],
           ),
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: FloatingActionButton.extended(
-              onPressed: () => AppNavScope.navigate(context, '/assign-task-self'),
-              backgroundColor: const Color(0xFF2563EB),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.assignment_add, size: 18),
-              label: const Text('Assign Task', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          if (canAssign)
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: FloatingActionButton.extended(
+                onPressed: () => AppNavScope.navigate(context, '/assign-task'),
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.assignment_add, size: 18),
+                label: const Text('Assign Task', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -585,13 +589,13 @@ class _ProjectTile extends StatelessWidget {
     required this.project,
     required this.index,
     required this.onTap,
-    required this.onAssignTask,
+    this.onAssignTask,
   });
 
   final Map<String, dynamic> project;
   final int index;
   final VoidCallback onTap;
-  final VoidCallback onAssignTask;
+  final VoidCallback? onAssignTask;
 
   @override
   Widget build(BuildContext context) {
@@ -648,12 +652,13 @@ class _ProjectTile extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     iconSize: 18,
                     onSelected: (v) {
-                      if (v == 'assign') onAssignTask();
+                      if (v == 'assign') onAssignTask?.call();
                       if (v == 'detail') onTap();
                     },
                     itemBuilder: (_) => [
                       const PopupMenuItem(value: 'detail', child: Text('Details', style: TextStyle(fontSize: 11))),
-                      const PopupMenuItem(value: 'assign', child: Text('Assign Task', style: TextStyle(fontSize: 11))),
+                      if (onAssignTask != null)
+                        const PopupMenuItem(value: 'assign', child: Text('Assign Task', style: TextStyle(fontSize: 11))),
                     ],
                   ),
                 ],
@@ -924,6 +929,8 @@ class _ProjectDetailSheet extends StatelessWidget {
     final pm = project['projectManager'];
     final pmName = pm is Map ? (pm['name'] ?? '—').toString() : '—';
 
+    final canAssign = RoleAccess.canAssignTask(context.read<AuthSession>().user);
+
     return DraggableScrollableSheet(
       initialChildSize: 0.55,
       minChildSize: 0.35,
@@ -1004,18 +1011,20 @@ class _ProjectDetailSheet extends StatelessWidget {
                       ),
                     )),
               ],
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    AppNavScope.navigate(context, '/assign-task-self');
-                  },
-                  icon: const Icon(Icons.assignment_add, size: 16),
-                  label: const Text('Assign Task', style: TextStyle(fontSize: 12)),
+              if (canAssign) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      AppNavScope.navigate(context, '/assign-task-self');
+                    },
+                    icon: const Icon(Icons.assignment_add, size: 16),
+                    label: const Text('Assign Task', style: TextStyle(fontSize: 12)),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         );

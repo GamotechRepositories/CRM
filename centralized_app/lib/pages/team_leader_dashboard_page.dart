@@ -66,6 +66,18 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
     }
   }
 
+  String? _formatTime(dynamic dateVal) {
+    if (dateVal == null) return null;
+    final dt = DateTime.tryParse(dateVal.toString());
+    if (dt == null) return null;
+    final local = dt.toLocal();
+    final hour = local.hour;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final h12 = (hour % 12 == 0) ? 12 : (hour % 12);
+    return '$h12:$minute $period';
+  }
+
   List<Map<String, dynamic>> get _teamMembers {
     final session = context.read<AuthSession>();
     final leaderId = session.user?['_id']?.toString() ?? '';
@@ -137,6 +149,31 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
         status = (att['checkOut'] != null) ? 'Away' : 'Online';
       }
 
+      final checkInTime = _formatTime(att['checkIn']);
+      final checkOutTime = _formatTime(att['checkOut']);
+
+      String? checkInLocation;
+      if (att['checkInAddress'] != null && att['checkInAddress'].toString().trim().isNotEmpty) {
+        checkInLocation = att['checkInAddress'].toString().trim();
+      } else if (att['checkInLatitude'] != null && att['checkInLongitude'] != null) {
+        final lat = num.tryParse('${att['checkInLatitude']}');
+        final lng = num.tryParse('${att['checkInLongitude']}');
+        if (lat != null && lng != null) {
+          checkInLocation = '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+        }
+      }
+
+      String? checkOutLocation;
+      if (att['checkOutAddress'] != null && att['checkOutAddress'].toString().trim().isNotEmpty) {
+        checkOutLocation = att['checkOutAddress'].toString().trim();
+      } else if (att['checkOutLatitude'] != null && att['checkOutLongitude'] != null) {
+        final lat = num.tryParse('${att['checkOutLatitude']}');
+        final lng = num.tryParse('${att['checkOutLongitude']}');
+        if (lat != null && lng != null) {
+          checkOutLocation = '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+        }
+      }
+
       final empTasks = _tasks.where((t) {
         final assigned = t['employee'] ?? t['assignedTo'];
         final eId = assigned is Map ? (assigned['_id'] ?? '').toString() : (assigned ?? '').toString();
@@ -154,6 +191,10 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
         'status': status,
         'openTasks': open,
         'progress': pct,
+        'checkInTime': checkInTime,
+        'checkInLocation': checkInLocation,
+        'checkOutTime': checkOutTime,
+        'checkOutLocation': checkOutLocation,
       };
     }).toList();
   }
@@ -411,7 +452,7 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: teamStatuses.length,
-                          separatorBuilder: (_, index) => const SizedBox(height: 10),
+                          separatorBuilder: (_, index) => const Divider(height: 20, color: Color(0xFFF1F5F9)),
                           itemBuilder: (context, idx) {
                             final m = teamStatuses[idx];
                             final name = m['name'] as String;
@@ -419,6 +460,10 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
                             final status = m['status'] as String;
                             final openTasks = m['openTasks'] as int;
                             final progress = m['progress'] as int;
+                            final checkInTime = m['checkInTime'] as String?;
+                            final checkInLocation = m['checkInLocation'] as String?;
+                            final checkOutTime = m['checkOutTime'] as String?;
+                            final checkOutLocation = m['checkOutLocation'] as String?;
 
                             Color statusBg;
                             Color statusFg;
@@ -463,13 +508,122 @@ class _TeamLeaderDashboardPageState extends State<TeamLeaderDashboardPage> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
-                                LinearProgressIndicator(
-                                  value: (progress / 100).clamp(0.02, 1.0),
-                                  minHeight: 4,
-                                  backgroundColor: const Color(0xFFE2E8F0),
-                                  color: const Color(0xFF4F46E5),
-                                  borderRadius: BorderRadius.circular(4),
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (checkInTime != null) ...[
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(Icons.login, size: 12, color: Color(0xFF10B981)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Check-in: $checkInTime',
+                                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.location_on, size: 10, color: Color(0xFFEF4444)),
+                                                  const SizedBox(width: 2),
+                                                  Expanded(
+                                                    child: Text(
+                                                      checkInLocation ?? 'Location not captured',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: checkInLocation != null ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                                                        fontStyle: checkInLocation != null ? FontStyle.normal : FontStyle.italic,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (checkOutTime != null)
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Icon(Icons.logout, size: 12, color: Color(0xFFF59E0B)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Check-out: $checkOutTime',
+                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.location_on, size: 10, color: Color(0xFFEF4444)),
+                                                    const SizedBox(width: 2),
+                                                    Expanded(
+                                                      child: Text(
+                                                        checkOutLocation ?? 'Location not captured',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: checkOutLocation != null ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                                                          fontStyle: checkOutLocation != null ? FontStyle.normal : FontStyle.italic,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        else
+                                          Row(
+                                            children: const [
+                                              Icon(Icons.radio_button_checked, size: 10, color: Color(0xFF10B981)),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Check-out: Active Now',
+                                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF059669)),
+                                              ),
+                                            ],
+                                          ),
+                                      ] else ...[
+                                        Row(
+                                          children: const [
+                                            Icon(Icons.schedule, size: 11, color: Color(0xFF94A3B8)),
+                                            SizedBox(width: 4),
+                                            Text('Not checked in today', style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8))),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: LinearProgressIndicator(
+                                        value: (progress / 100).clamp(0.02, 1.0),
+                                        minHeight: 4,
+                                        backgroundColor: const Color(0xFFE2E8F0),
+                                        color: const Color(0xFF4F46E5),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('$progress%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF64748B))),
+                                  ],
                                 ),
                               ],
                             );

@@ -87,8 +87,55 @@ export const canManageClientsForUser = (user) => {
   return canAddProjectForUser(user)
 }
 
-/** Any logged-in employee can assign tasks to other employees. */
-export const canAssignTaskForUser = (user) => Boolean(user?._id)
+/** Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks. */
+export const canAssignTaskForUser = (user) => {
+  if (!user) return false
+  if (isAdminUser(user)) return true
+  const accessRole = String(user?.designation?.accessRole || user?.role || '').toLowerCase().trim()
+  const title = getDesignationTitle(user).toLowerCase().trim()
+
+  if (
+    accessRole === 'admin' ||
+    accessRole === 'super_admin' ||
+    accessRole === 'superadmin' ||
+    title === 'admin' ||
+    title.includes('admin') ||
+    title === 'super admin' ||
+    isCooForUser(user)
+  ) {
+    return true
+  }
+
+  // Managers
+  if (
+    isOperationalManagerUser(user) ||
+    accessRole === 'manager' ||
+    title.includes('manager') ||
+    title.includes('operations head') ||
+    title.includes('head')
+  ) {
+    return true
+  }
+
+  // Team Leaders (TLs)
+  if (
+    accessRole === 'team_leader' ||
+    accessRole === 'team_lead' ||
+    accessRole === 'tl' ||
+    title === 'team leader' ||
+    title.includes('team leader') ||
+    title.includes('team lead') ||
+    title === 'tl' ||
+    title.startsWith('tl ') ||
+    title.includes('technical lead')
+  ) {
+    return true
+  }
+
+  const fromDesignation = getDesignationPermission(user, 'canAssignTask')
+  if (fromDesignation === true) return true
+  return false
+}
 
 /** Rating stays limited to admins / designations with assign permission historically. */
 export const canRateTaskForUser = (user) => {

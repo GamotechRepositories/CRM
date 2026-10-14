@@ -21,6 +21,7 @@ import {
   handleUrgentTaskCompleted,
 } from '../../utils/urgentTaskInterrupt.js';
 import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
+import { canEmployeeAssignTasks } from '../../utils/designationFields.js';
 
 const notificationService = createNotificationService({ Notification });
 
@@ -72,6 +73,13 @@ export const createTask = async (req, res) => {
 
     if (!project || !title || !assignedBy || !assigneeIds.length) {
       return res.status(400).json({ message: 'Project, title, assignedTo, and assignedBy are required' });
+    }
+
+    const assigner = await Employee.findById(assignedBy).populate('designation');
+    if (!assigner || !canEmployeeAssignTasks(assigner)) {
+      return res.status(403).json({
+        message: 'Only Team Leaders, Managers, Admin, and Super Admin have the authority to assign tasks.',
+      });
     }
 
     await Promise.all(assigneeIds.map((employeeId) => assertEmployeeAvailableForTask(Task, employeeId)));
