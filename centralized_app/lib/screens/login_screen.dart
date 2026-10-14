@@ -461,7 +461,7 @@ class _LoginBackgroundPainter extends CustomPainter {
 
 class _AppLogo extends StatelessWidget {
   final CompanyConfig? company;
-  const _AppLogo({Key? key, this.company}) : super(key: key);
+  const _AppLogo({this.company});
 
   @override
   Widget build(BuildContext context) {

@@ -125,7 +125,7 @@ class _AppSidebarState extends State<AppSidebar> {
                                       width: 24,
                                       height: 24,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Center(
+                                      errorBuilder: (_, error, stack) => Center(
                                         child: Text(
                                           session.userName.isNotEmpty ? session.userName[0].toUpperCase() : 'U',
                                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
@@ -158,8 +158,9 @@ class _AppSidebarState extends State<AppSidebar> {
                             ],
                           ),
                         ),
-                        );
-                      },
+                      ],
+                    );
+                  },
                     ),
                   ),
                 ],

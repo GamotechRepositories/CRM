@@ -138,7 +138,7 @@ class AttendanceHelpers {
   }
 
   static String formatMonthLabel(String monthKey) {
-    final d = DateTime.tryParse('${monthKey}-01T12:00:00');
+    final d = DateTime.tryParse('$monthKey-01T12:00:00');
     if (d == null) return monthKey;
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return '${months[d.month - 1]} ${d.year}';

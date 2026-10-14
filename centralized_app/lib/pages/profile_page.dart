@@ -1138,7 +1138,7 @@ class _InfoCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          if (child != null) child!,
+          ?child,
           for (final row in rows) row,
         ],
       ),
