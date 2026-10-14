@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getDashboardPathForUser } from '../config/dashboardRoutes'
+import { getTodayDateKey } from '../utils/attendanceLate'
 import Logo from '../assets/logo.jpg'
 
 const MailIcon = () => (
@@ -54,6 +55,10 @@ const Login = () => {
       setEmail(saved)
       setRemember(true)
     }
+    if (sessionStorage.getItem('crm_session_expired_notice') === '1') {
+      setInfo('A new workday has started. Please sign in to continue.')
+      sessionStorage.removeItem('crm_session_expired_notice')
+    }
   }, [])
 
   const handleSubmit = async (e) => {
@@ -66,12 +71,10 @@ const Login = () => {
       if (remember) localStorage.setItem(REMEMBER_KEY, email)
       else localStorage.removeItem(REMEMBER_KEY)
 
-      const today = new Date().toISOString().slice(0, 10)
-      const lastLoginDate = localStorage.getItem('crm_last_login_date')
-      if (lastLoginDate !== today) {
-        sessionStorage.setItem('crm_show_location_prompt', '1')
-        localStorage.setItem('crm_last_login_date', today)
-      }
+      const today = getTodayDateKey()
+      localStorage.setItem('crm_last_login_date', today)
+      sessionStorage.setItem('crm_show_checkin_popup', '1')
+
       navigate(getDashboardPathForUser(loggedInUser))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Login failed')

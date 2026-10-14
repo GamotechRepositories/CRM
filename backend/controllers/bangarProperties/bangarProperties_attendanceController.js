@@ -1,8 +1,13 @@
 import Attendance from '../../models/bangarProperties/bangarProperties_attendance.js';
+import Task from '../../models/bangarProperties/bangarProperties_task.js';
 import {
   createUpdateCheckInAddress,
   createUpdateCheckOutAddress,
 } from '../../utils/attendanceLocationHandlers.js';
+import {
+  pauseInProgressTasksForMeeting,
+  resumeTasksPausedByMeeting,
+} from '../../utils/meetingTaskInterrupt.js';
 
 const getStatus = (durationHours) => {
   if (durationHours >= 8) return 'Full Day';
@@ -129,6 +134,11 @@ export const checkOut = async (req, res) => {
         const meetingMins = Math.max(0, Math.floor((now - attendance.meetingStartedAt) / (1000 * 60)));
         attendance.meetingDurationMinutes = (attendance.meetingDurationMinutes || 0) + meetingMins;
         attendance.meetingStartedAt = null;
+        await resumeTasksPausedByMeeting({
+          Task,
+          employeeId: employee,
+          companyKey: 'bangarProperties',
+        });
       }
       // Only capture location for a real (today) checkout initiated by user
       if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat != null && lon != null) {
@@ -359,6 +369,13 @@ export const startMeeting = async (req, res) => {
     if (attendance.meetingStartedAt) return res.status(400).json({ message: 'Meeting already started' });
     attendance.meetingStartedAt = new Date();
     await attendance.save();
+
+    await pauseInProgressTasksForMeeting({
+      Task,
+      employeeId: employee,
+      companyKey: 'bangarProperties',
+    });
+
     const populated = await Attendance.findById(attendance._id).populate('employee');
     res.status(200).json({ message: 'Meeting started', attendance: populated });
   } catch (error) {
@@ -381,6 +398,13 @@ export const endMeeting = async (req, res) => {
     attendance.meetingDurationMinutes = (attendance.meetingDurationMinutes || 0) + mins;
     attendance.meetingStartedAt = null;
     await attendance.save();
+
+    await resumeTasksPausedByMeeting({
+      Task,
+      employeeId: employee,
+      companyKey: 'bangarProperties',
+    });
+
     const populated = await Attendance.findById(attendance._id).populate('employee');
     res.status(200).json({ message: 'Meeting ended', attendance: populated });
   } catch (error) {

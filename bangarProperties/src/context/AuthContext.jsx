@@ -19,8 +19,10 @@ import {
   isOperationalManagerUser,
   getDesignationTitle as getUserDesignationTitle,
 } from '../config/authPermissions'
+import { getTodayDateKey } from '../utils/attendanceLate'
 
 const AUTH_KEY = 'crm_user'
+const SESSION_DATE_KEY = 'crm_session_date'
 
 const MANAGER_PERMISSIONS = {
   hasFullAccess: true,
@@ -90,25 +92,69 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const today = getTodayDateKey()
     const stored = localStorage.getItem(AUTH_KEY)
-    if (stored) {
+    const sessionDate = localStorage.getItem(SESSION_DATE_KEY)
+
+    // Daily login enforcement: session is only valid for the current calendar day
+    if (stored && sessionDate === today) {
       try {
         const parsed = normalizeStoredUser(JSON.parse(stored))
         setUser(parsed)
         localStorage.setItem(AUTH_KEY, JSON.stringify(parsed))
       } catch {
         localStorage.removeItem(AUTH_KEY)
+        localStorage.removeItem(SESSION_DATE_KEY)
       }
+    } else if (stored) {
+      // Past day's session: invalidate and prompt user to login for the new day
+      localStorage.removeItem(AUTH_KEY)
+      localStorage.removeItem(SESSION_DATE_KEY)
+      sessionStorage.setItem('crm_session_expired_notice', '1')
+      setUser(null)
     }
     setLoading(false)
   }, [])
+
+  // Invalidate session if calendar day rolls over while user is active
+  useEffect(() => {
+    if (!user) return
+
+    const verifyDailySession = () => {
+      const today = getTodayDateKey()
+      const sessionDate = localStorage.getItem(SESSION_DATE_KEY)
+      if (sessionDate && sessionDate !== today) {
+        sessionStorage.setItem('crm_session_expired_notice', '1')
+        logout()
+      }
+    }
+
+    const intervalId = setInterval(verifyDailySession, 30000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        verifyDailySession()
+      }
+    }
+    window.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
+    }
+  }, [user])
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password })
     const u = normalizeStoredUser(res.data?.user)
     if (u) {
+      const today = getTodayDateKey()
       setUser(u)
       localStorage.setItem(AUTH_KEY, JSON.stringify(u))
+      localStorage.setItem(SESSION_DATE_KEY, today)
+      sessionStorage.setItem('crm_show_checkin_popup', '1')
+      sessionStorage.removeItem('crm_session_expired_notice')
       return u
     }
     throw new Error(res.data?.message || 'Login failed')
@@ -118,6 +164,8 @@ export const AuthProvider = ({ children }) => {
     disconnectRealtimeSocket()
     setUser(null)
     localStorage.removeItem(AUTH_KEY)
+    localStorage.removeItem(SESSION_DATE_KEY)
+    sessionStorage.removeItem('crm_show_checkin_popup')
   }
 
   const updateUser = (patch) => {

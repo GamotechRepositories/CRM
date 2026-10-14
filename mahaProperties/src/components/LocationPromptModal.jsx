@@ -7,6 +7,9 @@ const LocationPromptModal = () => {
   const [requesting, setRequesting] = useState(false)
 
   useEffect(() => {
+    if (sessionStorage.getItem('crm_show_checkin_popup') === '1') {
+      return
+    }
     if (sessionStorage.getItem(STORAGE_KEY) === '1') {
       setShow(true)
     }

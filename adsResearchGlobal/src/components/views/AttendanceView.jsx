@@ -424,6 +424,16 @@ const AttendanceView = () => {
   }, [syncActiveSessionFromServer])
 
   useEffect(() => {
+    const handleAttendanceUpdated = () => {
+      fetchDayAttendance()
+      fetchMonthAttendance()
+      syncActiveSessionFromServer()
+    }
+    window.addEventListener('crm:attendance-updated', handleAttendanceUpdated)
+    return () => window.removeEventListener('crm:attendance-updated', handleAttendanceUpdated)
+  }, [fetchDayAttendance, fetchMonthAttendance, syncActiveSessionFromServer])
+
+  useEffect(() => {
     const todayKey = getTodayDateKey()
     if (checkInLockedDate && checkInLockedDate !== todayKey) {
       setCheckInLockedDate('')
@@ -847,6 +857,7 @@ const AttendanceView = () => {
       await api.post('/attendance/meeting/start', { employee: selectedEmployee })
       await fetchDayAttendance()
       fetchMonthAttendance()
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error starting meeting')
     } finally {
@@ -862,6 +873,7 @@ const AttendanceView = () => {
       await api.post('/attendance/meeting/end', { employee: selectedEmployee })
       await fetchDayAttendance()
       fetchMonthAttendance()
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error ending meeting')
     } finally {

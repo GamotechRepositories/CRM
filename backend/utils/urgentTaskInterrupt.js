@@ -68,6 +68,7 @@ export const buildResumeFromPausedPayload = (task, now = new Date()) => {
     startedAt,
     pausedAt: null,
     pausedByUrgentTask: null,
+    pausedByMeeting: false,
   };
 };
 
@@ -106,16 +107,23 @@ export const assertEmployeeCanPause = async ({ Task, task, nextStatus }) => {
 
   const assigneeId = task?.assignedTo?._id || task?.assignedTo;
   const hasUrgent = await employeeHasOpenUrgentTask(Task, assigneeId, task?._id);
-  if (!hasUrgent) {
-    const err = new Error('Pause is only enabled when an urgent task is assigned to you');
+  if (!hasUrgent && !task?.pausedByMeeting) {
+    const err = new Error('Pause is only enabled when an urgent task is assigned to you or during a meeting');
     err.statusCode = 400;
     throw err;
   }
 };
 
-/** Block starting/resuming non-urgent work while an urgent task is still open. */
+/** Block starting/resuming non-urgent work while an urgent task is still open or during meeting. */
 export const assertCanStartOrResumeTask = async ({ Task, task, nextStatus }) => {
   if (nextStatus !== 'In Progress') return;
+
+  if (task?.pausedByMeeting) {
+    const err = new Error('Task was paused by an ongoing meeting — it will automatically resume when the meeting ends');
+    err.statusCode = 400;
+    throw err;
+  }
+
   if (String(task?.priority || '') === 'Urgent') return;
 
   const assigneeId = task?.assignedTo?._id || task?.assignedTo;

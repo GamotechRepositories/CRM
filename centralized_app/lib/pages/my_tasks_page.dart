@@ -745,7 +745,13 @@ class _TaskTile extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        _BadgePill(label: status, bg: sBg, fg: sFg),
+                        _BadgePill(
+                          label: (task['pausedByMeeting'] == true && status.toLowerCase() == 'paused')
+                              ? 'Paused (In Meeting)'
+                              : status,
+                          bg: sBg,
+                          fg: sFg,
+                        ),
                         if (priority.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           _BadgePill(label: priority, bg: pBg, fg: pFg),

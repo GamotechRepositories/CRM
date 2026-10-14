@@ -21,6 +21,11 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     type: mongoose.Schema.Types.ObjectId,
     default: null,
   },
+  /** True when task is temporarily paused due to an ongoing meeting. Auto-resumes on meeting end. */
+  pausedByMeeting: {
+    type: Boolean,
+    default: false,
+  },
   scheduledStartAt: {
     type: Date,
     default: null,

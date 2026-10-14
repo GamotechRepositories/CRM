@@ -294,6 +294,30 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
 
+                            if (session.sessionExpiredNotice) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFF6FF),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF2563EB)),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'A new workday has started. Please sign in to continue.',
+                                        style: TextStyle(fontSize: 12, color: Color(0xFF1D4ED8), fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
                             if (error != null && error.isNotEmpty) ...[
                               const SizedBox(height: 12),
                               Container(

@@ -1,4 +1,9 @@
 import Meeting from '../../models/bangarProperties/bangarProperties_meeting.js';
+import Task from '../../models/bangarProperties/bangarProperties_task.js';
+import {
+  pauseInProgressTasksForMeeting,
+  resumeTasksPausedByMeeting,
+} from '../../utils/meetingTaskInterrupt.js';
 
 const toApiMeeting = (doc) => {
   const obj = doc.toObject ? doc.toObject() : doc;
@@ -93,6 +98,17 @@ export const createMeeting = async (req, res) => {
       payload.organizerName = 'Organizer';
     }
     const meeting = await Meeting.create(payload);
+
+    if (meeting.status === 'ongoing') {
+      const participantIds = [
+        meeting.organizerId,
+        ...(meeting.participants || []).map((p) => p.userId),
+      ].filter(Boolean);
+      for (const empId of participantIds) {
+        await pauseInProgressTasksForMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
+      }
+    }
+
     res.status(201).json({ message: 'Meeting created', meeting: toApiMeeting(meeting) });
   } catch (error) {
     res.status(500).json({ message: 'Error creating meeting', error: error.message });
@@ -101,15 +117,37 @@ export const createMeeting = async (req, res) => {
 
 export const updateMeeting = async (req, res) => {
   try {
+    const existing = await Meeting.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Meeting not found' });
+
     const payload = fromBody({ ...req.body, companyId: req.body.companyId });
     delete payload.companyId;
     if (req.body.companyId) payload.companyId = req.body.companyId;
+
+    const previousStatus = existing.status;
+    const nextStatus = payload.status || previousStatus;
 
     const meeting = await Meeting.findByIdAndUpdate(req.params.id, payload, {
       new: true,
       runValidators: true,
     });
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+    const participantIds = [
+      existing.organizerId,
+      ...(existing.participants || []).map((p) => p.userId),
+    ].filter(Boolean);
+
+    if (previousStatus !== 'ongoing' && nextStatus === 'ongoing') {
+      for (const empId of participantIds) {
+        await pauseInProgressTasksForMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
+      }
+    } else if (previousStatus === 'ongoing' && ['completed', 'cancelled', 'scheduled'].includes(nextStatus)) {
+      for (const empId of participantIds) {
+        await resumeTasksPausedByMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
+      }
+    }
+
     res.status(200).json({ message: 'Meeting updated', meeting: toApiMeeting(meeting) });
   } catch (error) {
     res.status(500).json({ message: 'Error updating meeting', error: error.message });
@@ -120,6 +158,17 @@ export const deleteMeeting = async (req, res) => {
   try {
     const meeting = await Meeting.findByIdAndDelete(req.params.id);
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+    if (meeting.status === 'ongoing') {
+      const participantIds = [
+        meeting.organizerId,
+        ...(meeting.participants || []).map((p) => p.userId),
+      ].filter(Boolean);
+      for (const empId of participantIds) {
+        await resumeTasksPausedByMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
+      }
+    }
+
     res.status(200).json({ message: 'Meeting deleted' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting meeting', error: error.message });

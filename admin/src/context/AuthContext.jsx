@@ -6,7 +6,13 @@ import { TENANT_IDS } from '../config/tenants'
 const AUTH_KEY = 'central_admin_user'
 const TOKEN_KEY = 'central_admin_token'
 const COMPANY_SESSIONS_KEY = 'central_operation_company_sessions'
+const ADMIN_SESSION_DATE_KEY = 'central_admin_session_date'
 const AuthContext = createContext(null)
+
+const getTodayDateKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const getApiRoot = () => {
   const adminBase = import.meta.env.VITE_API_URL || '/api/v1/admin'
@@ -63,7 +69,10 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     try {
+      const today = getTodayDateKey()
       const raw = localStorage.getItem(AUTH_KEY)
+      const sessionDate = localStorage.getItem(ADMIN_SESSION_DATE_KEY)
+
       let sessions = {}
       try {
         const sessionsRaw = localStorage.getItem(COMPANY_SESSIONS_KEY)
@@ -71,20 +80,59 @@ export const AuthProvider = ({ children }) => {
       } catch {
         sessions = {}
       }
-      if (raw) {
+
+      if (raw && sessionDate === today) {
         setUser(mergeOperationSession(JSON.parse(raw), sessions))
+      } else if (raw) {
+        // Expired from a previous day
+        localStorage.removeItem(AUTH_KEY)
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(COMPANY_SESSIONS_KEY)
+        localStorage.removeItem(ADMIN_SESSION_DATE_KEY)
+        setUser(null)
       }
     } catch {
       localStorage.removeItem(AUTH_KEY)
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(ADMIN_SESSION_DATE_KEY)
     } finally {
       setLoading(false)
     }
   }, [])
 
+  // Invalidate session if calendar day rolls over while user is active
+  useEffect(() => {
+    if (!user) return
+
+    const verifyDailySession = () => {
+      const today = getTodayDateKey()
+      const sessionDate = localStorage.getItem(ADMIN_SESSION_DATE_KEY)
+      if (sessionDate && sessionDate !== today) {
+        logout()
+      }
+    }
+
+    const intervalId = setInterval(verifyDailySession, 30000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        verifyDailySession()
+      }
+    }
+    window.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('focus', handleVisibility)
+
+    return () => {
+      clearInterval(intervalId)
+      window.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('focus', handleVisibility)
+    }
+  }, [user])
+
   const persistSession = (nextUser, token = null, companySessions = null) => {
     const normalized = mergeOperationSession(nextUser, companySessions || nextUser?.companySessions)
     setUser(normalized)
     localStorage.setItem(AUTH_KEY, JSON.stringify(normalized))
+    localStorage.setItem(ADMIN_SESSION_DATE_KEY, getTodayDateKey())
     if (token) localStorage.setItem(TOKEN_KEY, token)
     if (normalized?.companySessions) {
       localStorage.setItem(COMPANY_SESSIONS_KEY, JSON.stringify(normalized.companySessions))
@@ -159,6 +207,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(AUTH_KEY)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(COMPANY_SESSIONS_KEY)
+    localStorage.removeItem(ADMIN_SESSION_DATE_KEY)
   }
 
   const companySessions = useMemo(() => {

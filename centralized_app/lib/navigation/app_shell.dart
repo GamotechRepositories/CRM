@@ -12,6 +12,8 @@ import '../navigation/sidebar_nav.dart';
 import '../pages/app_page_factory.dart';
 import '../screens/login_screen.dart';
 import '../services/work_reminder_service.dart';
+import '../utils/attendance_helpers.dart';
+import '../widgets/check_in_dialog.dart';
 
 /// Logged-in shell: compact drawer sidebar + company-scoped page content.
 class AppShell extends StatefulWidget {
@@ -39,6 +41,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
   }
 
+  Timer? _reminderStartTimer;
+  Timer? _dailySessionTimer;
+
   @override
   void initState() {
     super.initState();
@@ -48,13 +53,48 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _reminderStartTimer = Timer(const Duration(seconds: 4), () {
       if (mounted) WorkReminderService.instance.start(context.read<AuthSession>());
     });
+
+    // Check if new-day rollover occurred every 30s
+    _dailySessionTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) context.read<AuthSession>().checkDailySession();
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkDailyCheckInPrompt();
+    });
   }
 
-  Timer? _reminderStartTimer;
+  Future<void> _checkDailyCheckInPrompt() async {
+    final session = context.read<AuthSession>();
+    if (!session.showCheckInPrompt || !session.isLoggedIn) return;
+    session.consumeCheckInPrompt();
+
+    final api = session.api;
+    if (api == null || session.userId.isEmpty) return;
+
+    try {
+      final today = AttendanceHelpers.todayKey();
+      final attendances = await api.fetchAttendanceToday(
+        date: today,
+        employeeId: session.userId,
+      );
+      final alreadyCheckedIn = attendances.any((a) => a['checkIn'] != null);
+      if (alreadyCheckedIn || !mounted) return;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const CheckInDialog(),
+      );
+    } catch (_) {
+      // Best-effort check
+    }
+  }
 
   @override
   void dispose() {
     _reminderStartTimer?.cancel();
+    _dailySessionTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -62,6 +102,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
+      context.read<AuthSession>().checkDailySession();
       WorkReminderService.instance.refresh(context.read<AuthSession>(), fresh: true);
     }
   }

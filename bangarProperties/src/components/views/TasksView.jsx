@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { onTaskChanged } from '../../utils/realtimeSocket'
 import {
   formatTaskDuration,
   getEditableStatusOptions,
@@ -152,6 +153,18 @@ const TasksView = ({ isMyTasks = false }) => {
   useEffect(() => {
     if (canAssign || user?._id) fetchTasks()
   }, [filterProject, filterAssignee, canAssign, user?._id, isMyTasks])
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchTasks()
+    }
+    const unsub = onTaskChanged(handleUpdate)
+    window.addEventListener('crm:task-updated', handleUpdate)
+    return () => {
+      unsub?.()
+      window.removeEventListener('crm:task-updated', handleUpdate)
+    }
+  }, [])
 
   useEffect(() => {
     if (canAssign && !isMyTasks) {
@@ -577,8 +590,11 @@ const TasksView = ({ isMyTasks = false }) => {
                   </td>
                   <td className='py-4 px-6'>
                     <div className='flex flex-col gap-0.5'>
-                      <span className={`inline-flex w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                      <span className={`inline-flex items-center gap-1 w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
                         {normalizeTaskStatus(task.status) || task.status}
+                        {task.pausedByMeeting && (
+                          <span className='text-[10px] font-medium opacity-90'>(In Meeting)</span>
+                        )}
                       </span>
                       {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
                         <span className='text-xs text-blue-700'>
@@ -790,7 +806,11 @@ const TasksView = ({ isMyTasks = false }) => {
                     >
                       {updatingStatus ? 'Accepting...' : 'Accept Task'}
                     </button>
-                    {String(viewTask.priority || '') !== 'Urgent'
+                    {viewTask.pausedByMeeting ? (
+                      <span className='text-[11px] text-indigo-700 max-w-[14rem] text-right font-medium'>
+                        In meeting — task will auto-resume when meeting ends
+                      </span>
+                    ) : String(viewTask.priority || '') !== 'Urgent'
                       && hasOpenUrgentTask(tasks, user?._id, viewTask._id) ? (
                       <span className='text-[11px] text-amber-700 max-w-[12rem] text-right'>
                         Urgent task in progress — finish it first
