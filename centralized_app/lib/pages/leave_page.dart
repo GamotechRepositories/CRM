@@ -219,7 +219,7 @@ class _LeavePageState extends State<LeavePage> {
                           showEmployee: isApprover && _tab == _LeaveTab.list,
                           canApprove: _canApproveLeave(session, leave),
                           onTap: () => _openDetail(leave),
-                          onForward: () => _forwardLeave(leave),
+                          onApprove: () => _approveLeave(leave),
                           onReject: () => _rejectLeave(leave),
                         ),
                       )),
@@ -260,7 +260,7 @@ class _LeavePageState extends State<LeavePage> {
     if (!RoleAccess.canApproveLeave(session.user)) return false;
     if (leave['status'] != 'Pending') return false;
     final role = RoleAccess.leaveApprovalRole(session.user);
-    final stage = (leave['approvalStage'] ?? 'team_leader').toString();
+    final stage = (leave['approvalStage'] ?? 'hr').toString();
     if (!RoleAccess.canActOnLeaveStage(role, stage)) return false;
     return LeaveHelpers.employeeIdFrom(leave['employee']) != session.userId;
   }
@@ -286,9 +286,9 @@ class _LeavePageState extends State<LeavePage> {
         leave: leave,
         showEmployee: RoleAccess.canApproveLeave(session.user),
         canApprove: _canApproveLeave(session, leave),
-        onForward: () async {
+        onApprove: () async {
           Navigator.pop(context);
-          await _forwardLeave(leave);
+          await _approveLeave(leave);
         },
         onReject: () async {
           Navigator.pop(context);
@@ -298,13 +298,13 @@ class _LeavePageState extends State<LeavePage> {
     );
   }
 
-  Future<void> _forwardLeave(Map<String, dynamic> leave) async {
+  Future<void> _approveLeave(Map<String, dynamic> leave) async {
     final session = context.read<AuthSession>();
     final api = session.api;
     final id = leave['_id']?.toString();
     if (api == null || id == null) return;
     try {
-      await api.updateLeaveStatus(id, action: 'Forward', actorId: session.userId);
+      await api.updateLeaveStatus(id, action: 'Approve', actorId: session.userId);
       if (mounted) _load();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -560,7 +560,7 @@ class _FilterDropdown extends StatelessWidget {
         Text(label, style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
         DropdownButtonFormField<String>(
-          value: value.isEmpty ? '' : value,
+          initialValue: value.isEmpty ? '' : value,
           isDense: true,
           decoration: InputDecoration(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -612,7 +612,7 @@ class _LeaveCard extends StatelessWidget {
     required this.showEmployee,
     required this.canApprove,
     required this.onTap,
-    required this.onForward,
+    required this.onApprove,
     required this.onReject,
   });
 
@@ -620,7 +620,7 @@ class _LeaveCard extends StatelessWidget {
   final bool showEmployee;
   final bool canApprove;
   final VoidCallback onTap;
-  final VoidCallback onForward;
+  final VoidCallback onApprove;
   final VoidCallback onReject;
 
   @override
@@ -694,13 +694,13 @@ class _LeaveCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: onForward,
+                        onPressed: onApprove,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF047857),
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           textStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
                         ),
-                        child: const Text('Forward'),
+                        child: const Text('Approve'),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -980,7 +980,7 @@ class _ApplyLeaveSheetState extends State<_ApplyLeaveSheet> {
               ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _leaveType,
+                initialValue: _leaveType,
                 decoration: const InputDecoration(labelText: 'Leave Type', isDense: true),
                 style: const TextStyle(fontSize: 12, color: Color(0xFF0F172A)),
                 items: LeaveHelpers.leaveTypes
@@ -1050,14 +1050,14 @@ class _LeaveDetailSheet extends StatelessWidget {
     required this.leave,
     required this.showEmployee,
     required this.canApprove,
-    required this.onForward,
+    required this.onApprove,
     required this.onReject,
   });
 
   final Map<String, dynamic> leave;
   final bool showEmployee;
   final bool canApprove;
-  final VoidCallback onForward;
+  final VoidCallback onApprove;
   final VoidCallback onReject;
 
   @override
@@ -1129,7 +1129,7 @@ class _LeaveDetailSheet extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: FilledButton(onPressed: onForward, child: const Text('Forward', style: TextStyle(fontSize: 12)))),
+                  Expanded(child: FilledButton(onPressed: onApprove, child: const Text('Approve', style: TextStyle(fontSize: 12)))),
                   const SizedBox(width: 8),
                   Expanded(child: OutlinedButton(onPressed: onReject, child: const Text('Reject', style: TextStyle(fontSize: 12)))),
                 ],

@@ -1,4 +1,6 @@
-const STAGE_ORDER = ['team_leader', 'hr', 'admin', 'central_admin'];
+import { emitToUser } from '../services/realtimeNotification.service.js';
+
+const STAGE_ORDER = ['hr', 'admin', 'completed'];
 
 const getNumberOfDays = (startDate, endDate) => {
   const start = new Date(startDate);
@@ -12,32 +14,50 @@ const getRole = (employee) => {
   const designation = employee?.designation;
   const accessRole = String(designation?.accessRole || '').trim().toLowerCase();
   const title = String(designation?.title || designation?.name || '').trim().toLowerCase();
-  if (title === 'team leader' || title.includes('team lead')) return 'team_leader';
-  if (title === 'hr manager' || title === 'hr') return 'hr';
-  if (title === 'admin') return 'admin';
-  if (title.includes('manager')) return 'manager';
+  if (
+    accessRole === 'hr' ||
+    accessRole === 'hr_manager' ||
+    title === 'hr manager' ||
+    title === 'hr' ||
+    title.includes('human resource') ||
+    title.includes('hr ') ||
+    title.startsWith('hr')
+  ) {
+    return 'hr';
+  }
+  if (
+    title === 'chief operating officer' ||
+    title.includes('chief operating officer') ||
+    title === 'coo' ||
+    title.includes('coo')
+  ) {
+    return 'coo';
+  }
+  if (accessRole === 'admin' || title === 'admin') return 'admin';
+  if (title === 'team leader' || title.includes('team lead') || accessRole === 'team_leader') return 'team_leader';
+  if (title.includes('manager') || accessRole === 'manager') return 'manager';
   if (accessRole) return accessRole;
   return 'employee';
 };
 
 const getInitialStage = (employee) => {
   const role = getRole(employee);
-  if (role === 'admin') return 'central_admin';
-  if (role === 'hr') return 'admin';
-  if (role === 'team_leader' || role === 'manager') return 'hr';
-  return 'team_leader';
+  // If HR or COO applies for leave, escalate to admin; otherwise leave is approved by HR / COO
+  if (role === 'hr' || role === 'coo') return 'admin';
+  return 'hr';
 };
 
 const canActAtStage = (role, stage) => {
-  if (stage === 'team_leader') return role === 'team_leader' || role === 'manager';
-  if (stage === 'hr') return role === 'hr';
-  if (stage === 'admin') return role === 'admin';
+  // Both HR and Chief Operating Officer can approve leaves
+  if (role === 'hr' || role === 'coo') return stage === 'hr' || stage === 'admin' || stage === 'team_leader';
+  // Admin can act on 'admin' stage or as system administrator fallback
+  if (role === 'admin') return stage === 'admin' || stage === 'hr' || stage === 'team_leader';
   return false;
 };
 
 const nextStage = (stage) => {
   const index = STAGE_ORDER.indexOf(stage);
-  return index >= 0 ? STAGE_ORDER[index + 1] : null;
+  return index >= 0 ? STAGE_ORDER[index + 1] : 'completed';
 };
 
 const populateLeave = (Leave, id) =>
@@ -49,14 +69,15 @@ const populateLeave = (Leave, id) =>
 const notify = async (Notification, payload) => {
   if (!Notification) return;
   try {
-    await Notification.create(payload);
+    const doc = await Notification.create(payload);
+    emitToUser(String(payload.recipient), doc);
   } catch {
     // A notification failure must not roll back a valid leave transition.
   }
 };
 
 const notifyStageApprovers = async ({ Employee, Notification, stage, leave, actor = null }) => {
-  if (!Notification || stage === 'central_admin') return;
+  if (!Notification || stage === 'central_admin' || stage === 'completed') return;
   const candidates = await Employee.find({ status: 'Active' }).populate('designation').lean();
   const approvers = candidates.filter((employee) => canActAtStage(getRole(employee), stage));
   await Promise.all(approvers.map((approver) => notify(Notification, {
@@ -146,11 +167,18 @@ export const createLeaveHandlers = ({ Leave, Employee, Notification }) => {
 
   const updateLeaveStatus = async (req, res) => {
     try {
-      const action = String(req.body?.action || (req.body?.status === 'Rejected' ? 'Reject' : 'Forward')).trim();
+      const rawAction = String(req.body?.action || req.body?.status || '').trim();
+      const action = ['Approve', 'Approved'].some((a) => a.toLowerCase() === rawAction.toLowerCase())
+        ? 'Approve'
+        : ['Reject', 'Rejected'].some((a) => a.toLowerCase() === rawAction.toLowerCase())
+        ? 'Reject'
+        : rawAction.toLowerCase() === 'forward'
+        ? 'Approve'
+        : rawAction;
       const actorId = req.body?.actorId || req.body?.approvedBy;
       const comment = String(req.body?.comment || req.body?.rejectionReason || '').trim();
-      if (!['Forward', 'Reject'].includes(action)) {
-        return res.status(400).json({ message: 'Action must be Forward or Reject' });
+      if (!['Approve', 'Reject'].includes(action)) {
+        return res.status(400).json({ message: 'Action must be Approve or Reject' });
       }
       if (!actorId) return res.status(400).json({ message: 'The acting employee is required' });
 
@@ -163,16 +191,13 @@ export const createLeaveHandlers = ({ Leave, Employee, Notification }) => {
       if (leave.status !== 'Pending') {
         return res.status(400).json({ message: 'Leave has already received a final decision' });
       }
-      const stage = leave.approvalStage || 'team_leader';
-      if (stage === 'central_admin') {
-        return res.status(400).json({ message: 'This leave is awaiting the Centralized Admin final decision' });
-      }
+      const stage = leave.approvalStage || 'hr';
       if (String(leave.employee) === String(actor._id)) {
         return res.status(403).json({ message: 'You cannot process your own leave request' });
       }
       const actorRole = getRole(actor);
       if (!canActAtStage(actorRole, stage)) {
-        return res.status(403).json({ message: `This leave is awaiting action from ${stage.replace('_', ' ')}` });
+        return res.status(403).json({ message: 'Leave applications can only be approved by HR or Chief Operating Officer' });
       }
 
       const actedAt = new Date();
@@ -205,12 +230,15 @@ export const createLeaveHandlers = ({ Leave, Employee, Notification }) => {
         return res.status(200).json({ message: 'Leave rejected', leave: populated });
       }
 
-      const destination = nextStage(stage);
-      if (!destination) return res.status(400).json({ message: 'No next approval stage is configured' });
-      leave.approvalStage = destination;
+      // Approve action: HR grants direct approval
+      leave.status = 'Approved';
+      leave.approvalStage = 'completed';
+      leave.approvedBy = actor._id;
+      leave.approvedAt = actedAt;
+      leave.rejectionReason = '';
       leave.approvalHistory.push({
         stage,
-        action: 'Forwarded',
+        action: 'Approved',
         actor: actor._id,
         actorName: actor.name || '',
         actorRole,
@@ -218,18 +246,18 @@ export const createLeaveHandlers = ({ Leave, Employee, Notification }) => {
         actedAt,
       });
       await leave.save();
-      const populated = await populateLeave(Leave, leave._id);
-      await notifyStageApprovers({
-        Employee,
-        Notification,
-        stage: destination,
-        leave: populated,
-        actor: actor._id,
+      await notify(Notification, {
+        recipient: leave.employee,
+        type: 'leave_status',
+        title: 'Leave request approved',
+        message: comment ? `Your leave request was approved: ${comment}` : `Your ${leave.leaveType} leave request for ${leave.numberOfDays || 1} day(s) was approved.`,
+        link: '/leave',
+        priority: 'high',
+        metadata: { entityType: 'leave', entityId: leave._id, actor: actor._id, extra: { stage } },
       });
+      const populated = await populateLeave(Leave, leave._id);
       return res.status(200).json({
-        message: destination === 'central_admin'
-          ? 'Leave forwarded to Centralized Admin for final decision'
-          : `Leave forwarded to ${destination.replace('_', ' ')}`,
+        message: 'Leave approved successfully',
         leave: populated,
       });
     } catch (error) {

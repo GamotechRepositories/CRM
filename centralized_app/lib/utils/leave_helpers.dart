@@ -16,8 +16,8 @@ class LeaveHelpers {
 
   static const stageLabels = {
     'team_leader': 'Team Leader / Reporting Manager',
-    'hr': 'HR Manager',
-    'admin': 'Admin',
+    'hr': 'HR Manager / COO',
+    'admin': 'Admin / COO',
     'central_admin': 'Centralized Admin',
     'completed': 'Completed',
   };
@@ -27,7 +27,7 @@ class LeaveHelpers {
 
   static String stageLabel(String? stage, {required String status}) {
     if (status != 'Pending') return stageLabels['completed']!;
-    return stageLabels[stage ?? 'team_leader'] ?? stage ?? '—';
+    return stageLabels[stage ?? 'hr'] ?? stage ?? '—';
   }
 
   static String employeeIdFrom(dynamic employee) {

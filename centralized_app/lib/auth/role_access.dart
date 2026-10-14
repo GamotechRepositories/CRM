@@ -187,35 +187,28 @@ class RoleAccess {
     }.contains(path);
   }
 
+  static bool isCooUser(Map<String, dynamic>? user) {
+    if (user == null) return false;
+    final title = designationTitle(user).toLowerCase();
+    return title.contains('chief operating officer') || title == 'coo' || title.contains('coo');
+  }
+
   /// Mirrors web `canApproveLeaveForUser`.
   static bool canApproveLeave(Map<String, dynamic>? user) {
-    if (isAdminUser(user) || isHrUser(user)) return true;
-    final role = accessRole(user);
-    if (['team_leader', 'manager', 'hr'].contains(role)) return true;
-    final title = designationTitle(user).toLowerCase();
-    if (title.contains('team lead') || title.contains('manager')) return true;
-    final d = user?['designation'];
-    if (d is Map) {
-      final flag = d['permissions']?['canApproveLeave'];
-      if (flag is bool) return flag;
-    }
+    if (isAdminUser(user) || isHrUser(user) || isCooUser(user)) return true;
     return false;
   }
 
   static String leaveApprovalRole(Map<String, dynamic>? user) {
     if (isHrUser(user)) return 'hr';
+    if (isCooUser(user)) return 'coo';
     if (isAdminUser(user)) return 'admin';
-    if (isTeamLeader(user)) return 'team_leader';
-    if (isManager(user)) return 'manager';
-    final role = accessRole(user);
-    if (role.isNotEmpty) return role;
     return 'employee';
   }
 
   static bool canActOnLeaveStage(String role, String stage) {
-    if (stage == 'team_leader') return role == 'team_leader' || role == 'manager';
-    if (stage == 'hr') return role == 'hr';
-    if (stage == 'admin') return role == 'admin';
+    if (role == 'hr' || role == 'coo') return stage == 'hr' || stage == 'admin' || stage == 'team_leader';
+    if (role == 'admin') return stage == 'admin' || stage == 'hr' || stage == 'team_leader';
     return false;
   }
 

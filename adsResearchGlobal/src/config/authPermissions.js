@@ -131,24 +131,40 @@ export const canRateTaskForUser = (user) => {
   ].includes(title)
 }
 
-export const canApproveLeaveForUser = (user) => {
-  if (isAdminUser(user)) return true
-  const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
+export const isHrForUser = (user) => {
+  if (!user) return false
+  const accessRole = String(user?.designation?.accessRole || '').toLowerCase().trim()
   const title = getDesignationTitle(user)
-  if (['team_leader', 'manager', 'hr'].includes(accessRole)) return true
-  if (title.includes('team lead') || title.includes('manager')) return true
-  const fromDesignation = getDesignationPermission(user, 'canApproveLeave')
-  if (fromDesignation !== null) return fromDesignation
-  return [
-    'admin',
-    'hr manager',
-    'project manager',
-    'technical lead',
-    'engineering manager',
-    'product manager',
-    'senior software engineer',
-  ].includes(title)
+  return (
+    accessRole === 'hr' ||
+    accessRole === 'hr_manager' ||
+    title === 'hr manager' ||
+    title === 'hr' ||
+    title.includes('human resource') ||
+    title.includes('hr ') ||
+    title.startsWith('hr')
+  )
 }
+
+export const isCooForUser = (user) => {
+  if (!user) return false
+  const title = getDesignationTitle(user).toLowerCase().trim()
+  return (
+    title === 'chief operating officer' ||
+    title.includes('chief operating officer') ||
+    title === 'coo' ||
+    title.includes('coo')
+  )
+}
+
+export const canApproveLeaveForUser = (user) => {
+  if (!user) return false
+  if (isAdminUser(user)) return true
+  if (isHrForUser(user)) return true
+  if (isCooForUser(user)) return true
+  return false
+}
+
 
 export const canManageEmployeesForUser = (user) => {
   if (isAdminUser(user)) return true

@@ -29,8 +29,8 @@ const statusStyles = {
 
 const STAGE_LABELS = {
   team_leader: 'Team Leader / Reporting Manager',
-  hr: 'HR Manager',
-  admin: 'Admin',
+  hr: 'HR Manager / COO',
+  admin: 'Admin / COO',
   central_admin: 'Centralized Admin',
   completed: 'Completed',
 }
@@ -38,18 +38,35 @@ const STAGE_LABELS = {
 const getUserApprovalRole = (user) => {
   const accessRole = String(user?.designation?.accessRole || '').toLowerCase()
   const title = String(user?.designation?.title || '').toLowerCase()
+  if (
+    accessRole === 'hr' ||
+    accessRole === 'hr_manager' ||
+    title === 'hr manager' ||
+    title === 'hr' ||
+    title.includes('human resource') ||
+    title.includes('hr ') ||
+    title.startsWith('hr')
+  ) {
+    return 'hr'
+  }
+  if (
+    title === 'chief operating officer' ||
+    title.includes('chief operating officer') ||
+    title === 'coo' ||
+    title.includes('coo')
+  ) {
+    return 'coo'
+  }
+  if (accessRole === 'admin' || title === 'admin') return 'admin'
   if (title === 'team leader' || title.includes('team lead')) return 'team_leader'
-  if (title === 'hr manager' || title === 'hr') return 'hr'
-  if (title === 'admin') return 'admin'
   if (title.includes('manager')) return 'manager'
   if (accessRole) return accessRole
   return 'employee'
 }
 
 const canRoleActAtStage = (role, stage) => {
-  if (stage === 'team_leader') return role === 'team_leader' || role === 'manager'
-  if (stage === 'hr') return role === 'hr'
-  if (stage === 'admin') return role === 'admin'
+  if (role === 'hr' || role === 'coo') return stage === 'hr' || stage === 'admin' || stage === 'team_leader'
+  if (role === 'admin') return stage === 'admin' || stage === 'hr' || stage === 'team_leader'
   return false
 }
 
@@ -298,13 +315,13 @@ const LeaveView = () => {
     }
   }
 
-  const handleForward = async (id) => {
+  const handleApprove = async (id) => {
     try {
-      await api.patch(`/leave/${id}/status`, { action: 'Forward', actorId: user._id })
+      await api.patch(`/leave/${id}/status`, { action: 'Approve', actorId: user._id })
       setOpenMenuId(null)
       fetchLeaves()
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Error forwarding leave')
+      setError(err.response?.data?.message || err.message || 'Error approving leave')
     }
   }
 
@@ -571,7 +588,7 @@ const LeaveView = () => {
                               <td className='px-5 py-3'><StatusBadge status={leave.status} /></td>
                               <td className='px-5 py-3 whitespace-nowrap text-xs text-gray-600'>
                                 {leave.status === 'Pending'
-                                  ? STAGE_LABELS[leave.approvalStage || 'team_leader']
+                                  ? STAGE_LABELS[leave.approvalStage || 'hr'] || leave.approvalStage || 'HR Manager'
                                   : STAGE_LABELS.completed}
                               </td>
                               <td className='px-5 py-3 whitespace-nowrap text-gray-600 text-xs'>
@@ -600,22 +617,22 @@ const LeaveView = () => {
                                     </button>
                                     {isApprover &&
                                       leave.status === 'Pending' &&
-                                      canRoleActAtStage(approvalRole, leave.approvalStage || 'team_leader') &&
+                                      canRoleActAtStage(approvalRole, leave.approvalStage || 'hr') &&
                                       String(leave.employee?._id || leave.employee) !== String(user?._id) && (
                                       <>
                                         <button
                                           type='button'
-                                          onClick={() => handleForward(leave._id)}
-                                          className='w-full text-left px-3 py-2 hover:bg-emerald-50 text-emerald-700'
+                                          onClick={() => handleApprove(leave._id)}
+                                          className='w-full text-left px-3 py-2 hover:bg-emerald-50 text-emerald-700 font-medium'
                                         >
-                                          Forward
+                                          ✓ Approve
                                         </button>
                                         <button
                                           type='button'
                                           onClick={() => handleReject(leave._id)}
-                                          className='w-full text-left px-3 py-2 hover:bg-red-50 text-red-700'
+                                          className='w-full text-left px-3 py-2 hover:bg-red-50 text-red-700 font-medium'
                                         >
-                                          Reject
+                                          ✕ Reject
                                         </button>
                                       </>
                                     )}
@@ -817,7 +834,7 @@ const LeaveView = () => {
                 <span className='font-medium text-gray-500 block'>Current Approval Stage</span>
                 <p className='text-gray-900'>
                   {viewLeave.status === 'Pending'
-                    ? STAGE_LABELS[viewLeave.approvalStage || 'team_leader']
+                    ? STAGE_LABELS[viewLeave.approvalStage || 'hr'] || viewLeave.approvalStage || 'HR Manager'
                     : STAGE_LABELS.completed}
                 </p>
               </div>
@@ -841,10 +858,39 @@ const LeaveView = () => {
                 </div>
               )}
             </div>
+            {isApprover &&
+              viewLeave.status === 'Pending' &&
+              canRoleActAtStage(approvalRole, viewLeave.approvalStage || 'hr') &&
+              String(viewLeave.employee?._id || viewLeave.employee) !== String(user?._id) && (
+              <div className='flex gap-2 mt-4'>
+                <button
+                  type='button'
+                  onClick={async () => {
+                    const id = viewLeave._id
+                    setViewLeave(null)
+                    await handleApprove(id)
+                  }}
+                  className='flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 shadow-sm'
+                >
+                  ✓ Approve Leave
+                </button>
+                <button
+                  type='button'
+                  onClick={() => {
+                    const id = viewLeave._id
+                    setViewLeave(null)
+                    handleReject(id)
+                  }}
+                  className='flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-red-700 shadow-sm'
+                >
+                  ✕ Reject Leave
+                </button>
+              </div>
+            )}
             <button
               type='button'
               onClick={() => setViewLeave(null)}
-              className='w-full mt-5 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50'
+              className='w-full mt-3 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50'
             >
               Close
             </button>
