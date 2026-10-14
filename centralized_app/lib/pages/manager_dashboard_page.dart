@@ -5,6 +5,7 @@ import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../navigation/app_nav.dart';
 import '../api/api_cache.dart';
+import 'site_coordinator_dashboard_body.dart';
 
 class ManagerDashboardPage extends StatefulWidget {
   const ManagerDashboardPage({super.key});
@@ -196,6 +197,7 @@ class _ManagerDashboardPageState extends State<ManagerDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
     final activeProjects = _projects.where((p) => (p['status'] ?? '') == 'In Progress').length;
     final totalLeads = _leads.length;
     final totalClients = _clients.length;
@@ -375,6 +377,39 @@ class _ManagerDashboardPageState extends State<ManagerDashboardPage> {
                   ),
                 ),
                 const SizedBox(height: 14),
+
+                // Travel Allowance & Route Map Section (For STR & Sales Managers)
+                if (RoleAccess.canViewTravelAndRouteMap(session.user, companyKey: session.company?.key)) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x04000000), blurRadius: 6, offset: Offset(0, 2)),
+                      ],
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.directions_car_rounded, size: 16, color: Color(0xFF2563EB)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Travel Allowance & Route Map',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        SiteCoordinatorDashboardBody(shrinkWrap: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
 
                 // Top Performing Team Members Card
                 Container(

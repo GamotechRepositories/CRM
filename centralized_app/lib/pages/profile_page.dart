@@ -126,7 +126,22 @@ class _ProfileHero extends StatelessWidget {
     final designation = _designationLabel(employee['designation']);
     final department = profileVal(employee['department']);
     final status = profileVal(employee['employmentStatus'] ?? employee['status'], fallback: 'Active');
-    final photo = employee['profilePhoto']?.toString();
+    final session = context.read<AuthSession>();
+    final rawPhoto = employee['profilePhoto'] ??
+        employee['profilePicture'] ??
+        employee['avatar'] ??
+        employee['image'] ??
+        employee['photo'] ??
+        employee['profileImage'] ??
+        profile['profilePhoto'] ??
+        profile['avatar'] ??
+        session.user?['profilePhoto'] ??
+        session.user?['avatar'] ??
+        session.user?['photo'];
+    final photo = _resolvePhotoUrl(
+      rawPhoto,
+      baseUrl: session.api?.client.baseUrl ?? session.company?.apiBaseUrl,
+    );
     final email = profileVal(employee['email'] ?? employee['officialEmail'] ?? employee['personalEmail']);
     final phone = profileVal(employee['officialMobile'] ?? employee['personalMobile']);
     final empCode = profileVal(employee['employeeCode']);
@@ -1162,44 +1177,111 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _Avatar extends StatelessWidget {
+class _Avatar extends StatefulWidget {
   const _Avatar({required this.name, this.photoUrl, this.radius = 28});
   final String name;
   final String? photoUrl;
   final double radius;
 
   @override
+  State<_Avatar> createState() => _AvatarState();
+}
+
+class _AvatarState extends State<_Avatar> {
+  bool _imgError = false;
+
+  @override
+  void didUpdateWidget(covariant _Avatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photoUrl != widget.photoUrl) {
+      _imgError = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final initial = widget.name.isNotEmpty && widget.name != '—'
+        ? widget.name[0].toUpperCase()
+        : '?';
+    final photo = widget.photoUrl;
+    final hasPhoto = photo != null && photo.isNotEmpty && !_imgError;
+    final double diameter = widget.radius * 2;
+
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         Container(
+          width: diameter,
+          height: diameter,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
+            color: const Color(0xFFDBEAFE),
             border: Border.all(color: Colors.white, width: 3),
             boxShadow: const [
               BoxShadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 3)),
             ],
           ),
-          child: CircleAvatar(
-            radius: radius,
-            backgroundColor: const Color(0xFFDBEAFE),
-            backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
-            child: (photoUrl == null || photoUrl!.isEmpty)
-                ? Text(initial, style: TextStyle(fontSize: radius * 0.65, fontWeight: FontWeight.w800, color: const Color(0xFF2563EB)))
-                : null,
+          child: ClipOval(
+            child: hasPhoto
+                ? Image.network(
+                    photo,
+                    width: diameter,
+                    height: diameter,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return Center(
+                        child: SizedBox(
+                          width: widget.radius * 0.7,
+                          height: widget.radius * 0.7,
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted && !_imgError) {
+                          setState(() => _imgError = true);
+                        }
+                      });
+                      return Center(
+                        child: Text(
+                          initial,
+                          style: TextStyle(
+                            fontSize: widget.radius * 0.65,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF2563EB),
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                : Center(
+                    child: Text(
+                      initial,
+                      style: TextStyle(
+                        fontSize: widget.radius * 0.65,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ),
           ),
         ),
         Positioned(
           right: 2,
           bottom: 2,
           child: Container(
-            width: 12,
-            height: 12,
+            width: 14,
+            height: 14,
             decoration: BoxDecoration(
               color: const Color(0xFF10B981),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
+              border: Border.all(color: Colors.white, width: 2.5),
             ),
           ),
         ),
@@ -1294,4 +1376,29 @@ String formatMoney(dynamic v) {
   if (v == null || v.toString().trim().isEmpty) return '—';
   final n = num.tryParse(v.toString()) ?? 0;
   return '₹${n.round()}';
+}
+
+String? _resolvePhotoUrl(dynamic raw, {String? baseUrl}) {
+  if (raw == null) return null;
+  var str = raw.toString().trim();
+  if (str.isEmpty || str == 'null' || str == 'undefined') return null;
+  if ((str.startsWith('"') && str.endsWith('"')) ||
+      (str.startsWith("'") && str.endsWith("'"))) {
+    str = str.substring(1, str.length - 1).trim();
+  }
+  if (str.isEmpty) return null;
+  if (!str.startsWith('http://') && !str.startsWith('https://')) {
+    if (baseUrl != null && baseUrl.trim().isNotEmpty) {
+      final cleanBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final cleanPath = str.replaceFirst(RegExp(r'^/+'), '');
+      str = '$cleanBase/$cleanPath';
+    } else {
+      return null;
+    }
+  }
+  try {
+    return Uri.encodeFull(str);
+  } catch (_) {
+    return str;
+  }
 }

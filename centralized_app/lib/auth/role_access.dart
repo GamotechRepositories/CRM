@@ -247,10 +247,13 @@ class RoleAccess {
     return false;
   }
 
-  /// Available for Sales employees, Team Leaders, Site Coordinators & Admins.
-  static bool canViewTravelAndRouteMap(Map<String, dynamic>? user) {
+  /// Available for Sales employees, Team Leaders, Managers, Site Coordinators & Admins, and all STR users.
+  static bool canViewTravelAndRouteMap(Map<String, dynamic>? user, {String? companyKey}) {
     if (user == null) return false;
-    if (isAdminUser(user) || isSiteCoordinatorUser(user) || isTeamLeader(user)) return true;
+    if (companyKey == 'salesTechReality') return true;
+    final userCompany = (user['company'] ?? '').toString().toLowerCase();
+    if (userCompany.contains('salestech') || userCompany.contains('sales_tech')) return true;
+    if (isAdminUser(user) || isSiteCoordinatorUser(user) || isTeamLeader(user) || isManager(user)) return true;
     return isSalesDepartment(user);
   }
 

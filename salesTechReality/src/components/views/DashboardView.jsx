@@ -74,14 +74,8 @@ const DashboardView = () => {
   else if (kind === 'site_coordinator') content = <SiteCoordinatorDashboardView />
   else content = <EmployeeDashboardView />
 
-  // Sales department (non–site-coordinator roles) also get travel allowance + route map.
-  if (
-    kind !== 'admin' &&
-    kind !== 'hr' &&
-    kind !== 'site_coordinator' &&
-    hasTravelDashboard(user) &&
-    !isSiteCoordinatorUser(user)
-  ) {
+  // In STR, employee dashboard and others dashboard get travel allowance & route map with timeline.
+  if (kind !== 'site_coordinator') {
     content = (
       <>
         {content}

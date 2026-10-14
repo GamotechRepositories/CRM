@@ -124,15 +124,21 @@ class SidebarNav {
         label: 'My Workspace',
         icon: '👤',
         alwaysVisible: true,
-        children: const [
-          SidebarChildItem(id: 'my-profile', label: 'My Profile', path: '/my-profile'),
-          SidebarChildItem(id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips'),
-          SidebarChildItem(id: 'my-tasks', label: 'My Tasks', path: '/my-tasks'),
-          SidebarChildItem(id: 'assign-task', label: 'Assign Task', path: '/assign-task'),
-          SidebarChildItem(id: 'leave-calendar', label: 'Leave Calendar', path: '/leave-calendar'),
-          SidebarChildItem(id: 'my-leaves', label: 'My Leaves', path: '/leave'),
-          SidebarChildItem(id: 'my-attendance', label: 'My Attendance', path: '/my-attendance'),
-          SidebarChildItem(id: 'my-projects', label: 'My Projects', path: '/my-projects'),
+        children: [
+          const SidebarChildItem(id: 'my-profile', label: 'My Profile', path: '/my-profile'),
+          const SidebarChildItem(id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips'),
+          const SidebarChildItem(id: 'my-tasks', label: 'My Tasks', path: '/my-tasks'),
+          const SidebarChildItem(id: 'assign-task', label: 'Assign Task', path: '/assign-task'),
+          const SidebarChildItem(id: 'leave-calendar', label: 'Leave Calendar', path: '/leave-calendar'),
+          const SidebarChildItem(id: 'my-leaves', label: 'My Leaves', path: '/leave'),
+          const SidebarChildItem(id: 'my-attendance', label: 'My Attendance', path: '/my-attendance'),
+          const SidebarChildItem(id: 'my-projects', label: 'My Projects', path: '/my-projects'),
+          if (ctx.canViewTravelAndRouteMap)
+            const SidebarChildItem(
+              id: 'travel-allowance',
+              label: 'Travel & Route Map',
+              path: '/travel-allowance',
+            ),
         ],
       ),
       SidebarEntry.group(

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../auth/auth_session.dart';
 import '../auth/role_access.dart';
 import '../config/company_config.dart';
+import '../utils/attendance_helpers.dart';
 import 'sidebar_nav.dart';
 
 /// Compact drawer sidebar — same menu tree for every company.
@@ -102,17 +103,44 @@ class _AppSidebarState extends State<AppSidebar> {
                       color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: const Color(0xFF334155),
-                          child: Text(
-                            session.userName.isNotEmpty ? session.userName[0].toUpperCase() : 'U',
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                    child: Builder(
+                      builder: (context) {
+                        final userPhoto = AttendanceHelpers.profilePhotoUrl(
+                          session.user,
+                          apiBaseUrl: session.company?.apiBaseUrl,
+                        );
+                        return Row(
+                          children: [
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF334155),
+                            ),
+                            child: ClipOval(
+                              child: (userPhoto != null && userPhoto.isNotEmpty)
+                                  ? Image.network(
+                                      userPhoto,
+                                      width: 24,
+                                      height: 24,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Center(
+                                        child: Text(
+                                          session.userName.isNotEmpty ? session.userName[0].toUpperCase() : 'U',
+                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                        ),
+                                      ),
+                                    )
+                                  : Center(
+                                      child: Text(
+                                        session.userName.isNotEmpty ? session.userName[0].toUpperCase() : 'U',
+                                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                      ),
+                                    ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
+                          const SizedBox(width: 8),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +158,8 @@ class _AppSidebarState extends State<AppSidebar> {
                             ],
                           ),
                         ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -286,7 +315,7 @@ SidebarNavContext sidebarContextForSession(AuthSession session) {
     fullAccess: RoleAccess.hasFullAccess(user),
     canViewProjects: RoleAccess.canViewProjects(user),
     isTeamLeader: RoleAccess.isTeamLeader(user),
-    canViewTravelAndRouteMap: RoleAccess.canViewTravelAndRouteMap(user),
+    canViewTravelAndRouteMap: RoleAccess.canViewTravelAndRouteMap(user, companyKey: company?.key),
     dashboardPath: RoleAccess.dashboardPath(user),
     includeProperties: company?.id != CompanyId.adsResearchGlobal,
     allowedSections: RoleAccess.sidebarSections(user),

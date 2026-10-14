@@ -369,8 +369,8 @@ class EmployeeDashboardBody extends StatelessWidget {
             ],
           ),
         ),
-        // Travel Allowance & Route Map (Directly on Dashboard for Sales Department)
-        if (RoleAccess.canViewTravelAndRouteMap(session.user)) ...[
+        // Travel Allowance & Route Map (Directly on Dashboard for Sales Department & STR)
+        if (RoleAccess.canViewTravelAndRouteMap(session.user, companyKey: session.company?.key)) ...[
           const SizedBox(height: 12),
           const _EmpCard(
             title: 'Travel Allowance & Route Map',

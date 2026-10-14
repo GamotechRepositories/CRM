@@ -55,17 +55,8 @@ export const isSiteCoordinatorUser = (user) => {
   )
 }
 
-/** Sales department employees get travel allowance + route map on their dashboard. */
-export const isSalesDepartmentUser = (user) => {
-  const dept = String(
-    user?.department || user?.designation?.department || ''
-  ).trim()
-  return /sales/i.test(dept)
-}
-
-/** Dedicated SC dashboard, or travel section for any Sales employee. */
-export const hasTravelDashboard = (user) =>
-  isSiteCoordinatorUser(user) || isSalesDepartmentUser(user)
+/** In STR, employees and field staff get travel allowance + route map on their dashboard. */
+export const hasTravelDashboard = (user) => true
 
 export const getDashboardKind = (user) => {
   const rawDesignation = user?.designation
