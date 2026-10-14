@@ -724,58 +724,94 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                 const isStart = point.type === 'journey_start'
                 const isEnd = point.type === 'journey_end'
                 const label =
-                  point.visitorName
+                  point.name
+                  || point.visitorName
                   || (isStart
-                    ? `Journey ${point.journeyNumber || ''} start`.trim()
+                    ? `Journey ${point.journeyNumber || ''} Start`.trim()
                     : isEnd
-                      ? `Journey ${point.journeyNumber || ''} end`.trim()
+                      ? `Journey ${point.journeyNumber || ''} End`.trim()
                       : point.property?.title || 'Site visit')
+                const arrival = point.arrivalTime || point.checkInAt
+                const departure = point.departureTime || point.checkOutAt
+                const durationMinutes = point.durationMinutes
+                const segmentKm = point.segmentKm ?? point.distanceFromPrevKm ?? 0
+
                 return (
-                  <div key={`${point.type}-${point.siteVisitId || idx}`} className='px-5 py-4 flex gap-3'>
-                    <div className='flex flex-col items-center pt-1'>
+                  <div key={`${point.type}-${point.siteVisitId || idx}`} className='px-5 py-4 flex gap-3.5 hover:bg-gray-50/60 transition-colors'>
+                    <div className='flex flex-col items-center pt-0.5'>
                       <span
-                        className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center ${
-                          isStart || isEnd
-                            ? 'bg-slate-800 text-white'
-                            : 'bg-indigo-100 text-indigo-700'
+                        className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shadow-sm ${
+                          isStart
+                            ? 'bg-emerald-600 text-white'
+                            : isEnd
+                              ? 'bg-red-600 text-white'
+                              : 'bg-indigo-600 text-white'
                         }`}
                       >
-                        {isStart ? 'S' : isEnd ? 'E' : idx}
+                        {isStart ? 'S' : isEnd ? 'E' : point.stopNumber || idx}
                       </span>
                       {idx < timeline.length - 1 ? (
-                        <span className='w-px flex-1 bg-indigo-100 mt-1 min-h-[24px]' />
+                        <span className='w-0.5 flex-1 bg-indigo-100 mt-1 min-h-[32px]' />
                       ) : null}
                     </div>
-                    <div className='min-w-0 flex-1'>
+                    <div className='min-w-0 flex-1 bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm'>
                       <div className='flex flex-wrap items-center justify-between gap-2'>
-                        <p className='font-medium text-gray-900 truncate'>{label}</p>
-                        {!isStart ? (
-                          <span className='text-xs font-semibold text-amber-700 tabular-nums'>
-                            +{point.segmentKm || 0} km
+                        <div className='flex items-center gap-2 flex-wrap'>
+                          <p className='font-semibold text-gray-900 text-sm'>{label}</p>
+                          {point.stopNumber && !isStart && !isEnd ? (
+                            <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100'>
+                              Stop {point.stopNumber}
+                            </span>
+                          ) : null}
+                        </div>
+                        {!isStart && segmentKm > 0 ? (
+                          <span className='inline-flex items-center text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200'>
+                            +{segmentKm} km
                           </span>
-                        ) : (
-                          <span className='text-xs font-semibold text-slate-500'>Origin</span>
-                        )}
+                        ) : isStart ? (
+                          <span className='text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded'>Origin</span>
+                        ) : null}
                       </div>
-                      <p className='text-xs text-gray-500 mt-0.5'>
-                        {formatTime(point.checkInAt)}
-                        {point.checkOutAt ? ` → ${formatTime(point.checkOutAt)}` : ''}
-                        {point.city ? ` · ${point.city}` : ''}
-                      </p>
+
+                      <div className='flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-600'>
+                        <span className='inline-flex items-center gap-1 font-medium'>
+                          <svg className='w-3.5 h-3.5 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
+                          </svg>
+                          {arrival && departure ? (
+                            `${formatTime(arrival)} – ${formatTime(departure)}`
+                          ) : arrival ? (
+                            isStart ? `Started at ${formatTime(arrival)}` : `Arrived at ${formatTime(arrival)}`
+                          ) : departure ? (
+                            `Ended at ${formatTime(departure)}`
+                          ) : '—'}
+                          {point.city ? ` · ${point.city}` : ''}
+                        </span>
+
+                        {durationMinutes > 0 ? (
+                          <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-100'>
+                            Stayed {durationMinutes} min
+                          </span>
+                        ) : null}
+                      </div>
+
                       <PlaceAddress
                         address={point.address}
                         latitude={point.latitude}
                         longitude={point.longitude}
-                        className='block text-xs text-gray-600 mt-1 line-clamp-2'
+                        className='block text-xs text-gray-500 mt-2 line-clamp-2'
                       />
                       {point.mapsUrl ? (
                         <a
                           href={point.mapsUrl}
                           target='_blank'
                           rel='noopener noreferrer'
-                          className='inline-block mt-2 text-xs font-medium text-indigo-600 hover:underline'
+                          className='inline-flex items-center gap-1 mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline'
                         >
-                          View on Google Maps
+                          <span>Open in Google Maps</span>
+                          <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' />
+                          </svg>
                         </a>
                       ) : null}
                     </div>
@@ -789,12 +825,12 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         <section className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
           <div className='px-5 py-4 border-b border-gray-100'>
             <h2 className='text-sm font-semibold text-gray-900'>
-              {isViewingToday ? 'Today&apos;s assigned visits' : `Site visits · ${formatDayLabel(date)}`}
+              {isViewingToday ? "Today's assigned visits" : `Site visits · ${formatDayLabel(date)}`}
             </h2>
             <p className='text-xs text-gray-500 mt-0.5'>
               {journeyStarted
                 ? 'Check in on arrival · check out when leaving'
-                : 'You can still check in, but distance starts only after Start journey'}
+                : 'Start journey on scheduled visit or use Start journey above to begin tracking'}
             </p>
           </div>
           <div className='divide-y divide-gray-50'>
@@ -837,14 +873,29 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                           </a>
                         ) : null}
                         {!checkedIn ? (
-                          <button
-                            type='button'
-                            disabled={Boolean(busyId) || !isViewingToday}
-                            onClick={() => captureAndPost(visit._id, 'check-in')}
-                            className='rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
-                          >
-                            {busyId === `${visit._id}:check-in` ? '…' : 'Check in'}
-                          </button>
+                          <div className='flex items-center gap-1.5'>
+                            {!journeyActive ? (
+                              <button
+                                type='button'
+                                disabled={Boolean(journeyBusy) || !isViewingToday}
+                                onClick={() => startOrEndJourney('start')}
+                                className='rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1 shadow-sm'
+                              >
+                                <svg className='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M13 10V3L4 14h7v7l9-11h-7z' />
+                                </svg>
+                                <span>{journeyBusy === 'start' ? 'Starting…' : 'Start Journey'}</span>
+                              </button>
+                            ) : null}
+                            <button
+                              type='button'
+                              disabled={Boolean(busyId) || !isViewingToday}
+                              onClick={() => captureAndPost(visit._id, 'check-in')}
+                              className='rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
+                            >
+                              {busyId === `${visit._id}:check-in` ? '…' : 'Check in'}
+                            </button>
+                          </div>
                         ) : !checkedOut ? (
                           <button
                             type='button'

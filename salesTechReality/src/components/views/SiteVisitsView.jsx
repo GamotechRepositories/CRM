@@ -1,20 +1,61 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
+import { useAuth } from '../../context/AuthContext'
+import { getCurrentLocation, locationErrorMessage } from '../../utils/geolocation'
 import {
   formatVisitDateTime,
   SITE_VISIT_STATUS_STYLES,
   SITE_VISIT_STATUSES,
 } from '../../config/siteVisit'
 
+const localYmd = (d = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(d))
+
 const SiteVisitsView = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [visits, setVisits] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [viewVisit, setViewVisit] = useState(null)
+  const [startingJourneyId, setStartingJourneyId] = useState('')
+
+  const handleStartJourney = async (visit) => {
+    if (!visit) return
+    const empId = user?._id || visit.assignedTo?._id
+    if (!empId) {
+      alert('Cannot determine employee for this journey.')
+      return
+    }
+    setStartingJourneyId(visit._id)
+    try {
+      const loc = await getCurrentLocation()
+      if (loc.failed) {
+        alert(locationErrorMessage(loc.reason))
+        return
+      }
+      await api.post('/site-visits/start-journey', {
+        employeeId: empId,
+        date: localYmd(),
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        address: loc.address || '',
+      })
+      navigate('/site-coordinator-dashboard')
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to start journey')
+    } finally {
+      setStartingJourneyId('')
+    }
+  }
 
   const fetchVisits = async () => {
     try {
@@ -185,7 +226,20 @@ const SiteVisitsView = () => {
                         </span>
                       </td>
                       <td className='px-4 py-3'>
-                        <div className='flex items-center gap-2'>
+                        <div className='flex items-center gap-2 flex-wrap'>
+                          {v.status === 'Scheduled' && (
+                            <button
+                              type='button'
+                              disabled={startingJourneyId === v._id}
+                              onClick={() => handleStartJourney(v)}
+                              className='inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm'
+                            >
+                              <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M13 10V3L4 14h7v7l9-11h-7z' />
+                              </svg>
+                              <span>{startingJourneyId === v._id ? 'Starting…' : 'Start Journey'}</span>
+                            </button>
+                          )}
                           <button type='button' onClick={() => setViewVisit(v)} className='text-xs font-medium text-gray-600 hover:text-gray-900'>View</button>
                           <button type='button' onClick={() => navigate(`/site-visits/edit/${v._id}`)} className='text-xs font-medium text-blue-600 hover:text-blue-700'>Edit</button>
                           <button type='button' onClick={() => handleDelete(v._id)} className='text-xs font-medium text-red-600 hover:text-red-700'>Delete</button>
@@ -254,7 +308,20 @@ const SiteVisitsView = () => {
                 <p className='text-gray-900 mt-0.5 whitespace-pre-wrap'>{viewVisit.feedback}</p>
               </div>
             )}
-            <div className='flex gap-2 mt-5'>
+            <div className='flex gap-2 mt-5 flex-wrap'>
+              {viewVisit.status === 'Scheduled' && (
+                <button
+                  type='button'
+                  disabled={startingJourneyId === viewVisit._id}
+                  onClick={() => handleStartJourney(viewVisit)}
+                  className='flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center justify-center gap-1.5'
+                >
+                  <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M13 10V3L4 14h7v7l9-11h-7z' />
+                  </svg>
+                  <span>{startingJourneyId === viewVisit._id ? 'Starting Journey…' : 'Start Journey'}</span>
+                </button>
+              )}
               <button
                 type='button'
                 onClick={() => { setViewVisit(null); navigate(`/site-visits/edit/${viewVisit._id}`) }}

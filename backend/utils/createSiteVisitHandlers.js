@@ -92,6 +92,29 @@ const enrichPointAddress = async (point) => {
 
 const serializeJourney = (journey, journeyNumber = null) => {
   if (!journey) return null;
+  const stops = Array.isArray(journey.stops)
+    ? journey.stops.map((s, idx) => ({
+        stopNumber: s.stopNumber || idx + 1,
+        type: s.type || 'stop',
+        name: s.name || '',
+        siteVisitId: s.siteVisitId || null,
+        propertyId: s.propertyId || null,
+        propertyTitle: s.propertyTitle || '',
+        visitorName: s.visitorName || '',
+        address: s.address || '',
+        city: s.city || '',
+        latitude: s.latitude,
+        longitude: s.longitude,
+        arrivalTime: s.arrivalTime,
+        departureTime: s.departureTime,
+        durationMinutes: s.durationMinutes || 0,
+        distanceFromPrevKm: s.distanceFromPrevKm || 0,
+        status: s.status || '',
+        notes: s.notes || '',
+        recordedAt: s.recordedAt,
+      }))
+    : [];
+
   return {
     id: journey._id,
     journeyNumber,
@@ -107,6 +130,8 @@ const serializeJourney = (journey, journeyNumber = null) => {
     endAddress: journey.endAddress || '',
     trackPointCount: journey.trackPoints?.length || 0,
     distanceKm: roundKm(totalTrackedDistanceKm(journey.trackPoints)),
+    stops,
+    stopCount: stops.length,
     mapsUrl:
       journey.startLatitude != null && journey.startLongitude != null
         ? `https://www.google.com/maps?q=${journey.startLatitude},${journey.startLongitude}`
@@ -116,12 +141,29 @@ const serializeJourney = (journey, journeyNumber = null) => {
 
 const findJourneysForDay = async (TravelJourney, employeeId, dayStart) => {
   if (!TravelJourney || !employeeId) return [];
-  return TravelJourney.find({ employee: employeeId, date: dayStart }).sort({ startedAt: 1 });
+  const dayEnd = endOfBusinessDay(dayStart);
+  return TravelJourney.find({
+    employee: employeeId,
+    $or: [
+      { date: dayStart },
+      { date: { $gte: dayStart, $lte: dayEnd } },
+      { startedAt: { $gte: dayStart, $lte: dayEnd } },
+    ],
+  }).sort({ startedAt: 1 });
 };
 
 const findActiveJourneyForDay = async (TravelJourney, employeeId, dayStart) => {
   if (!TravelJourney || !employeeId) return null;
-  return TravelJourney.findOne({ employee: employeeId, date: dayStart, status: 'active' }).sort({
+  const dayEnd = endOfBusinessDay(dayStart);
+  return TravelJourney.findOne({
+    employee: employeeId,
+    status: 'active',
+    $or: [
+      { date: dayStart },
+      { date: { $gte: dayStart, $lte: dayEnd } },
+      { startedAt: { $gte: dayStart, $lte: dayEnd } },
+    ],
+  }).sort({
     startedAt: -1,
   });
 };
@@ -147,9 +189,43 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
   journeys.forEach((journey, journeyIdx) => {
     const journeyNum = journeyIdx + 1;
 
+    // If journey has persisted stops in DB, use them as rich timeline items
+    if (Array.isArray(journey.stops) && journey.stops.length > 0) {
+      journey.stops.forEach((s, idx) => {
+        const arrival = s.arrivalTime || journey.startedAt;
+        const departure = s.departureTime;
+        const durationMins = s.durationMinutes || (arrival && departure ? Math.max(1, Math.round((new Date(departure) - new Date(arrival)) / 60000)) : 0);
+
+        timeline.push({
+          type: s.type || 'stop',
+          stopNumber: s.stopNumber || idx + 1,
+          journeyId: journey._id,
+          journeyNumber: journeyNum,
+          siteVisitId: s.siteVisitId || null,
+          visitorName: s.name || s.visitorName || (s.type === 'journey_start' ? `Journey ${journeyNum} start` : s.type === 'journey_end' ? `Journey ${journeyNum} end` : 'Site Visit'),
+          property: s.propertyTitle ? { title: s.propertyTitle } : null,
+          address: s.address || (s.type === 'journey_start' ? journey.startAddress : s.type === 'journey_end' ? journey.endAddress : ''),
+          city: s.city || '',
+          status: s.status || (s.type === 'journey_end' ? 'ended' : journey.status),
+          scheduledAt: arrival,
+          checkInAt: arrival,
+          checkOutAt: departure,
+          durationMinutes: durationMins,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          mapsUrl: s.latitude != null && s.longitude != null ? `https://www.google.com/maps?q=${s.latitude},${s.longitude}` : null,
+          segmentKm: roundKm(s.distanceFromPrevKm || 0),
+          notes: s.notes || '',
+        });
+      });
+      return;
+    }
+
+    // Fallback: dynamically construct if stops were not yet persisted
     if (journey.startLatitude != null && journey.startLongitude != null) {
       timeline.push({
         type: 'journey_start',
+        stopNumber: 1,
         journeyId: journey._id,
         journeyNumber: journeyNum,
         siteVisitId: null,
@@ -161,6 +237,7 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
         scheduledAt: null,
         checkInAt: journey.startedAt,
         checkOutAt: null,
+        durationMinutes: 0,
         latitude: journey.startLatitude,
         longitude: journey.startLongitude,
         mapsUrl: `https://www.google.com/maps?q=${journey.startLatitude},${journey.startLongitude}`,
@@ -188,8 +265,13 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
         { latitude: v.checkInLatitude, longitude: v.checkInLongitude }
       );
 
+      const durationMins = v.checkInAt && v.checkOutAt
+        ? Math.max(1, Math.round((new Date(v.checkOutAt).getTime() - new Date(v.checkInAt).getTime()) / 60000))
+        : 0;
+
       timeline.push({
         type: 'check_in',
+        stopNumber: timeline.length + 1,
         journeyId: journey._id,
         journeyNumber: journeyNum,
         siteVisitId: v._id,
@@ -201,6 +283,7 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
         scheduledAt: v.scheduledAt,
         checkInAt: v.checkInAt,
         checkOutAt: v.checkOutAt,
+        durationMinutes: durationMins,
         latitude: v.checkInLatitude,
         longitude: v.checkInLongitude,
         mapsUrl: `https://www.google.com/maps?q=${v.checkInLatitude},${v.checkInLongitude}`,
@@ -227,6 +310,7 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
           : 0;
       timeline.push({
         type: 'journey_end',
+        stopNumber: timeline.length + 1,
         journeyId: journey._id,
         journeyNumber: journeyNum,
         siteVisitId: null,
@@ -238,6 +322,7 @@ const buildTimelineFromJourneys = (journeys, checkedIn) => {
         scheduledAt: null,
         checkInAt: journey.endedAt,
         checkOutAt: null,
+        durationMinutes: 0,
         latitude: journey.endLatitude,
         longitude: journey.endLongitude,
         mapsUrl: `https://www.google.com/maps?q=${journey.endLatitude},${journey.endLongitude}`,
@@ -433,18 +518,70 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
       }
 
       const now = new Date();
-      const dayStart = startOfBusinessDay(now);
+      const dateVal = req.body.date ? new Date(req.body.date) : now;
+      const dayStart = startOfBusinessDay(dateVal);
       const active = await findActiveJourneyForDay(TravelJourney, employeeId, dayStart);
 
       if (active?.startedAt) {
-        return res.status(409).json({
-          message: 'You already have an active journey. End it before starting another.',
-          journey: serializeJourney(active),
-        });
+        // Auto-end previous active journey if client requested newTrip / forceEndPrevious
+        if (req.body.forceEndPrevious || req.body.newTrip || req.body.force) {
+          active.status = 'ended';
+          active.endedAt = now;
+          active.endLatitude = coords.latitude;
+          active.endLongitude = coords.longitude;
+          active.endAddress = coords.address;
+          appendTrackPoint(active, {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            address: coords.address,
+            source: 'journey_end',
+            recordedAt: now,
+          });
+          if (Array.isArray(active.stops)) {
+            active.stops.push({
+              stopNumber: active.stops.length + 1,
+              type: 'journey_end',
+              name: `Journey End`,
+              address: coords.address,
+              latitude: coords.latitude,
+              longitude: coords.longitude,
+              arrivalTime: now,
+              departureTime: now,
+              durationMinutes: 0,
+              distanceFromPrevKm: 0,
+              status: 'completed',
+              recordedAt: now,
+            });
+          }
+          await active.save();
+        } else {
+          return res.status(409).json({
+            message: 'You already have an active journey. End it or start a new trip.',
+            canAutoEnd: true,
+            journey: serializeJourney(active),
+          });
+        }
       }
 
       const dayJourneys = await findJourneysForDay(TravelJourney, employeeId, dayStart);
       const journeyNumber = dayJourneys.length + 1;
+
+      const initialStops = [
+        {
+          stopNumber: 1,
+          type: 'journey_start',
+          name: `Journey ${journeyNumber} Start`,
+          address: coords.address,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          arrivalTime: now,
+          departureTime: now,
+          durationMinutes: 0,
+          distanceFromPrevKm: 0,
+          status: 'completed',
+          recordedAt: now,
+        },
+      ];
 
       const journey = new TravelJourney({
         employee: employeeId,
@@ -459,6 +596,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         endLongitude: null,
         endAddress: '',
         trackPoints: [],
+        stops: initialStops,
       });
 
       appendTrackPoint(journey, {
@@ -493,11 +631,16 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
       const coords = await parseAndResolveCoords(req.body);
       const now = new Date();
-      const dayStart = startOfBusinessDay(req.body.date ? new Date(req.body.date) : now);
+      const dateVal = req.body.date ? new Date(req.body.date) : now;
+      const dayStart = startOfBusinessDay(dateVal);
       const journeyId = String(req.body.journeyId || '').trim();
       let journey = journeyId
-        ? await TravelJourney.findOne({ _id: journeyId, employee: employeeId, date: dayStart })
+        ? await TravelJourney.findOne({ _id: journeyId, employee: employeeId })
         : await findActiveJourneyForDay(TravelJourney, employeeId, dayStart);
+
+      if (!journey && employeeId) {
+        journey = await TravelJourney.findOne({ employee: employeeId, status: 'active' }).sort({ startedAt: -1 });
+      }
 
       if (!journey?.startedAt) {
         return res.status(400).json({ message: 'No active journey to end. Start a journey first.' });
@@ -523,6 +666,35 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
           recordedAt: now,
         });
       }
+
+      // Append journey_end stop to database stops
+      if (!Array.isArray(journey.stops)) journey.stops = [];
+      const lastStop = journey.stops[journey.stops.length - 1];
+      let lastSegKm = 0;
+      if (lastStop?.latitude != null && lastStop?.longitude != null && coords) {
+        lastSegKm = pathDistanceBetweenTimes(
+          journey.trackPoints,
+          lastStop.arrivalTime || journey.startedAt,
+          now,
+          { latitude: lastStop.latitude, longitude: lastStop.longitude },
+          { latitude: coords.latitude, longitude: coords.longitude }
+        );
+      }
+      journey.stops.push({
+        stopNumber: journey.stops.length + 1,
+        type: 'journey_end',
+        name: `Journey End`,
+        address: coords?.address || journey.endAddress || '',
+        latitude: coords?.latitude || journey.endLatitude,
+        longitude: coords?.longitude || journey.endLongitude,
+        arrivalTime: now,
+        departureTime: now,
+        durationMinutes: 0,
+        distanceFromPrevKm: roundKm(lastSegKm),
+        status: 'completed',
+        recordedAt: now,
+      });
+
       await journey.save();
 
       return res.status(200).json({
@@ -541,7 +713,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         return res.status(400).json({ message: 'Valid latitude and longitude are required to check in' });
       }
 
-      const visit = await SiteVisit.findById(req.params.id);
+      const visit = await SiteVisit.findById(req.params.id).populate('property');
       if (!visit) return res.status(404).json({ message: 'Site visit not found' });
 
       const employeeId = req.body.employeeId || visit.assignedTo;
@@ -551,7 +723,9 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
       let travelFromPreviousKm = null;
       const journey = employeeId
-        ? await findActiveJourneyForDay(TravelJourney, employeeId, dayStart)
+        ? (req.body.journeyId
+            ? await TravelJourney.findById(req.body.journeyId)
+            : await findActiveJourneyForDay(TravelJourney, employeeId, dayStart))
         : null;
       const journeyActive = Boolean(journey?.startedAt && journey.status === 'active');
 
@@ -588,6 +762,31 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
           siteVisitId: visit._id,
           recordedAt: now,
         });
+
+        // Add main stop to database journey timeline
+        if (!Array.isArray(journey.stops)) journey.stops = [];
+        const visitTitle = visit.property?.title || visit.visitorName || 'Site Visit';
+        journey.stops.push({
+          stopNumber: journey.stops.length + 1,
+          type: 'site_visit',
+          name: visitTitle,
+          siteVisitId: visit._id,
+          propertyId: visit.property?._id || visit.property || null,
+          propertyTitle: visit.property?.title || '',
+          visitorName: visit.visitorName || '',
+          address: coords.address || visit.address || '',
+          city: visit.city || '',
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          arrivalTime: now,
+          departureTime: null,
+          durationMinutes: 0,
+          distanceFromPrevKm: roundKm(travelFromPreviousKm || 0),
+          status: 'checked_in',
+          notes: visit.notes || '',
+          recordedAt: now,
+        });
+
         await journey.save();
       }
 
@@ -642,9 +841,12 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
       const employeeId = req.body.employeeId || visit.assignedTo;
       const dayStart = startOfBusinessDay(now);
       const journey = employeeId
-        ? await findActiveJourneyForDay(TravelJourney, employeeId, dayStart)
+        ? (visit.travelJourneyId
+            ? await TravelJourney.findById(visit.travelJourneyId)
+            : await findActiveJourneyForDay(TravelJourney, employeeId, dayStart))
         : null;
-      if (journey?.startedAt && journey.status === 'active') {
+
+      if (journey?.startedAt) {
         appendTrackPoint(journey, {
           latitude: coords.latitude,
           longitude: coords.longitude,
@@ -653,6 +855,18 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
           siteVisitId: visit._id,
           recordedAt: now,
         });
+
+        // Update departure time and stay duration on database stop
+        if (Array.isArray(journey.stops)) {
+          const stop = journey.stops.find((s) => String(s.siteVisitId) === String(visit._id));
+          if (stop) {
+            stop.departureTime = now;
+            if (stop.arrivalTime) {
+              stop.durationMinutes = Math.max(1, Math.round((now.getTime() - new Date(stop.arrivalTime).getTime()) / 60000));
+            }
+            stop.status = 'completed';
+          }
+        }
         await journey.save();
       }
 

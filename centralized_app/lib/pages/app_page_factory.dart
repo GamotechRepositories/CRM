@@ -305,6 +305,7 @@ class AppPageFactory {
       case '/travel-route-map':
       case '/site-coordinator-dashboard':
       case '/dashboard/site_coordinator':
+      case '/site-visits':
         return Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(14),

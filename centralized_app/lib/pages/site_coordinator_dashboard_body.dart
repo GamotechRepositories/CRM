@@ -241,11 +241,14 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
 
   @override
   Widget build(BuildContext context) {
+    final journeys = _timelineData?['journeys'] is List
+        ? (_timelineData!['journeys'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
     final journey = _timelineData?['journey'];
     final journeyMap = journey is Map ? Map<String, dynamic>.from(journey) : null;
-    final journeyStarted = _timelineData?['journeyStarted'] == true && journeyMap?['startedAt'] != null;
-    final journeyActive = journeyStarted && journeyMap?['status'] == 'active';
-    final journeyEnded = journeyStarted && journeyMap?['status'] == 'ended';
+    final journeyStarted = _timelineData?['journeyStarted'] == true || journeys.isNotEmpty;
+    final journeyActive = journeys.any((j) => j['status'] == 'active') || journeyMap?['status'] == 'active';
+    final journeyEnded = journeyStarted && !journeyActive;
     final timeline = _timelineData?['timeline'] is List
         ? (_timelineData!['timeline'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
         : <Map<String, dynamic>>[];
@@ -288,6 +291,7 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
           journeyStarted: journeyStarted,
           journeyActive: journeyActive,
           journeyEnded: journeyEnded,
+          journeys: journeys,
           startedAt: journeyMap?['startedAt'],
           startAddress: journeyMap?['startAddress']?.toString(),
           endedAt: journeyMap?['endedAt'],
@@ -369,7 +373,7 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
         const SizedBox(height: 8),
         _Panel(
           title: "Today's assigned visits",
-          subtitle: journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey to track distance',
+          subtitle: journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey on visit to track distance',
           child: _loading
               ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
               : _visits.isEmpty
@@ -380,6 +384,8 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
                           visit: visit,
                           busyKey: _busyKey,
                           journeyStarted: journeyStarted,
+                          journeyActive: journeyActive,
+                          onStartJourney: () => _startOrEndJourney('start'),
                           onCheckIn: () => _visitAction('${visit['_id']}', 'check-in'),
                           onCheckOut: () => _visitAction('${visit['_id']}', 'check-out'),
                         );
@@ -440,6 +446,7 @@ class _JourneyPanel extends StatelessWidget {
     required this.journeyStarted,
     required this.journeyActive,
     required this.journeyEnded,
+    required this.journeys,
     required this.startedAt,
     required this.startAddress,
     required this.endedAt,
@@ -452,6 +459,7 @@ class _JourneyPanel extends StatelessWidget {
   final bool journeyStarted;
   final bool journeyActive;
   final bool journeyEnded;
+  final List<Map<String, dynamic>> journeys;
   final dynamic startedAt;
   final String? startAddress;
   final dynamic endedAt;
@@ -461,6 +469,15 @@ class _JourneyPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final journeyCount = journeys.length;
+    final activeJourney = journeys.firstWhere(
+      (j) => j['status'] == 'active',
+      orElse: () => {},
+    );
+    final activeSince = activeJourney['startedAt'] ?? startedAt;
+    final activeAddr = activeJourney['startAddress']?.toString() ?? startAddress;
+    final endedJourneys = journeys.where((j) => j['status'] == 'ended').toList();
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -471,43 +488,108 @@ class _JourneyPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Today's journey", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                journeyCount > 0 ? "Today's journeys ($journeyCount total)" : "Today's journey",
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              if (journeyActive)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.fiber_manual_record, size: 8, color: Color(0xFF15803D)),
+                      SizedBox(width: 3),
+                      Text('Trip Active', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           if (!loading && !journeyStarted)
-            const Text('Journey not started. Tap Start journey to track distance.', style: TextStyle(fontSize: 10, color: Color(0xFFB45309))),
+            const Text('No journeys yet. Tap Start journey to begin GPS tracking.', style: TextStyle(fontSize: 10, color: Color(0xFFB45309))),
           if (journeyActive)
             Text(
-              'Active since ${_scFormatTime(startedAt)}${startAddress != null && startAddress!.isNotEmpty ? ' · $startAddress' : ''}',
-              style: const TextStyle(fontSize: 10, color: Color(0xFF047857)),
+              'Trip ${activeJourney['journeyNumber'] ?? journeyCount} active since ${_scFormatTime(activeSince)}${activeAddr != null && activeAddr.isNotEmpty ? ' · $activeAddr' : ''}',
+              style: const TextStyle(fontSize: 10, color: Color(0xFF047857), fontWeight: FontWeight.w500),
             ),
-          if (journeyEnded)
-            Text(
-              'Ended at ${_scFormatTime(endedAt)}',
-              style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
+          if (!journeyActive && endedJourneys.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                '${endedJourneys.length} completed trip${endedJourneys.length == 1 ? '' : 's'}. You can start another trip or allocate travel expense.',
+                style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
+              ),
             ),
+          if (endedJourneys.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            ...endedJourneys.map((j) {
+              final num = j['journeyNumber'] ?? (endedJourneys.indexOf(j) + 1);
+              final km = j['distanceKm'] ?? 0;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, size: 12, color: Color(0xFF10B981)),
+                    const SizedBox(width: 4),
+                    Text('Trip $num: ', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                    Text(
+                      '${_scFormatTime(j['startedAt'])} → ${_scFormatTime(j['endedAt'])}',
+                      style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                    ),
+                    const Spacer(),
+                    Text('$km km', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                  ],
+                ),
+              );
+            }),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
-              if (!journeyStarted || journeyEnded)
-                FilledButton(
-                  onPressed: loading || journeyBusy != null || journeyActive ? null : onStart,
+              if (!journeyActive)
+                FilledButton.icon(
+                  onPressed: loading || journeyBusy != null ? null : onStart,
+                  icon: const Icon(Icons.navigation, size: 12),
+                  label: Text(
+                    journeyBusy == 'start'
+                        ? 'Starting…'
+                        : journeyCount > 0
+                            ? 'Start new journey (Trip ${journeyCount + 1})'
+                            : 'Start journey',
+                  ),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF2563EB),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     textStyle: const TextStyle(fontSize: 11),
                   ),
-                  child: Text(journeyBusy == 'start' ? 'Starting…' : journeyEnded ? 'Restart journey' : 'Start journey'),
                 ),
               if (journeyActive)
-                FilledButton(
+                FilledButton.icon(
                   onPressed: loading || journeyBusy != null ? null : onEnd,
+                  icon: const Icon(Icons.stop_circle_outlined, size: 12),
+                  label: Text(journeyBusy == 'end' ? 'Ending…' : 'End journey'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF334155),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     textStyle: const TextStyle(fontSize: 11),
                   ),
-                  child: Text(journeyBusy == 'end' ? 'Ending…' : 'End journey'),
                 ),
             ],
           ),
@@ -596,7 +678,7 @@ class _Panel extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (action != null) action!,
+                ?action,
               ],
             ),
           ),
@@ -670,18 +752,31 @@ class _TimelineTileState extends State<_TimelineTile> {
     final property = point['property'];
     final propTitle = property is Map ? (property['title'] ?? '').toString() : '';
     final label = isStart
-        ? 'Journey start'
+        ? 'Journey Start'
         : isEnd
-            ? 'Journey end'
+            ? 'Journey End'
             : propTitle.isNotEmpty
                 ? propTitle
-                : (point['visitorName'] ?? 'Site visit').toString();
-    final segmentKm = point['segmentKm'] ?? 0;
+                : (point['name'] ?? point['visitorName'] ?? 'Site visit').toString();
+    final segmentKm = point['segmentKm'] ?? point['distanceFromPrevKm'] ?? 0;
     final place = _placeName;
     final city = '${point['city'] ?? ''}'.trim();
+    final arrival = point['arrivalTime'] ?? point['checkInAt'];
+    final departure = point['departureTime'] ?? point['checkOutAt'];
+    final durationMinutes = point['durationMinutes'];
+    final stopNum = point['stopNumber'];
+
+    String timeText = '';
+    if (arrival != null && departure != null) {
+      timeText = '${_scFormatTime(arrival)} – ${_scFormatTime(departure)}';
+    } else if (arrival != null) {
+      timeText = isStart ? 'Started at ${_scFormatTime(arrival)}' : 'Arrived at ${_scFormatTime(arrival)}';
+    } else if (departure != null) {
+      timeText = 'Ended at ${_scFormatTime(departure)}';
+    }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -689,56 +784,113 @@ class _TimelineTileState extends State<_TimelineTile> {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundColor: isStart || isEnd ? const Color(0xFF334155) : const Color(0xFFE0E7FF),
+                backgroundColor: isStart
+                    ? const Color(0xFF16A34A)
+                    : isEnd
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF4338CA),
                 child: Text(
-                  isStart ? 'S' : isEnd ? 'E' : '${widget.index}',
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: isStart || isEnd ? Colors.white : const Color(0xFF4338CA)),
+                  isStart
+                      ? 'S'
+                      : isEnd
+                          ? 'E'
+                          : stopNum != null
+                              ? '$stopNum'
+                              : '${widget.index}',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
                 ),
               ),
-              if (!widget.isLast) Container(width: 2, height: 24, color: const Color(0xFFE0E7FF)),
+              if (!widget.isLast) Container(width: 2, height: 36, color: const Color(0xFFE2E8F0)),
             ],
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
-                    if (!isStart)
-                      Text('+$segmentKm km', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFFB45309))),
-                  ],
-                ),
-                Text(
-                  '${_scFormatTime(point['checkInAt'])}${city.isNotEmpty ? ' · $city' : ''}',
-                  style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8)),
-                ),
-                if (_resolving && (place == null || place.isEmpty))
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2),
-                    child: Text('Resolving place…', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-                  )
-                else if (place != null && place.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.place_outlined, size: 12, color: Color(0xFF64748B)),
-                        const SizedBox(width: 3),
-                        Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                        ),
+                      ),
+                      if (segmentKm != null && segmentKm > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: Text(
-                            place,
-                            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
+                            '+$segmentKm km',
+                            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
-              ],
+                  if (timeText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 11, color: Color(0xFF64748B)),
+                          const SizedBox(width: 4),
+                          Text(
+                            timeText + (city.isNotEmpty ? ' · $city' : ''),
+                            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                          ),
+                          if (durationMinutes != null && durationMinutes > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Stayed $durationMinutes min',
+                                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Color(0xFF4338CA)),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  if (_resolving && (place == null || place.isEmpty))
+                    const Padding(
+                      padding: EdgeInsets.only(top: 3),
+                      child: Text('Resolving place…', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+                    )
+                  else if (place != null && place.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.place_outlined, size: 12, color: Color(0xFF94A3B8)),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              place,
+                              style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
@@ -752,6 +904,8 @@ class _VisitTile extends StatelessWidget {
     required this.visit,
     required this.busyKey,
     required this.journeyStarted,
+    required this.journeyActive,
+    required this.onStartJourney,
     required this.onCheckIn,
     required this.onCheckOut,
   });
@@ -759,6 +913,8 @@ class _VisitTile extends StatelessWidget {
   final Map<String, dynamic> visit;
   final String? busyKey;
   final bool journeyStarted;
+  final bool journeyActive;
+  final VoidCallback onStartJourney;
   final VoidCallback onCheckIn;
   final VoidCallback onCheckOut;
 
@@ -783,20 +939,67 @@ class _VisitTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+              if (visit['status'] != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: checkedOut
+                        ? const Color(0xFFECFDF5)
+                        : checkedIn
+                            ? const Color(0xFFEFF6FF)
+                            : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${visit['status']}'.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: checkedOut
+                          ? const Color(0xFF047857)
+                          : checkedIn
+                              ? const Color(0xFF1D4ED8)
+                              : const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 2),
           Text(
-            '${_scFormatTime(visit['scheduledAt'])} · ${visit['status'] ?? '—'}${visit['city'] != null ? ' · ${visit['city']}' : ''}',
+            '${_scFormatTime(visit['scheduledAt'])}${visit['city'] != null ? ' · ${visit['city']}' : ''}',
             style: const TextStyle(fontSize: 9, color: Color(0xFF64748B)),
           ),
           if ('${visit['address'] ?? visit['meetingPoint'] ?? ''}'.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('${visit['address'] ?? visit['meetingPoint']}', style: const TextStyle(fontSize: 10, color: Color(0xFF475569)), maxLines: 2, overflow: TextOverflow.ellipsis),
+              child: Text(
+                '${visit['address'] ?? visit['meetingPoint']}',
+                style: const TextStyle(fontSize: 10, color: Color(0xFF475569)),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           const SizedBox(height: 8),
           Row(
             children: [
-              if (!checkedIn)
+              if (!checkedIn) ...[
+                if (!journeyActive)
+                  FilledButton.icon(
+                    onPressed: busyKey != null ? null : onStartJourney,
+                    icon: const Icon(Icons.navigation, size: 12),
+                    label: const Text('Start Journey', style: TextStyle(fontSize: 10)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                  ),
+                if (!journeyActive) const SizedBox(width: 6),
                 FilledButton(
                   onPressed: busyKey != null ? null : onCheckIn,
                   style: FilledButton.styleFrom(
@@ -805,8 +1008,8 @@ class _VisitTile extends StatelessWidget {
                     textStyle: const TextStyle(fontSize: 10),
                   ),
                   child: Text(busyKey == '$id:check-in' ? '…' : 'Check in'),
-                )
-              else if (!checkedOut)
+                ),
+              ] else if (!checkedOut)
                 FilledButton(
                   onPressed: busyKey != null ? null : onCheckOut,
                   style: FilledButton.styleFrom(
@@ -820,7 +1023,7 @@ class _VisitTile extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(6)),
-                  child: const Text('Done', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF047857))),
+                  child: const Text('Visit Completed', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF047857))),
                 ),
               if (checkedIn && journeyStarted && visit['travelFromPreviousKm'] != null) ...[
                 const SizedBox(width: 8),

@@ -45,4 +45,34 @@ export const getTravelJourneySchemaFields = ({ employeeRef }) => ({
       address: { type: String, default: '' },
     },
   ],
+  /**
+   * Main stops / timeline milestones for the journey (Google Maps Timeline style).
+   * Includes journey_start, visits/stops with arrival, stay duration, departure, and journey_end.
+   */
+  stops: [
+    {
+      stopNumber: { type: Number, default: 1 },
+      type: {
+        type: String,
+        enum: ['journey_start', 'site_visit', 'check_in', 'check_out', 'stop', 'journey_end'],
+        default: 'stop',
+      },
+      name: { type: String, default: '' },
+      siteVisitId: { type: mongoose.Schema.Types.ObjectId, default: null },
+      propertyId: { type: mongoose.Schema.Types.ObjectId, default: null },
+      propertyTitle: { type: String, default: '' },
+      visitorName: { type: String, default: '' },
+      address: { type: String, default: '' },
+      city: { type: String, default: '' },
+      latitude: { type: Number, default: null },
+      longitude: { type: Number, default: null },
+      arrivalTime: { type: Date, default: null },
+      departureTime: { type: Date, default: null },
+      durationMinutes: { type: Number, default: 0 },
+      distanceFromPrevKm: { type: Number, default: 0 },
+      status: { type: String, default: 'scheduled' },
+      notes: { type: String, default: '' },
+      recordedAt: { type: Date, default: Date.now },
+    },
+  ],
 });
