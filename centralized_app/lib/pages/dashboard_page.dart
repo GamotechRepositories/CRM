@@ -1207,17 +1207,7 @@ class _RecentActivitiesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activitiesList = stats.activities.isNotEmpty
-        ? stats.activities
-        : [
-            ActivityItem(type: 'Task', title: 'Task completed: gas process systems, ecommerce website template search', date: DateTime.now().subtract(const Duration(minutes: 20))),
-            ActivityItem(type: 'Task', title: 'Task completed: home page code refining', date: DateTime.now().subtract(const Duration(minutes: 55))),
-            ActivityItem(type: 'Task', title: 'Task completed: Kolte patil developer ads run', date: DateTime.now().subtract(const Duration(hours: 1))),
-            ActivityItem(type: 'Task', title: 'Task completed: layout pages code refining', date: DateTime.now().subtract(const Duration(hours: 1))),
-            ActivityItem(type: 'Task', title: 'Task completed: Daily Post', date: DateTime.now().subtract(const Duration(hours: 2))),
-            ActivityItem(type: 'Task', title: 'Task completed: Daily Post 25 Aug', date: DateTime.now().subtract(const Duration(hours: 2))),
-            ActivityItem(type: 'Task', title: 'Task completed: domain purchase for gas process systems', date: DateTime.now().subtract(const Duration(hours: 2))),
-          ];
+    final activitiesList = stats.activities;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1267,8 +1257,16 @@ class _RecentActivitiesCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Column(
-            children: activitiesList.map((a) {
+          if (activitiesList.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text('No recent activities', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+              ),
+            )
+          else
+            Column(
+              children: activitiesList.map((a) {
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(vertical: 6),
