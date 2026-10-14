@@ -64,18 +64,27 @@ const localYmd = (d) => {
 }
 
 /**
- * True if task dueDate falls on the same calendar day as filterYmd (YYYY-MM-DD from date input).
+ * True if task dueDate falls within [filterDateFrom, filterDateTo] (YYYY-MM-DD from date inputs).
  * Checks both UTC date (how date-only form values are stored) and local date (scheduled times).
  */
-const matchesDueDateFilter = (dueDateVal, filterYmd) => {
-  if (!filterYmd) return true
+const matchesDueDateRange = (dueDateVal, filterDateFrom, filterDateTo) => {
+  if (!filterDateFrom && !filterDateTo) return true
   if (dueDateVal == null || dueDateVal === '') return false
   const d = new Date(dueDateVal)
   if (Number.isNaN(d.getTime())) return false
   const utcKey = d.toISOString().slice(0, 10)
   const localKey = localYmd(d)
-  return utcKey === filterYmd || localKey === filterYmd
+
+  const inRange = (key) => {
+    if (filterDateFrom && key < filterDateFrom) return false
+    if (filterDateTo && key > filterDateTo) return false
+    return true
+  }
+
+  return inRange(localKey) || inRange(utcKey)
 }
+
+const matchesDueDateFilter = (dueDateVal, filterYmd) => matchesDueDateRange(dueDateVal, filterYmd, filterYmd)
 
 const TasksView = ({ isMyTasks = false }) => {
   const { user, canAssignTask } = useAuth()
@@ -84,8 +93,11 @@ const TasksView = ({ isMyTasks = false }) => {
   const [loading, setLoading] = useState(true)
   const [filterProject, setFilterProject] = useState('')
   const [filterStatus, setFilterStatus] = useState(() => parseStatusParam(searchParams.get('status')) || 'All')
-  const [filterDate, setFilterDate] = useState(() =>
-    searchParams.has('date') ? searchParams.get('date') || '' : ''
+  const [filterDateFrom, setFilterDateFrom] = useState(() =>
+    searchParams.get('dateFrom') || searchParams.get('date') || ''
+  )
+  const [filterDateTo, setFilterDateTo] = useState(() =>
+    searchParams.get('dateTo') || searchParams.get('date') || ''
   )
   const [filterAssignee, setFilterAssignee] = useState('')
   const [projects, setProjects] = useState([])
@@ -99,21 +111,30 @@ const TasksView = ({ isMyTasks = false }) => {
     } else {
       setFilterStatus('All')
     }
-    if (searchParams.has('date')) {
-      setFilterDate(searchParams.get('date') || '')
+    if (searchParams.has('dateFrom') || searchParams.has('dateTo')) {
+      setFilterDateFrom(searchParams.get('dateFrom') || '')
+      setFilterDateTo(searchParams.get('dateTo') || '')
+    } else if (searchParams.has('date')) {
+      const d = searchParams.get('date') || ''
+      setFilterDateFrom(d)
+      setFilterDateTo(d)
     } else {
-      setFilterDate('')
+      setFilterDateFrom('')
+      setFilterDateTo('')
     }
   }, [searchParams])
 
   const clearAllFilters = () => {
     setFilterStatus('All')
-    setFilterDate('')
+    setFilterDateFrom('')
+    setFilterDateTo('')
     setFilterProject('')
     setFilterAssignee('')
     const next = new URLSearchParams(searchParams)
     next.delete('status')
     next.delete('date')
+    next.delete('dateFrom')
+    next.delete('dateTo')
     setSearchParams(next, { replace: true })
   }
 
@@ -193,7 +214,7 @@ const TasksView = ({ isMyTasks = false }) => {
       const projectId = t.project?._id || t.project
       if (projectId !== filterProject) return false
     }
-    if (filterDate && !matchesDueDateFilter(t.dueDate, filterDate)) return false
+    if (!matchesDueDateRange(t.dueDate, filterDateFrom, filterDateTo)) return false
     return true
   })
 
@@ -281,7 +302,7 @@ const TasksView = ({ isMyTasks = false }) => {
   }
 
   const hiddenByFilters = !loading && filteredTasks.length === 0 && tasksForStats.length > 0
-  const hasActiveFilters = filterStatus !== 'All' || filterDate || filterProject || filterAssignee
+  const hasActiveFilters = filterStatus !== 'All' || filterDateFrom || filterDateTo || filterProject || filterAssignee
 
   const handleStatusChange = async (task, newStatus) => {
     const taskId = task._id
@@ -448,20 +469,37 @@ const TasksView = ({ isMyTasks = false }) => {
 
       <div className='mb-6 flex flex-wrap items-center gap-4'>
         <div className='flex items-center gap-2'>
-          <label className='text-sm font-medium text-gray-700'>Date</label>
+          <label className='text-sm font-medium text-gray-700'>Date From</label>
           <input
             type='date'
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
+            value={filterDateFrom}
+            max={filterDateTo || undefined}
+            onChange={(e) => setFilterDateFrom(e.target.value)}
             className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
           />
-          <button
-            type='button'
-            onClick={() => setFilterDate('')}
-            className='px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg'
-          >
-            All
-          </button>
+        </div>
+        <div className='flex items-center gap-2'>
+          <label className='text-sm font-medium text-gray-700'>Date To</label>
+          <input
+            type='date'
+            value={filterDateTo}
+            min={filterDateFrom || undefined}
+            onChange={(e) => setFilterDateTo(e.target.value)}
+            className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'
+          />
+          {(filterDateFrom || filterDateTo) && (
+            <button
+              type='button'
+              onClick={() => {
+                setFilterDateFrom('')
+                setFilterDateTo('')
+              }}
+              className='px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg'
+              title='Clear dates'
+            >
+              Clear
+            </button>
+          )}
         </div>
         <div className='flex items-center gap-2'>
           <label className='text-sm font-medium text-gray-700'>Project</label>
