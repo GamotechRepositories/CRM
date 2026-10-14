@@ -31,6 +31,7 @@ class _MyTasksPageState extends State<MyTasksPage> {
   void initState() {
     super.initState();
     _filterStatus = widget.initialStatus;
+    NotificationService.instance.requestPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
