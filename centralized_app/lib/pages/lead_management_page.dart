@@ -165,15 +165,29 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
 
   Future<void> _makeCall(String phoneNumber) async {
     final cleanNumber = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (cleanNumber.isEmpty) return;
-    final uri = Uri.parse('tel:$cleanNumber');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
+    if (cleanNumber.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cannot initiate call to $phoneNumber')),
+          const SnackBar(content: Text('No valid contact number found')),
         );
+      }
+      return;
+    }
+    final uri = Uri(scheme: 'tel', path: cleanNumber);
+    try {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(uri);
+      }
+    } catch (_) {
+      try {
+        await launchUrl(Uri.parse('tel:$cleanNumber'), mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open phone dialer for $phoneNumber')),
+          );
+        }
       }
     }
   }
@@ -803,37 +817,49 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
 
                 // Contact & Quick Call Row
                 if (contactNumber.isNotEmpty)
-                  Row(
-                    children: [
-                      const Icon(Icons.phone_outlined, size: 12, color: Color(0xFF64748B)),
-                      const SizedBox(width: 3),
-                      Text(
-                        contactNumber,
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: () => _makeCall(contactNumber),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0xFFBFDBFE)),
-                          ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        InkWell(
+                          onTap: () => _makeCall(contactNumber),
+                          borderRadius: BorderRadius.circular(4),
                           child: Row(
-                            children: const [
-                              Icon(Icons.call, size: 9, color: Color(0xFF2563EB)),
-                              SizedBox(width: 2),
-                              Text('Call', style: TextStyle(fontSize: 9, color: Color(0xFF2563EB), fontWeight: FontWeight.w700)),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.phone_outlined, size: 12, color: Color(0xFF64748B)),
+                              const SizedBox(width: 3),
+                              Text(
+                                contactNumber,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w500),
+                              ),
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _makeCall(contactNumber),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFFBFDBFE)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.call, size: 10, color: Color(0xFF2563EB)),
+                                SizedBox(width: 3),
+                                Text('Call', style: TextStyle(fontSize: 10, color: Color(0xFF2563EB), fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                const SizedBox(height: 4),
 
                 // Chips Row: Source, Business Type, City
                 Wrap(
@@ -1039,6 +1065,12 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
+                      if (lead['contactNumber'] != null && lead['contactNumber'].toString().trim().isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.call, color: Color(0xFF2563EB)),
+                          tooltip: 'Call Lead',
+                          onPressed: () => _makeCall(lead['contactNumber'].toString()),
+                        ),
                       IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => Navigator.pop(ctx),
@@ -1050,7 +1082,13 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
                     child: ListView(
                       children: [
                         _detailRow('Business Name', lead['businessName']),
-                        _detailRow('Contact Number', lead['contactNumber']),
+                        _detailRow(
+                          'Contact Number',
+                          lead['contactNumber'],
+                          onCall: lead['contactNumber'] != null && lead['contactNumber'].toString().trim().isNotEmpty
+                              ? () => _makeCall(lead['contactNumber'].toString())
+                              : null,
+                        ),
                         _detailRow('Email', lead['email']),
                         _detailRow('Status', lead['status']),
                         _detailRow('Business Type', lead['businessType']),
@@ -1156,7 +1194,7 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
     );
   }
 
-  Widget _detailRow(String title, dynamic val) {
+  Widget _detailRow(String title, dynamic val, {VoidCallback? onCall}) {
     final v = val?.toString();
     if (v == null || v.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -1171,6 +1209,27 @@ class _LeadManagementPageState extends State<LeadManagementPage> {
           Expanded(
             child: Text(v, style: const TextStyle(fontSize: 11, color: Color(0xFF0F172A), fontWeight: FontWeight.w600)),
           ),
+          if (onCall != null)
+            InkWell(
+              onTap: onCall,
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.call, size: 10, color: Color(0xFF2563EB)),
+                    SizedBox(width: 3),
+                    Text('Call', style: TextStyle(fontSize: 10, color: Color(0xFF2563EB), fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
