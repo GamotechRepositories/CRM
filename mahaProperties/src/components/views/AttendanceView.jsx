@@ -827,6 +827,7 @@ const AttendanceView = () => {
       notifyBreakStarted()
       await fetchDayAttendance()
       fetchMonthAttendance()
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error starting break')
     } finally {
@@ -842,6 +843,7 @@ const AttendanceView = () => {
       await api.post('/attendance/break/end', { employee: selectedEmployee })
       await fetchDayAttendance()
       fetchMonthAttendance()
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error ending break')
     } finally {
