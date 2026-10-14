@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Task from '../../models/mahaProperties/mahaProperties_task.js';
+import Attendance from '../../models/mahaProperties/mahaProperties_attendance.js';
 import Employee from '../../models/mahaProperties/mahaProperties_employee.js';
 import Company from '../../models/mahaProperties/mahaProperties_company.js';
 import Notification from '../../models/mahaProperties/mahaProperties_notification.js';
@@ -172,6 +173,14 @@ export const createTask = async (req, res) => {
     const initialStatus = status || 'Pending';
     const createdTasks = [];
     for (const employeeId of assigneeIds) {
+      if (initialStatus === 'In Progress') {
+        await assertCanStartOrResumeTask({
+          Task,
+          Attendance,
+          task: { assignedTo: employeeId, priority: priority || 'Medium' },
+          nextStatus: initialStatus,
+        });
+      }
       const task = new Task({
         project,
         title,
@@ -339,7 +348,12 @@ export const updateTask = async (req, res) => {
     }
 
     await assertEmployeeCanPause({ Task, task: existing, nextStatus });
-    await assertCanStartOrResumeTask({ Task, task: { ...existing.toObject(), ...payload }, nextStatus });
+    await assertCanStartOrResumeTask({
+      Task,
+      Attendance,
+      task: { ...existing.toObject(), ...payload },
+      nextStatus,
+    });
 
     Object.assign(
       payload,

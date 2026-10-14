@@ -8,6 +8,10 @@ import {
   pauseInProgressTasksForMeeting,
   resumeTasksPausedByMeeting,
 } from '../../utils/meetingTaskInterrupt.js';
+import {
+  pauseInProgressTasksForBreak,
+  resumeTasksPausedByBreak,
+} from '../../utils/breakTaskInterrupt.js';
 
 const getStatus = (durationHours) => {
   if (durationHours >= 8) return 'Full Day';
@@ -129,6 +133,11 @@ export const checkOut = async (req, res) => {
         const breakMins = Math.max(0, Math.floor((now - attendance.breakStartedAt) / (1000 * 60)));
         attendance.breakDurationMinutes = (attendance.breakDurationMinutes || 0) + breakMins;
         attendance.breakStartedAt = null;
+        await resumeTasksPausedByBreak({
+          Task,
+          employeeId: employee,
+          companyKey: 'adsResearchGlobal',
+        });
       }
       if (attendance.meetingStartedAt) {
         const meetingMins = Math.max(0, Math.floor((now - attendance.meetingStartedAt) / (1000 * 60)));
@@ -326,6 +335,13 @@ export const startBreak = async (req, res) => {
     if (attendance.breakStartedAt) return res.status(400).json({ message: 'Break already started' });
     attendance.breakStartedAt = new Date();
     await attendance.save();
+
+    await pauseInProgressTasksForBreak({
+      Task,
+      employeeId: employee,
+      companyKey: 'adsResearchGlobal',
+    });
+
     const populated = await Attendance.findById(attendance._id).populate('employee');
     res.status(200).json({ message: 'Break started', attendance: populated });
   } catch (error) {
@@ -348,6 +364,13 @@ export const endBreak = async (req, res) => {
     attendance.breakDurationMinutes = (attendance.breakDurationMinutes || 0) + mins;
     attendance.breakStartedAt = null;
     await attendance.save();
+
+    await resumeTasksPausedByBreak({
+      Task,
+      employeeId: employee,
+      companyKey: 'adsResearchGlobal',
+    });
+
     const populated = await Attendance.findById(attendance._id).populate('employee');
     res.status(200).json({ message: 'Break ended', attendance: populated });
   } catch (error) {

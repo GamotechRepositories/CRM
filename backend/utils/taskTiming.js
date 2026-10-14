@@ -41,22 +41,26 @@ export const applyTaskStatusTiming = ({ existingStatus, nextStatus, payload = {}
     result.pausedAt = null;
     result.pausedByUrgentTask = null;
     result.pausedByMeeting = false;
+    result.pausedByBreak = false;
   } else if (nextStatus === 'In Progress' && existingStatus !== 'In Progress') {
     result.startedAt = result.startedAt || new Date();
     result.pausedAt = null;
     result.pausedByUrgentTask = null;
     result.pausedByMeeting = false;
+    result.pausedByBreak = false;
   } else if (nextStatus === 'Completed') {
     // Keep startedAt for auto star rating. Clear pause markers.
     result.pausedAt = null;
     result.pausedByUrgentTask = null;
     result.pausedByMeeting = false;
+    result.pausedByBreak = false;
   } else if (nextStatus !== 'In Progress' && nextStatus !== 'Paused') {
     // Pending / Cancelled — clear active timer
     result.startedAt = null;
     result.pausedAt = null;
     result.pausedByUrgentTask = null;
     result.pausedByMeeting = false;
+    result.pausedByBreak = false;
   }
 
   return result;

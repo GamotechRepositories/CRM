@@ -26,6 +26,11 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     type: Boolean,
     default: false,
   },
+  /** True when task is temporarily paused due to an active break. Auto-resumes on break end. */
+  pausedByBreak: {
+    type: Boolean,
+    default: false,
+  },
   scheduledStartAt: {
     type: Date,
     default: null,

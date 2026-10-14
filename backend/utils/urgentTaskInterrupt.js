@@ -1,3 +1,6 @@
+import mongoose from 'mongoose';
+import { isEmployeeOnBreak } from './breakTaskInterrupt.js';
+
 /**
  * Urgent-task interrupt: pause current In Progress work when Urgent is assigned,
  * and auto-resume those paused tasks when the Urgent task is completed.
@@ -69,6 +72,7 @@ export const buildResumeFromPausedPayload = (task, now = new Date()) => {
     pausedAt: null,
     pausedByUrgentTask: null,
     pausedByMeeting: false,
+    pausedByBreak: false,
   };
 };
 
@@ -107,15 +111,15 @@ export const assertEmployeeCanPause = async ({ Task, task, nextStatus }) => {
 
   const assigneeId = task?.assignedTo?._id || task?.assignedTo;
   const hasUrgent = await employeeHasOpenUrgentTask(Task, assigneeId, task?._id);
-  if (!hasUrgent && !task?.pausedByMeeting) {
-    const err = new Error('Pause is only enabled when an urgent task is assigned to you or during a meeting');
+  if (!hasUrgent && !task?.pausedByMeeting && !task?.pausedByBreak) {
+    const err = new Error('Pause is only enabled when an urgent task is assigned to you, during a meeting, or during a break');
     err.statusCode = 400;
     throw err;
   }
 };
 
-/** Block starting/resuming non-urgent work while an urgent task is still open or during meeting. */
-export const assertCanStartOrResumeTask = async ({ Task, task, nextStatus }) => {
+/** Block starting/resuming non-urgent work while on break, during meeting, or while an urgent task is open. */
+export const assertCanStartOrResumeTask = async ({ Task, task, nextStatus, Attendance = null }) => {
   if (nextStatus !== 'In Progress') return;
 
   if (task?.pausedByMeeting) {
@@ -124,9 +128,31 @@ export const assertCanStartOrResumeTask = async ({ Task, task, nextStatus }) => 
     throw err;
   }
 
-  if (String(task?.priority || '') === 'Urgent') return;
+  if (task?.pausedByBreak) {
+    const err = new Error('Task was paused by an active break — it will resume when your break ends');
+    err.statusCode = 400;
+    throw err;
+  }
 
   const assigneeId = task?.assignedTo?._id || task?.assignedTo;
+
+  // Resolve attendance model if not explicitly provided
+  let attendanceModel = Attendance;
+  if (!attendanceModel && Task) {
+    const expectedAttModelName = Task.modelName?.replace(/_Task$/i, '_Attendance');
+    attendanceModel = Task.db?.models?.[expectedAttModelName] || mongoose.models?.[expectedAttModelName];
+  }
+  if (attendanceModel && assigneeId) {
+    const onBreak = await isEmployeeOnBreak({ Attendance: attendanceModel, employeeId: assigneeId });
+    if (onBreak) {
+      const err = new Error('Cannot start or resume a task while on break — please end your break first');
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  if (String(task?.priority || '') === 'Urgent') return;
+
   const hasUrgent = await employeeHasOpenUrgentTask(Task, assigneeId, task?._id);
   if (hasUrgent) {
     const err = new Error('Complete the urgent task first — other tasks stay paused until then');

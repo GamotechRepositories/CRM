@@ -389,6 +389,8 @@ const TasksView = ({ isMyTasks = false }) => {
       }
     } catch (err) {
       console.error('Failed to update task status:', err)
+      const msg = err.response?.data?.message || err.message || 'Failed to update task status'
+      alert(msg)
     } finally {
       setUpdatingStatus(false)
     }
@@ -672,6 +674,9 @@ const TasksView = ({ isMyTasks = false }) => {
                         {task.pausedByMeeting && (
                           <span className='text-[10px] font-medium opacity-90'>(In Meeting)</span>
                         )}
+                        {task.pausedByBreak && (
+                          <span className='text-[10px] font-medium opacity-90'>(On Break)</span>
+                        )}
                       </span>
                       {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
                         <span className='text-xs text-blue-700'>
@@ -868,6 +873,7 @@ const TasksView = ({ isMyTasks = false }) => {
                       onClick={() => handleStatusChange(viewTask, 'In Progress')}
                       disabled={
                         updatingStatus
+                        || viewTask.pausedByBreak
                         || (
                           String(viewTask.priority || '') !== 'Urgent'
                           && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
@@ -875,15 +881,21 @@ const TasksView = ({ isMyTasks = false }) => {
                       }
                       className='px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50'
                       title={
-                        String(viewTask.priority || '') !== 'Urgent'
-                        && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
+                        viewTask.pausedByBreak
+                          ? 'Cannot start task while on break — end your break first'
+                          : String(viewTask.priority || '') !== 'Urgent'
+                          && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
                           ? 'Complete the urgent task before accepting other tasks'
                           : undefined
                       }
                     >
                       {updatingStatus ? 'Accepting...' : 'Accept Task'}
                     </button>
-                    {viewTask.pausedByMeeting ? (
+                    {viewTask.pausedByBreak ? (
+                      <span className='text-[11px] text-amber-700 max-w-[14rem] text-right font-medium'>
+                        On break — end your break before starting/resuming tasks
+                      </span>
+                    ) : viewTask.pausedByMeeting ? (
                       <span className='text-[11px] text-indigo-700 max-w-[14rem] text-right font-medium'>
                         In meeting — task will auto-resume when meeting ends
                       </span>

@@ -816,9 +816,11 @@ class _TaskTile extends StatelessWidget {
                     Row(
                       children: [
                         _BadgePill(
-                          label: (task['pausedByMeeting'] == true && status.toLowerCase() == 'paused')
-                              ? 'Paused (In Meeting)'
-                              : status,
+                          label: (task['pausedByBreak'] == true && status.toLowerCase() == 'paused')
+                              ? 'Paused (On Break)'
+                              : ((task['pausedByMeeting'] == true && status.toLowerCase() == 'paused')
+                                  ? 'Paused (In Meeting)'
+                                  : status),
                           bg: sBg,
                           fg: sFg,
                         ),
@@ -954,15 +956,39 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
   bool _saving = false;
   String? _error;
   String? _selectedStatus;
+  bool _isOnBreak = false;
 
   @override
   void initState() {
     super.initState();
     _task = Map<String, dynamic>.from(widget.task);
     _selectedStatus = TaskStatus.normalize(_task['status']);
+    _isOnBreak = _task['pausedByBreak'] == true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkBreakStatus());
+  }
+
+  Future<void> _checkBreakStatus() async {
+    final session = context.read<AuthSession>();
+    final api = session.api;
+    if (api == null || session.userId.isEmpty) return;
+    try {
+      final list = await api.fetchAttendanceToday(employeeId: session.userId);
+      if (!mounted) return;
+      final onBreak = list.any((a) => a['breakStartedAt'] != null && a['checkOut'] == null);
+      if (onBreak != _isOnBreak) {
+        setState(() => _isOnBreak = onBreak);
+      }
+    } catch (_) {}
   }
 
   Future<void> _updateStatus(String newStatus) async {
+    if (newStatus == 'In Progress' && (_isOnBreak || _task['pausedByBreak'] == true)) {
+      setState(() {
+        _error = 'Cannot start or resume a task while on break. Please end your break first.';
+      });
+      return;
+    }
+
     final session = context.read<AuthSession>();
     final api = session.api;
     final id = _task['_id']?.toString();
@@ -1156,6 +1182,50 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (_isOnBreak || _task['pausedByBreak'] == true) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('☕', style: TextStyle(fontSize: 18)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Break in Progress',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'You cannot start or resume tasks until your break has ended. End your break from Attendance first.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFFB45309),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Text('Update Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF334155))),
               const SizedBox(height: 8),
               Wrap(
@@ -1163,19 +1233,41 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                 runSpacing: 8,
                 children: ['Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled'].map((st) {
                   final isSel = _selectedStatus == st;
+                  final isBlockedByBreak = st == 'In Progress' && (_isOnBreak || _task['pausedByBreak'] == true);
                   return ChoiceChip(
-                    label: Text(
-                      st,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                        color: isSel ? Colors.white : const Color(0xFF334155),
-                      ),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isBlockedByBreak) ...[
+                          const Icon(Icons.lock_outline_rounded, size: 12, color: Color(0xFFD97706)),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          st,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                            color: isSel
+                                ? Colors.white
+                                : (isBlockedByBreak ? const Color(0xFF94A3B8) : const Color(0xFF334155)),
+                          ),
+                        ),
+                      ],
                     ),
                     selected: isSel,
                     selectedColor: const Color(0xFF2563EB),
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    onSelected: _saving ? null : (_) => _updateStatus(st),
+                    backgroundColor: isBlockedByBreak ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
+                    onSelected: _saving
+                        ? null
+                        : (_) {
+                            if (isBlockedByBreak) {
+                              setState(() {
+                                _error = 'Cannot start or resume task while on break. End your break first.';
+                              });
+                              return;
+                            }
+                            _updateStatus(st);
+                          },
                   );
                 }).toList(),
               ),

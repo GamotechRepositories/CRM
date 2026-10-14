@@ -71,7 +71,9 @@ export const getEditableStatusOptions = (task, { hasOpenUrgent = false } = {}) =
   }
 
   if (current === 'Paused') {
-    if (hasOpenUrgent) return ['Paused', 'Completed', 'Cancelled']
+    if (hasOpenUrgent || task?.pausedByBreak || task?.pausedByMeeting) {
+      return ['Paused', 'Completed', 'Cancelled']
+    }
     return ['Paused', 'In Progress', 'Completed', 'Cancelled']
   }
 
@@ -83,6 +85,9 @@ export const getEditableStatusOptions = (task, { hasOpenUrgent = false } = {}) =
   }
 
   // Pending — can move forward, not sideways into Paused unless urgent rules apply elsewhere
+  if (task?.pausedByBreak || task?.pausedByMeeting) {
+    return ['Pending', 'Completed', 'Cancelled']
+  }
   return ['Pending', 'In Progress', 'Completed', 'Cancelled']
 }
 
