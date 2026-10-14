@@ -18,6 +18,39 @@ export const TASK_STAR_BANDS = [
   { maxRatio: Infinity, score: 1, label: 'More than 50% late' },
 ];
 
+export const TASK_RATING_FEEDBACK = {
+  1: {
+    score: 1,
+    title: 'Needs Improvement',
+    message: "Don't give up! Every challenge is an opportunity to learn and improve. Keep trying, and you'll get better.",
+  },
+  2: {
+    score: 2,
+    title: 'Keep Going',
+    message: "You're making progress! Stay focused, work on the little things, and keep moving forward.",
+  },
+  3: {
+    score: 3,
+    title: 'Good Effort',
+    message: "Good job! You're on the right track. Keep learning, stay consistent, and aim even higher.",
+  },
+  4: {
+    score: 4,
+    title: 'Great Work',
+    message: "Excellent effort! You're doing really well. Keep up the great work and push yourself toward excellence.",
+  },
+  5: {
+    score: 5,
+    title: 'Outstanding Performance',
+    message: "Fantastic work! You've done an amazing job. Keep shining, stay motivated, and continue setting new standards!",
+  },
+};
+
+export const getTaskRatingFeedback = (score) => {
+  const rounded = Math.max(1, Math.min(5, Math.round(Number(score) || 3)));
+  return TASK_RATING_FEEDBACK[rounded] || TASK_RATING_FEEDBACK[3];
+};
+
 const toValidDate = (value) => {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value);
@@ -146,10 +179,13 @@ export const buildAutoTaskRating = ({
   if (score == null) return null;
 
   const label = getTaskStarBandLabel(score);
+  const feedback = getTaskRatingFeedback(score);
   const actualLabel = actualMinutes == null ? 'n/a' : `${actualMinutes}`;
   return {
     score,
-    comments: `Auto-rated from completion time (${actualLabel} min vs ${estimate} min estimate). ${label}.`,
+    title: feedback.title,
+    encouragement: feedback.message,
+    comments: `${feedback.title}: "${feedback.message}" (Completed in ${actualLabel} min vs ${estimate} min estimate. ${label}).`,
     ratedBy: null,
     ratedAt: now,
     auto: true,

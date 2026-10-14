@@ -36,6 +36,8 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
   },
   rating: {
     score: { type: Number, min: 1, max: 5, default: null },
+    title: { type: String, default: '' },
+    encouragement: { type: String, default: '' },
     comments: { type: String, default: '' },
     ratedBy: { type: mongoose.Schema.Types.ObjectId, ref: employeeRef, default: null },
     ratedAt: { type: Date, default: null },

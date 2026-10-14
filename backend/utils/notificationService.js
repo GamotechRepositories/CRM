@@ -1,3 +1,5 @@
+import { getTaskRatingFeedback } from './taskStarRating.js';
+
 const toId = (value) => {
   if (!value) return null;
   if (typeof value === 'object' && value._id) return value._id;
@@ -155,6 +157,32 @@ export const createNotificationService = ({ Notification }) => {
     });
   };
 
+  const notifyTaskCompletionRating = async ({ task }) => {
+    const recipientId = toId(task?.assignedTo);
+    const score = Number(task?.rating?.score);
+    if (!recipientId || !score) return null;
+
+    const feedback = getTaskRatingFeedback(score);
+    const starStr = '⭐'.repeat(score);
+
+    return createOne({
+      recipientId,
+      type: 'task_completion_rating',
+      title: `${score} ${starStr} · ${feedback.title}`,
+      message: `"${task.title}" completed! ${feedback.message}`,
+      link: '/my-tasks',
+      priority: 'high',
+      metadata: {
+        entityType: 'task',
+        entityId: task._id,
+        score,
+        ratingTitle: feedback.title,
+        encouragement: feedback.message,
+        ratingComments: task.rating?.comments || '',
+      },
+    });
+  };
+
   const notifyAnnouncement = async ({ recipientIds = [], title, message, actorId = null, link = '' }) => {
     const items = recipientIds.map((recipientId) => ({
       recipientId,
@@ -177,6 +205,7 @@ export const createNotificationService = ({ Notification }) => {
     notifyTaskAssigned,
     notifyTaskReviewed,
     notifyTaskCompleted,
+    notifyTaskCompletionRating,
     notifyTaskStatusChanged,
     notifyAnnouncement,
   };

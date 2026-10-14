@@ -57,6 +57,9 @@ export const runTaskNotificationSideEffects = async ({
     if (existing.status !== updated.status) {
       if (updated.status === 'Completed') {
         await notificationService.notifyTaskCompleted({ task: updated });
+        if (updated.rating?.score) {
+          await notificationService.notifyTaskCompletionRating({ task: updated });
+        }
       } else {
         await notificationService.notifyTaskStatusChanged({
           task: updated,
@@ -65,6 +68,7 @@ export const runTaskNotificationSideEffects = async ({
       }
       notifyAssigneeSocket(updated, 'status', {
         previousStatus: existing.status,
+        rating: updated.rating,
       });
     }
   } catch (error) {

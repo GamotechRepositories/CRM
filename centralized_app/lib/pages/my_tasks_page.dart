@@ -5,6 +5,7 @@ import '../auth/auth_session.dart';
 import '../navigation/app_nav.dart';
 import '../utils/task_status.dart';
 import '../api/api_cache.dart';
+import '../services/notification_service.dart';
 
 /// Tasks Page — supports all company tasks (`/tasks`) or user tasks (`/my-tasks`).
 class MyTasksPage extends StatefulWidget {
@@ -256,6 +257,7 @@ class _MyTasksPageState extends State<MyTasksPage> {
   }
 
   Future<void> _openTaskDetail(Map<String, dynamic> task) async {
+    final oldStatus = TaskStatus.normalize(task['status']);
     final updated = await showModalBottomSheet<Map<String, dynamic>?>(
       context: context,
       isScrollControlled: true,
@@ -268,6 +270,21 @@ class _MyTasksPageState extends State<MyTasksPage> {
         final idx = _tasks.indexWhere((t) => t['_id']?.toString() == id);
         if (idx >= 0) _tasks[idx] = updated;
       });
+
+      final newStatus = TaskStatus.normalize(updated['status']);
+      if (newStatus == 'Completed' && oldStatus != 'Completed') {
+        final score = num.tryParse('${updated['rating']?['score']}')?.toInt() ?? 5;
+        final feedback = TaskRatingFeedback.forScore(score);
+        if (mounted) {
+          showDialog<void>(
+            context: context,
+            builder: (_) => TaskRatingCelebrationDialog(
+              task: updated,
+              feedback: feedback,
+            ),
+          );
+        }
+      }
     }
   }
 }
@@ -958,6 +975,19 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
     try {
       final updated = await api.updateTask(id, {'status': newStatus});
       if (!mounted) return;
+
+      if (newStatus == 'Completed') {
+        final score = num.tryParse('${updated['rating']?['score']}')?.toInt() ?? 5;
+        final feedback = TaskRatingFeedback.forScore(score);
+        await NotificationService.instance.show(
+          id: id.hashCode,
+          title: '$score ⭐ ${feedback.title}',
+          body: feedback.message,
+          channel: NotificationChannel.tasks,
+        );
+      }
+
+      if (!mounted) return;
       setState(() {
         _task = updated;
         _selectedStatus = TaskStatus.normalize(updated['status']);
@@ -1164,6 +1194,213 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Encouraging messages model for ratings from 1 to 5.
+class TaskRatingFeedback {
+  final int score;
+  final String title;
+  final String message;
+
+  const TaskRatingFeedback({
+    required this.score,
+    required this.title,
+    required this.message,
+  });
+
+  static const Map<int, TaskRatingFeedback> all = {
+    1: TaskRatingFeedback(
+      score: 1,
+      title: 'Needs Improvement',
+      message: "Don't give up! Every challenge is an opportunity to learn and improve. Keep trying, and you'll get better.",
+    ),
+    2: TaskRatingFeedback(
+      score: 2,
+      title: 'Keep Going',
+      message: "You're making progress! Stay focused, work on the little things, and keep moving forward.",
+    ),
+    3: TaskRatingFeedback(
+      score: 3,
+      title: 'Good Effort',
+      message: "Good job! You're on the right track. Keep learning, stay consistent, and aim even higher.",
+    ),
+    4: TaskRatingFeedback(
+      score: 4,
+      title: 'Great Work',
+      message: "Excellent effort! You're doing really well. Keep up the great work and push yourself toward excellence.",
+    ),
+    5: TaskRatingFeedback(
+      score: 5,
+      title: 'Outstanding Performance',
+      message: "Fantastic work! You've done an amazing job. Keep shining, stay motivated, and continue setting new standards!",
+    ),
+  };
+
+  static TaskRatingFeedback forScore(int? score) {
+    final s = (score ?? 5).clamp(1, 5);
+    return all[s] ?? all[5]!;
+  }
+}
+
+/// Task completion celebration dialog with encouraging message and star rating.
+class TaskRatingCelebrationDialog extends StatelessWidget {
+  const TaskRatingCelebrationDialog({
+    super.key,
+    required this.task,
+    required this.feedback,
+  });
+
+  final Map<String, dynamic> task;
+  final TaskRatingFeedback feedback;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (task['title'] ?? 'Task').toString();
+    final score = feedback.score;
+    final ratingComments = task['rating']?['comments']?.toString() ?? '';
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Text('🏆', style: TextStyle(fontSize: 34)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                final filled = index < score;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Icon(
+                    filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: filled ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                    size: 28,
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$score / 5 Rating',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFB45309),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              feedback.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '“${feedback.message}”',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF334155),
+                      height: 1.45,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (ratingComments.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      ratingComments,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        color: Color(0xFF64748B),
+                        height: 1.3,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Task: $title',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Great, Keep Going!',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

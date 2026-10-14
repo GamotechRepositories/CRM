@@ -86,6 +86,34 @@ const matchesDueDateRange = (dueDateVal, filterDateFrom, filterDateTo) => {
 
 const matchesDueDateFilter = (dueDateVal, filterYmd) => matchesDueDateRange(dueDateVal, filterYmd, filterYmd)
 
+const TASK_RATING_FEEDBACK = {
+  1: {
+    score: 1,
+    title: 'Needs Improvement',
+    message: "Don't give up! Every challenge is an opportunity to learn and improve. Keep trying, and you'll get better.",
+  },
+  2: {
+    score: 2,
+    title: 'Keep Going',
+    message: "You're making progress! Stay focused, work on the little things, and keep moving forward.",
+  },
+  3: {
+    score: 3,
+    title: 'Good Effort',
+    message: "Good job! You're on the right track. Keep learning, stay consistent, and aim even higher.",
+  },
+  4: {
+    score: 4,
+    title: 'Great Work',
+    message: "Excellent effort! You're doing really well. Keep up the great work and push yourself toward excellence.",
+  },
+  5: {
+    score: 5,
+    title: 'Outstanding Performance',
+    message: "Fantastic work! You've done an amazing job. Keep shining, stay motivated, and continue setting new standards!",
+  },
+}
+
 const TasksView = ({ isMyTasks = false }) => {
   const { user, canAssignTask } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -287,6 +315,7 @@ const TasksView = ({ isMyTasks = false }) => {
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [uploadingPostLink, setUploadingPostLink] = useState(false)
   const [socialUpload, setSocialUpload] = useState({ platform: '', url: '' })
+  const [completionCelebration, setCompletionCelebration] = useState(null)
 
   const canUpdateTaskStatus = (task) => {
     if (!task || !user?._id) return false
@@ -337,6 +366,16 @@ const TasksView = ({ isMyTasks = false }) => {
         setTasks((prev) =>
           prev.map((t) => (t._id === taskId ? { ...t, ...updated, status } : t))
         )
+        if (resolvedStatus === 'Completed') {
+          const score = updated?.rating?.score || 5
+          const feedback = TASK_RATING_FEEDBACK[score] || TASK_RATING_FEEDBACK[5]
+          setCompletionCelebration({
+            taskTitle: updated?.title || task.title,
+            score,
+            feedback,
+            comments: updated?.rating?.comments || '',
+          })
+        }
       }
       if (
         filterStatus !== 'All'
@@ -946,6 +985,52 @@ const TasksView = ({ isMyTasks = false }) => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {completionCelebration && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn'>
+          <div className='bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 text-center transform transition-all'>
+            <div className='w-16 h-16 mx-auto mb-3 rounded-full bg-amber-100 flex items-center justify-center text-3xl shadow-sm'>
+              🏆
+            </div>
+            <div className='flex justify-center items-center gap-1 mb-2'>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  className={`text-2xl ${star <= completionCelebration.score ? 'text-amber-400' : 'text-gray-300'}`}
+                >
+                  ★
+                </span>
+              ))}
+            </div>
+            <div className='inline-block px-3 py-1 bg-amber-50 text-amber-800 text-xs font-bold rounded-full mb-2'>
+              {completionCelebration.score} / 5 Rating
+            </div>
+            <h3 className='text-lg font-bold text-gray-900 mb-2'>
+              {completionCelebration.feedback.title}
+            </h3>
+            <div className='bg-gray-50 rounded-xl p-4 border border-gray-200 mb-4'>
+              <p className='text-sm text-gray-700 italic font-medium leading-relaxed'>
+                “{completionCelebration.feedback.message}”
+              </p>
+              {completionCelebration.comments && (
+                <p className='text-xs text-gray-500 mt-2 border-t border-gray-200 pt-2'>
+                  {completionCelebration.comments}
+                </p>
+              )}
+            </div>
+            <p className='text-xs text-gray-500 mb-5 line-clamp-1'>
+              Task: <span className='font-medium text-gray-800'>{completionCelebration.taskTitle}</span>
+            </p>
+            <button
+              type='button'
+              onClick={() => setCompletionCelebration(null)}
+              className='w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-md'
+            >
+              Great, Keep Going!
+            </button>
           </div>
         </div>
       )}

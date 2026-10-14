@@ -61,6 +61,8 @@ export const applyAutoTaskStarRating = ({
     if (autoRating) {
       result.rating = {
         score: autoRating.score,
+        title: autoRating.title || '',
+        encouragement: autoRating.encouragement || '',
         comments: autoRating.comments,
         ratedBy: null,
         ratedAt: autoRating.ratedAt,
