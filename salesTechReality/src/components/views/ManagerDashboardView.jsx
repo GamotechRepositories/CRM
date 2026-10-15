@@ -317,14 +317,6 @@ const ManagerDashboardView = () => {
     }
   }, [clients, projects, leads, tasks, employees, billings, reporteeIds])
 
-  if (loading) {
-    return <div className='p-8 text-sm text-gray-600'>Loading dashboard...</div>
-  }
-
-  const firstName = (user?.name || 'Manager').split(' ')[0]
-  const designation = user?.designation?.title || 'Manager'
-  const totalTasks = tasks.length
-
   const pendingApprovalCount = useMemo(() => {
     return tasks.filter((t) => {
       const isPending = t.approvalStatus === 'Pending' || (!t.approvalStatus && t.status === 'Pending')
@@ -333,6 +325,14 @@ const ManagerDashboardView = () => {
       return reporteeIds.has(assigneeId)
     }).length
   }, [tasks, reporteeIds])
+
+  if (loading) {
+    return <div className='p-8 text-sm text-gray-600'>Loading dashboard...</div>
+  }
+
+  const firstName = (user?.name || 'Manager').split(' ')[0]
+  const designation = user?.designation?.title || 'Manager'
+  const totalTasks = tasks.length
 
   return (
     <div className='p-6 md:p-8 w-full bg-[#f8f9fa] min-h-full'>

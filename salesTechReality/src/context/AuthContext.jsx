@@ -116,6 +116,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(false)
   }, [])
 
+  const logout = () => {
+    disconnectRealtimeSocket()
+    setUser(null)
+    localStorage.removeItem(AUTH_KEY)
+    localStorage.removeItem(SESSION_DATE_KEY)
+    sessionStorage.removeItem('crm_show_checkin_popup')
+  }
+
   // Invalidate session if calendar day rolls over while user is active
   useEffect(() => {
     if (!user) return
@@ -158,14 +166,6 @@ export const AuthProvider = ({ children }) => {
       return u
     }
     throw new Error(res.data?.message || 'Login failed')
-  }
-
-  const logout = () => {
-    disconnectRealtimeSocket()
-    setUser(null)
-    localStorage.removeItem(AUTH_KEY)
-    localStorage.removeItem(SESSION_DATE_KEY)
-    sessionStorage.removeItem('crm_show_checkin_popup')
   }
 
   const updateUser = (patch) => {
