@@ -3,14 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import { getAllReporteeIds, refEmployeeId } from '../../utils/reportingHierarchy'
-import { getTaskRemainingMinutes, normalizeTaskStatus } from '../../utils/taskStatus'
-
-const PRIORITY_BADGES = {
-  Urgent: 'bg-red-100 text-red-800 border-red-200',
-  High: 'bg-orange-100 text-orange-800 border-orange-200',
-  Medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  Low: 'bg-green-100 text-green-800 border-green-200',
-}
 
 const formatMinutes = (minutes) => {
   const mins = Number(minutes)
@@ -33,16 +25,11 @@ const formatDate = (dateStr) => {
   })
 }
 
-const formatDateTime = (dateStr) => {
-  if (!dateStr) return '—'
+const isDateOverdue = (dateStr) => {
+  if (!dateStr) return false
   const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  if (Number.isNaN(d.getTime())) return false
+  return d.getTime() < Date.now()
 }
 
 const getInitials = (name = '') =>
@@ -54,8 +41,25 @@ const getInitials = (name = '') =>
     .join('')
     .toUpperCase() || '?'
 
+const PencilIcon = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    xmlns='http://www.w3.org/2000/svg'
+    fill='none'
+    viewBox='0 0 24 24'
+    strokeWidth={2}
+    stroke='currentColor'
+    className={className}
+  >
+    <path
+      strokeLinecap='round'
+      strokeLinejoin='round'
+      d='m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125'
+    />
+  </svg>
+)
+
 const TaskApprovalView = () => {
-  const { user, hasFullAccess, canAssignTask } = useAuth()
+  const { user, hasFullAccess } = useAuth()
   const navigate = useNavigate()
 
   const [tasks, setTasks] = useState([])
@@ -67,6 +71,7 @@ const TaskApprovalView = () => {
 
   // Duration adjustments map: { [taskId]: { hours: number, minutes: number } }
   const [durationEdits, setDurationEdits] = useState({})
+  const [editingDurationId, setEditingDurationId] = useState(null)
   const [submittingId, setSubmittingId] = useState(null)
   const [rejectingTask, setRejectingTask] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -103,14 +108,13 @@ const TaskApprovalView = () => {
 
   // Get list of employee IDs who report to this manager
   const reporteeIds = useMemo(() => {
-    if (hasFullAccess()) return null // null means full access (all employees)
+    if (hasFullAccess()) return null
     return getAllReporteeIds(employees, user?._id)
   }, [employees, user?._id, hasFullAccess])
 
   // Filter tasks to those relevant to this manager's team
   const managerTasks = useMemo(() => {
     return tasks.filter((t) => {
-      // If task has approvalStatus explicitly set (Pending, Approved, Rejected)
       const hasApprovalStatus = Boolean(t.approvalStatus && t.approvalStatus !== 'None')
       if (!hasApprovalStatus && t.status !== 'Pending') return false
 
@@ -119,7 +123,6 @@ const TaskApprovalView = () => {
       const assigneeId = refEmployeeId(t.assignedTo)
       const assignerId = refEmployeeId(t.assignedBy)
 
-      // Included if assignee or assigner is in reportee tree or self
       if (reporteeIds) {
         if (reporteeIds.has(assigneeId) || reporteeIds.has(assignerId)) return true
       }
@@ -168,10 +171,9 @@ const TaskApprovalView = () => {
 
     return list.filter((t) => {
       const title = (t.title || '').toLowerCase()
-      const desc = (t.description || '').toLowerCase()
       const assignee = (t.assignedTo?.name || '').toLowerCase()
       const proj = (t.project?.projectName || '').toLowerCase()
-      return title.includes(q) || desc.includes(q) || assignee.includes(q) || proj.includes(q)
+      return title.includes(q) || assignee.includes(q) || proj.includes(q)
     })
   }, [managerTasks, activeTab, search])
 
@@ -215,8 +217,8 @@ const TaskApprovalView = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t._id) === String(updated._id) ? updated : t))
       )
-      setActionSuccess(`Task "${task.title}" approved! Timer started for ${task.assignedTo?.name || 'employee'}.`)
-      setTimeout(() => setActionSuccess(null), 5000)
+      setActionSuccess(`Approved "${task.title}". Active timer started (${formatMinutes(totalMinutes)}).`)
+      setTimeout(() => setActionSuccess(null), 4000)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to approve task')
     } finally {
@@ -238,8 +240,8 @@ const TaskApprovalView = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t._id) === String(updated._id) ? updated : t))
       )
-      setActionSuccess(`Task "${rejectingTask.title}" has been rejected.`)
-      setTimeout(() => setActionSuccess(null), 5000)
+      setActionSuccess(`Task "${rejectingTask.title}" rejected.`)
+      setTimeout(() => setActionSuccess(null), 4000)
       setRejectingTask(null)
       setRejectReason('')
     } catch (err) {
@@ -261,124 +263,99 @@ const TaskApprovalView = () => {
   }
 
   return (
-    <div className='p-6 md:p-8 w-full bg-[#f8f9fa] min-h-full space-y-6'>
-      {/* Header */}
-      <div className='flex flex-wrap items-start justify-between gap-4'>
+    <div className='p-4 md:p-8 w-full bg-[#f8f9fa] min-h-full space-y-5'>
+      {/* Top Header & Search */}
+      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-4'>
         <div>
-          <div className='flex items-center gap-3'>
+          <div className='flex items-center gap-2.5'>
             <h1 className='text-2xl font-bold text-gray-900'>Task Approval</h1>
             {counts.Pending > 0 && (
-              <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'>
+              <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200'>
                 {counts.Pending} Pending
               </span>
             )}
           </div>
-          <p className='text-gray-600 mt-1 text-sm'>
-            Review tasks created by your team, adjust estimated durations, and approve to start task timers.
+          <p className='text-xs sm:text-sm text-gray-500 mt-1'>
+            Review employee tasks, adjust duration, and approve to start task timer.
           </p>
         </div>
-        <div className='flex items-center gap-2'>
+
+        <div className='flex items-center gap-3'>
+          <div className='relative w-full sm:w-64'>
+            <span className='absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 text-xs'>
+              🔍
+            </span>
+            <input
+              type='text'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder='Search title, assignee, project…'
+              className='w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs'
+            />
+          </div>
           <button
             type='button'
             onClick={() => navigate('/assign-task')}
-            className='px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 shadow-sm flex items-center gap-1.5'
+            className='px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 shadow-2xs flex items-center gap-1.5 whitespace-nowrap'
           >
             <span>+</span> Assign Task
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className='grid grid-cols-2 lg:grid-cols-4 gap-4'>
-        <button
-          type='button'
-          onClick={() => setActiveTab('Pending')}
-          className={`text-left rounded-xl p-4 border transition-all ${
-            activeTab === 'Pending'
-              ? 'bg-amber-50 border-amber-300 shadow-sm'
-              : 'bg-white border-gray-100 shadow-xs hover:border-gray-200'
-          }`}
-        >
-          <div className='flex items-center justify-between'>
-            <span className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Pending Approval</span>
-            <span className='text-lg'>⏳</span>
-          </div>
-          <p className='text-3xl font-extrabold text-amber-600 mt-2'>{counts.Pending}</p>
-          <p className='text-xs text-gray-400 mt-1'>Awaiting your review</p>
-        </button>
-
-        <button
-          type='button'
-          onClick={() => setActiveTab('Approved')}
-          className={`text-left rounded-xl p-4 border transition-all ${
-            activeTab === 'Approved'
-              ? 'bg-emerald-50 border-emerald-300 shadow-sm'
-              : 'bg-white border-gray-100 shadow-xs hover:border-gray-200'
-          }`}
-        >
-          <div className='flex items-center justify-between'>
-            <span className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Approved</span>
-            <span className='text-lg'>✅</span>
-          </div>
-          <p className='text-3xl font-extrabold text-emerald-600 mt-2'>{counts.Approved}</p>
-          <p className='text-xs text-gray-400 mt-1'>Timer active / in progress</p>
-        </button>
-
-        <button
-          type='button'
-          onClick={() => setActiveTab('Rejected')}
-          className={`text-left rounded-xl p-4 border transition-all ${
-            activeTab === 'Rejected'
-              ? 'bg-rose-50 border-rose-300 shadow-sm'
-              : 'bg-white border-gray-100 shadow-xs hover:border-gray-200'
-          }`}
-        >
-          <div className='flex items-center justify-between'>
-            <span className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Rejected</span>
-            <span className='text-lg'>✕</span>
-          </div>
-          <p className='text-3xl font-extrabold text-rose-600 mt-2'>{counts.Rejected}</p>
-          <p className='text-xs text-gray-400 mt-1'>Needs revision</p>
-        </button>
-
-        <button
-          type='button'
-          onClick={() => setActiveTab('All')}
-          className={`text-left rounded-xl p-4 border transition-all ${
-            activeTab === 'All'
-              ? 'bg-blue-50 border-blue-300 shadow-sm'
-              : 'bg-white border-gray-100 shadow-xs hover:border-gray-200'
-          }`}
-        >
-          <div className='flex items-center justify-between'>
-            <span className='text-xs font-semibold text-gray-500 uppercase tracking-wider'>Total Submitted</span>
-            <span className='text-lg'>📋</span>
-          </div>
-          <p className='text-3xl font-extrabold text-gray-800 mt-2'>{counts.All}</p>
-          <p className='text-xs text-gray-400 mt-1'>All team tasks</p>
-        </button>
+      {/* Tabs / Filter bar */}
+      <div className='flex items-center gap-2 border-b border-gray-200 pb-3'>
+        {[
+          { key: 'Pending', label: 'Pending Approval', count: counts.Pending },
+          { key: 'Approved', label: 'Approved', count: counts.Approved },
+          { key: 'Rejected', label: 'Rejected', count: counts.Rejected },
+          { key: 'All', label: 'All Tasks', count: counts.All },
+        ].map((tab) => {
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              type='button'
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-white text-blue-700 shadow-2xs border border-gray-200'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                  isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Success Banner */}
+      {/* Success Notification */}
       {actionSuccess && (
-        <div className='p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center justify-between'>
+        <div className='p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between'>
           <div className='flex items-center gap-2'>
             <span>✓</span>
-            <span className='font-medium'>{actionSuccess}</span>
+            <span>{actionSuccess}</span>
           </div>
           <button
             type='button'
             onClick={() => setActionSuccess(null)}
-            className='text-emerald-700 hover:text-emerald-900 font-bold ml-4'
+            className='text-emerald-700 hover:text-emerald-900 font-bold'
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Error Banner */}
+      {/* Error Notification */}
       {error && (
-        <div className='p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between'>
+        <div className='p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center justify-between'>
           <div className='flex items-center gap-2'>
             <span>⚠️</span>
             <span>{error}</span>
@@ -386,212 +363,338 @@ const TaskApprovalView = () => {
           <button
             type='button'
             onClick={() => setError(null)}
-            className='text-rose-700 hover:text-rose-900 font-bold ml-4'
+            className='text-rose-700 hover:text-rose-900 font-bold'
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Search & Tabs */}
-      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-100 shadow-xs'>
-        <div className='flex flex-wrap gap-1.5'>
-          {['Pending', 'Approved', 'Rejected', 'All'].map((tab) => (
-            <button
-              key={tab}
-              type='button'
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeTab === tab
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {tab === 'Pending' ? `Pending (${counts.Pending})` : tab}
-            </button>
-          ))}
-        </div>
-
-        <div className='relative w-full sm:w-72'>
-          <span className='absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400'>
-            🔍
-          </span>
-          <input
-            type='text'
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder='Search task, employee, project…'
-            className='w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50/50'
-          />
-        </div>
-      </div>
-
-      {/* Task List */}
+      {/* Redesigned Clean View - Showing ONLY: Task Title, Project, Assignee, Duration, Due, Action */}
       {filteredTasks.length === 0 ? (
-        <div className='bg-white rounded-2xl border border-gray-100 p-12 text-center shadow-xs'>
-          <div className='w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto text-2xl text-blue-500 mb-3'>
+        <div className='bg-white rounded-xl border border-gray-200 p-12 text-center shadow-2xs'>
+          <div className='w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto text-xl mb-3'>
             ✓
           </div>
-          <h3 className='text-base font-bold text-gray-900'>
-            {activeTab === 'Pending'
-              ? 'No pending task approvals'
-              : `No ${activeTab.toLowerCase()} tasks found`}
+          <h3 className='text-sm font-bold text-gray-900'>
+            {activeTab === 'Pending' ? 'No tasks awaiting approval' : `No ${activeTab.toLowerCase()} tasks found`}
           </h3>
           <p className='text-xs text-gray-500 mt-1 max-w-sm mx-auto'>
             {activeTab === 'Pending'
-              ? 'All tasks submitted by your team members have been reviewed.'
-              : 'Try selecting a different filter or search term.'}
+              ? 'All employee tasks are up to date.'
+              : 'Try switching to another tab or clearing your search.'}
           </p>
         </div>
       ) : (
-        <div className='space-y-4'>
-          {filteredTasks.map((task) => {
-            const isPending = task.approvalStatus === 'Pending' || (!task.approvalStatus && task.status === 'Pending')
-            const isApproved = task.approvalStatus === 'Approved'
-            const isRejected = task.approvalStatus === 'Rejected'
-            const duration = durationEdits[task._id] || { hours: 1, minutes: 0 }
-            const totalEditedMins = (duration.hours || 0) * 60 + (duration.minutes || 0)
-            const isSubmitting = submittingId === task._id
+        <div className='bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden'>
+          {/* Desktop Table View */}
+          <div className='hidden md:block overflow-x-auto'>
+            <table className='w-full text-left border-collapse'>
+              <thead>
+                <tr className='bg-gray-50/75 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider'>
+                  <th className='py-3.5 px-4'>Task Title</th>
+                  <th className='py-3.5 px-4'>Project</th>
+                  <th className='py-3.5 px-4'>Assignee</th>
+                  <th className='py-3.5 px-4'>Duration</th>
+                  <th className='py-3.5 px-4'>Due</th>
+                  <th className='py-3.5 px-4 text-right'>Action</th>
+                </tr>
+              </thead>
+              <tbody className='divide-y divide-gray-100 text-xs'>
+                {filteredTasks.map((task) => {
+                  const isPending = task.approvalStatus === 'Pending' || (!task.approvalStatus && task.status === 'Pending')
+                  const isApproved = task.approvalStatus === 'Approved'
+                  const isRejected = task.approvalStatus === 'Rejected'
+                  const duration = durationEdits[task._id] || { hours: 1, minutes: 0 }
+                  const totalEditedMins = (duration.hours || 0) * 60 + (duration.minutes || 0)
+                  const isSubmitting = submittingId === task._id
+                  const isOverdue = isPending && isDateOverdue(task.dueDate)
 
-            return (
-              <div
-                key={task._id}
-                className={`bg-white rounded-2xl border shadow-xs transition-shadow hover:shadow-md ${
-                  isPending
-                    ? 'border-amber-200/80 ring-1 ring-amber-100'
-                    : isApproved
-                      ? 'border-emerald-100'
-                      : 'border-gray-100'
-                }`}
-              >
-                <div className='p-5 md:p-6 space-y-4'>
-                  {/* Top Bar: Project, Priority, Status */}
-                  <div className='flex flex-wrap items-center justify-between gap-2'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                      <span className='px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100'>
-                        📁 {task.project?.projectName || 'Project Task'}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${
-                          PRIORITY_BADGES[task.priority] || PRIORITY_BADGES.Medium
-                        }`}
+                  return (
+                    <tr
+                      key={task._id}
+                      className='hover:bg-blue-50/20 transition-colors group'
+                    >
+                      {/* 1. Task Title */}
+                      <td className='py-3.5 px-4 max-w-[280px]'>
+                        <div className='flex items-center gap-2'>
+                          <span
+                            onClick={() => navigate(`/tasks/${task._id}`)}
+                            className='font-semibold text-gray-900 hover:text-blue-600 cursor-pointer truncate block'
+                            title={task.title}
+                          >
+                            {task.title}
+                          </span>
+                        </div>
+                        {isRejected && task.rejectionReason && (
+                          <p className='text-[11px] text-rose-600 mt-0.5 truncate' title={task.rejectionReason}>
+                            Reason: {task.rejectionReason}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* 2. Project */}
+                      <td className='py-3.5 px-4 whitespace-nowrap'>
+                        {task.project?.projectName ? (
+                          <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200'>
+                            📁 {task.project.projectName}
+                          </span>
+                        ) : (
+                          <span className='text-gray-400'>—</span>
+                        )}
+                      </td>
+
+                      {/* 3. Assignee */}
+                      <td className='py-3.5 px-4 whitespace-nowrap'>
+                        <div className='flex items-center gap-2.5'>
+                          <div className='w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 shadow-2xs'>
+                            {getInitials(task.assignedTo?.name)}
+                          </div>
+                          <div>
+                            <span className='font-semibold text-gray-900 block leading-tight'>
+                              {task.assignedTo?.name || 'Employee'}
+                            </span>
+                            {task.assignedTo?.designation?.title && (
+                              <span className='text-[10px] text-gray-400 block'>
+                                {task.assignedTo.designation.title}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* 4. Duration */}
+                      <td className='py-3.5 px-4 whitespace-nowrap'>
+                        {isPending && editingDurationId === task._id ? (
+                          <div className='flex items-center gap-1.5 animate-in fade-in duration-150'>
+                            <div className='inline-flex items-center bg-white border border-blue-500 ring-2 ring-blue-100 rounded-lg shadow-2xs overflow-hidden'>
+                              <input
+                                type='number'
+                                min='0'
+                                max='72'
+                                value={duration.hours}
+                                onChange={(e) => handleDurationChange(task._id, 'hours', e.target.value)}
+                                className='w-10 px-1 py-1 text-xs font-bold text-center text-gray-900 focus:outline-none'
+                                title='Edit duration hours'
+                                autoFocus
+                              />
+                              <span className='text-[11px] font-semibold text-gray-400 pr-1'>h</span>
+                              <span className='text-gray-200'>:</span>
+                              <input
+                                type='number'
+                                min='0'
+                                max='59'
+                                step='5'
+                                value={duration.minutes}
+                                onChange={(e) => handleDurationChange(task._id, 'minutes', e.target.value)}
+                                className='w-10 px-1 py-1 text-xs font-bold text-center text-gray-900 focus:outline-none'
+                                title='Edit duration minutes'
+                              />
+                              <span className='text-[11px] font-semibold text-gray-400 pr-1.5'>m</span>
+                            </div>
+
+                            {/* Done checkmark button */}
+                            <button
+                              type='button'
+                              onClick={() => setEditingDurationId(null)}
+                              className='p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-colors'
+                              title='Done'
+                            >
+                              ✓
+                            </button>
+
+                            {/* Quick presets */}
+                            <div className='hidden xl:flex items-center gap-1'>
+                              {[30, 60, 120, 240].map((mins) => (
+                                <button
+                                  key={mins}
+                                  type='button'
+                                  onClick={() => handleQuickDuration(task._id, mins)}
+                                  className={`px-1.5 py-0.5 text-[10px] font-semibold rounded border transition-colors ${
+                                    totalEditedMins === mins
+                                      ? 'bg-blue-600 text-white border-blue-600'
+                                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                                  }`}
+                                  title={`Set duration to ${mins < 60 ? `${mins}m` : `${mins / 60}h`}`}
+                                >
+                                  {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className='inline-flex items-center gap-1.5 group'>
+                            <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200'>
+                              ⏱️ {formatMinutes(totalEditedMins)}
+                            </span>
+                            {isPending && (
+                              <button
+                                type='button'
+                                onClick={() => setEditingDurationId(task._id)}
+                                className='p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-colors'
+                                title='Edit duration'
+                              >
+                                <PencilIcon className='w-3.5 h-3.5' />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 5. Due */}
+                      <td className='py-3.5 px-4 whitespace-nowrap'>
+                        {task.dueDate ? (
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs ${
+                              isOverdue
+                                ? 'text-rose-600 font-semibold'
+                                : 'text-gray-600'
+                            }`}
+                          >
+                            <span>📅</span> {formatDate(task.dueDate)}
+                            {isOverdue && (
+                              <span className='text-[10px] px-1 py-0.2 bg-rose-100 text-rose-700 rounded font-bold'>
+                                Overdue
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className='text-gray-400'>—</span>
+                        )}
+                      </td>
+
+                      {/* 6. Action */}
+                      <td className='py-3.5 px-4 whitespace-nowrap text-right'>
+                        {isPending ? (
+                          <div className='inline-flex items-center justify-end gap-1.5'>
+                            <button
+                              type='button'
+                              onClick={() => {
+                                setRejectingTask(task)
+                                setRejectReason('')
+                              }}
+                              disabled={isSubmitting}
+                              className='px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:text-rose-600 hover:bg-rose-50 text-xs font-semibold transition-colors disabled:opacity-50'
+                              title='Reject task'
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type='button'
+                              onClick={() => handleApprove(task)}
+                              disabled={isSubmitting || totalEditedMins <= 0}
+                              className='px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-2xs flex items-center gap-1.5 disabled:opacity-50'
+                              title='Approve task and immediately start active timer'
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <span className='w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin' />
+                                  <span>Starting…</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>▶</span>
+                                  <span>Approve & Start</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : isApproved ? (
+                          <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200'>
+                            <span className='w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse' />
+                            Approved · Timer Started
+                          </span>
+                        ) : (
+                          <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200'>
+                            ✕ Rejected
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View (Showing only Task Title, Project, Assignee, Duration, Due, Action) */}
+          <div className='md:hidden divide-y divide-gray-100'>
+            {filteredTasks.map((task) => {
+              const isPending = task.approvalStatus === 'Pending' || (!task.approvalStatus && task.status === 'Pending')
+              const isApproved = task.approvalStatus === 'Approved'
+              const isRejected = task.approvalStatus === 'Rejected'
+              const duration = durationEdits[task._id] || { hours: 1, minutes: 0 }
+              const totalEditedMins = (duration.hours || 0) * 60 + (duration.minutes || 0)
+              const isSubmitting = submittingId === task._id
+              const isOverdue = isPending && isDateOverdue(task.dueDate)
+
+              return (
+                <div key={task._id} className='p-4 space-y-3'>
+                  {/* Title & Project */}
+                  <div className='flex items-start justify-between gap-2'>
+                    <div>
+                      <h4
+                        onClick={() => navigate(`/tasks/${task._id}`)}
+                        className='font-bold text-gray-900 text-sm hover:text-blue-600 cursor-pointer'
                       >
-                        {task.priority || 'Medium'} Priority
+                        {task.title}
+                      </h4>
+                      {task.project?.projectName && (
+                        <span className='inline-block text-[11px] font-medium text-slate-600 mt-0.5'>
+                          📁 {task.project.projectName}
+                        </span>
+                      )}
+                    </div>
+                    {isApproved && (
+                      <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800'>
+                        Approved
                       </span>
-                      {isPending && (
-                        <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1'>
-                          <span>⏳</span> Awaiting Manager Approval
-                        </span>
-                      )}
-                      {isApproved && (
-                        <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1'>
-                          <span>✅</span> Approved · Timer Started
-                        </span>
-                      )}
-                      {isRejected && (
-                        <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1'>
-                          <span>✕</span> Rejected
-                        </span>
-                      )}
-                    </div>
-
-                    <div className='text-xs text-gray-400'>
-                      Submitted: <span className='font-medium text-gray-600'>{formatDateTime(task.createdAt)}</span>
-                    </div>
-                  </div>
-
-                  {/* Title & Description */}
-                  <div>
-                    <h3 className='text-lg font-bold text-gray-900 hover:text-blue-600 cursor-pointer' onClick={() => navigate(`/tasks/${task._id}`)}>
-                      {task.title}
-                    </h3>
-                    {task.description && (
-                      <p className='text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-3'>
-                        {task.description}
-                      </p>
+                    )}
+                    {isRejected && (
+                      <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800'>
+                        Rejected
+                      </span>
                     )}
                   </div>
 
-                  {/* Assignee / Requester Row */}
-                  <div className='flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100'>
-                    <div className='flex items-center gap-3'>
-                      <div className='w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs'>
+                  {/* Assignee & Due */}
+                  <div className='flex items-center justify-between text-xs text-gray-600 pt-1'>
+                    <div className='flex items-center gap-2'>
+                      <div className='w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0'>
                         {getInitials(task.assignedTo?.name)}
                       </div>
-                      <div>
-                        <div className='flex items-center gap-2'>
-                          <span className='text-sm font-semibold text-gray-900'>
-                            {task.assignedTo?.name || 'Employee'}
-                          </span>
-                          {task.assignedTo?.employeeCode && (
-                            <span className='text-xs font-mono text-gray-400'>
-                              ({task.assignedTo.employeeCode})
-                            </span>
-                          )}
-                        </div>
-                        <p className='text-xs text-gray-500'>
-                          {task.assignedTo?.designation?.title || task.assignedTo?.department || 'Team Member'}
-                          {task.assignedTo?.email && ` · ${task.assignedTo.email}`}
-                        </p>
-                      </div>
+                      <span className='font-medium text-gray-900'>
+                        {task.assignedTo?.name || 'Employee'}
+                      </span>
                     </div>
 
-                    <div className='flex items-center gap-4 text-xs text-gray-500'>
-                      {task.dueDate && (
-                        <div>
-                          <span className='text-gray-400'>Due Date:</span>{' '}
-                          <span className='font-semibold text-gray-700'>{formatDate(task.dueDate)}</span>
-                        </div>
-                      )}
-                      <div>
-                        <span className='text-gray-400'>Requested Duration:</span>{' '}
-                        <span className='font-semibold text-gray-700'>
-                          {formatMinutes(task.estimatedDurationMinutes) || 'Not specified'}
+                    <div className='text-right'>
+                      {task.dueDate ? (
+                        <span className={`text-[11px] ${isOverdue ? 'text-rose-600 font-bold' : 'text-gray-500'}`}>
+                          Due: {formatDate(task.dueDate)}
                         </span>
-                      </div>
+                      ) : (
+                        <span className='text-gray-400 text-[11px]'>No due date</span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Rejection Note Display */}
-                  {isRejected && task.rejectionReason && (
-                    <div className='p-3 rounded-xl bg-rose-50 border border-rose-100 text-xs text-rose-800'>
-                      <span className='font-bold'>Rejection Reason:</span> {task.rejectionReason}
-                    </div>
-                  )}
-
-                  {/* Approval Actions Section (for Pending tasks) */}
-                  {isPending && (
-                    <div className='mt-4 p-4 rounded-xl bg-amber-50/60 border border-amber-200/70 space-y-3'>
-                      <div className='flex flex-wrap items-center justify-between gap-2'>
-                        <div>
-                          <span className='text-xs font-bold text-amber-900 uppercase tracking-wider'>
-                            Review & Set Task Duration
-                          </span>
-                          <p className='text-xs text-amber-800 mt-0.5'>
-                            You can edit this task duration. Once approved, the active task timer will immediately start for {task.assignedTo?.name || 'the employee'}.
-                          </p>
-                        </div>
-                        <span className='px-2.5 py-1 rounded-lg bg-amber-200/70 text-amber-900 text-xs font-bold'>
-                          Approved Duration: {formatMinutes(totalEditedMins)}
-                        </span>
-                      </div>
-
-                      {/* Duration Editor Controls */}
-                      <div className='flex flex-wrap items-center gap-3'>
-                        <div className='flex items-center gap-1.5'>
-                          <label className='text-xs font-semibold text-gray-700'>Hours:</label>
+                  {/* Duration row */}
+                  <div className='flex items-center justify-between gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200'>
+                    <span className='text-xs font-semibold text-gray-700'>Duration:</span>
+                    {isPending && editingDurationId === task._id ? (
+                      <div className='flex items-center gap-1.5'>
+                        <div className='inline-flex items-center bg-white border border-blue-400 ring-1 ring-blue-100 rounded-md px-1.5 py-0.5 text-xs font-bold'>
                           <input
                             type='number'
                             min='0'
                             max='72'
                             value={duration.hours}
                             onChange={(e) => handleDurationChange(task._id, 'hours', e.target.value)}
-                            className='w-16 px-2 py-1 text-xs font-bold text-center bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none'
+                            className='w-8 text-center focus:outline-none'
+                            autoFocus
                           />
-                        </div>
-
-                        <div className='flex items-center gap-1.5'>
-                          <label className='text-xs font-semibold text-gray-700'>Mins:</label>
+                          <span className='text-gray-400 font-normal mr-1'>h</span>
                           <input
                             type='number'
                             min='0'
@@ -599,99 +702,76 @@ const TaskApprovalView = () => {
                             step='5'
                             value={duration.minutes}
                             onChange={(e) => handleDurationChange(task._id, 'minutes', e.target.value)}
-                            className='w-16 px-2 py-1 text-xs font-bold text-center bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none'
+                            className='w-8 text-center focus:outline-none'
                           />
+                          <span className='text-gray-400 font-normal'>m</span>
                         </div>
-
-                        {/* Quick Buttons */}
-                        <div className='flex items-center gap-1'>
-                          {[
-                            { label: '30m', mins: 30 },
-                            { label: '1h', mins: 60 },
-                            { label: '2h', mins: 120 },
-                            { label: '4h', mins: 240 },
-                            { label: '8h', mins: 480 },
-                          ].map((btn) => (
-                            <button
-                              key={btn.label}
-                              type='button'
-                              onClick={() => handleQuickDuration(task._id, btn.mins)}
-                              className={`px-2 py-1 text-[11px] font-semibold rounded-md transition-colors ${
-                                totalEditedMins === btn.mins
-                                  ? 'bg-blue-600 text-white shadow-xs'
-                                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
-                              }`}
-                            >
-                              {btn.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className='flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-amber-200/50'>
                         <button
                           type='button'
-                          onClick={() => {
-                            setRejectingTask(task)
-                            setRejectReason('')
-                          }}
-                          disabled={isSubmitting}
-                          className='px-3.5 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors disabled:opacity-50'
+                          onClick={() => setEditingDurationId(null)}
+                          className='p-1 rounded bg-blue-600 text-white font-bold text-xs'
+                          title='Done'
                         >
-                          ✕ Reject
-                        </button>
-
-                        <button
-                          type='button'
-                          onClick={() => handleApprove(task)}
-                          disabled={isSubmitting || totalEditedMins <= 0}
-                          className='px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm hover:shadow flex items-center gap-2 disabled:opacity-50'
-                        >
-                          {isSubmitting ? (
-                            <>
-                              <div className='w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin' />
-                              <span>Approving…</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>▶</span>
-                              <span>Approve & Start Timer ({formatMinutes(totalEditedMins)})</span>
-                            </>
-                          )}
+                          ✓
                         </button>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Details / Timer indicator for Approved tasks */}
-                  {isApproved && (
-                    <div className='p-3 rounded-xl bg-emerald-50/60 border border-emerald-200/60 flex flex-wrap items-center justify-between gap-2 text-xs'>
-                      <div className='flex items-center gap-2'>
-                        <span className='w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping' />
-                        <span className='font-semibold text-emerald-900'>Active Timer Running</span>
-                        <span className='text-emerald-700'>
-                          · Started {formatDateTime(task.startedAt || task.updatedAt)}
+                    ) : (
+                      <div className='flex items-center gap-1.5'>
+                        <span className='text-xs font-bold text-gray-800'>
+                          ⏱️ {formatMinutes(totalEditedMins)}
                         </span>
+                        {isPending && (
+                          <button
+                            type='button'
+                            onClick={() => setEditingDurationId(task._id)}
+                            className='p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                            title='Edit duration'
+                          >
+                            <PencilIcon className='w-3.5 h-3.5' />
+                          </button>
+                        )}
                       </div>
-                      <div className='text-emerald-800 font-semibold'>
-                        Duration: {formatMinutes(task.estimatedDurationMinutes)}
-                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions for Pending */}
+                  {isPending && (
+                    <div className='flex items-center justify-end gap-2 pt-1'>
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setRejectingTask(task)
+                          setRejectReason('')
+                        }}
+                        disabled={isSubmitting}
+                        className='px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50'
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type='button'
+                        onClick={() => handleApprove(task)}
+                        disabled={isSubmitting || totalEditedMins <= 0}
+                        className='px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs flex items-center gap-1 disabled:opacity-50'
+                      >
+                        <span>▶</span>
+                        <span>Approve & Start</span>
+                      </button>
                     </div>
                   )}
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
       )}
 
       {/* Rejection Modal */}
       {rejectingTask && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs'>
-          <div className='bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-2xs'>
+          <div className='bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4'>
             <div className='flex items-center justify-between'>
-              <h3 className='text-lg font-bold text-gray-900'>Reject Task</h3>
+              <h3 className='text-base font-bold text-gray-900'>Reject Task</h3>
               <button
                 type='button'
                 onClick={() => setRejectingTask(null)}
@@ -711,7 +791,7 @@ const TaskApprovalView = () => {
                 rows={3}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
-                placeholder='E.g. Task duration is too high, project scope needs clarification, duplicate task…'
+                placeholder='E.g. Duration too high, project scope needs clarification…'
                 className='w-full p-2.5 text-xs rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-rose-500 bg-gray-50/50'
               />
             </div>
@@ -722,7 +802,7 @@ const TaskApprovalView = () => {
                 'Duration needs adjustment',
                 'Requirements unclear',
                 'Duplicate task',
-                'Assigned to wrong project',
+                'Wrong project',
               ].map((reason) => (
                 <button
                   key={reason}
@@ -740,7 +820,7 @@ const TaskApprovalView = () => {
                 type='button'
                 onClick={() => setRejectingTask(null)}
                 disabled={submittingId === rejectingTask._id}
-                className='px-4 py-2 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50'
+                className='px-3.5 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50'
               >
                 Cancel
               </button>
@@ -748,7 +828,7 @@ const TaskApprovalView = () => {
                 type='button'
                 onClick={handleRejectSubmit}
                 disabled={submittingId === rejectingTask._id}
-                className='px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm'
+                className='px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-2xs'
               >
                 {submittingId === rejectingTask._id ? 'Rejecting…' : 'Confirm Rejection'}
               </button>
