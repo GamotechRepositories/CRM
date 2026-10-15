@@ -82,20 +82,24 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
       _error = null;
     });
 
+    final isSelf = widget.selfMode || !RoleAccess.canAssignTaskToOthers(session.user);
+
     try {
-      final projectsFuture = widget.selfMode
+      final projectsFuture = isSelf
           ? api.fetchMyProjects(session.userId)
           : api.fetchProjects();
-      final employeesFuture = widget.selfMode ? Future.value(<Map<String, dynamic>>[]) : api.fetchEmployees();
+      final employeesFuture = isSelf ? Future.value(<Map<String, dynamic>>[]) : api.fetchEmployees();
       final results = await Future.wait([projectsFuture, employeesFuture]);
       if (!mounted) return;
       setState(() {
         _projects = results[0];
         _employees = results[1];
-        _assigneeId = widget.selfMode ? session.userId : _assigneeId;
+        _assigneeId = isSelf ? session.userId : _assigneeId;
         _loadingData = false;
       });
-      await _loadAvailability();
+      if (!isSelf) {
+        await _loadAvailability();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -137,8 +141,9 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
       return;
     }
 
+    final isSelf = widget.selfMode || !RoleAccess.canAssignTaskToOthers(session.user);
     final title = _titleCtrl.text.trim();
-    final assignee = widget.selfMode ? userId : _assigneeId;
+    final assignee = isSelf ? userId : _assigneeId;
     if (_projectId == null || _projectId!.isEmpty || title.isEmpty || assignee == null || assignee.isEmpty) {
       setState(() => _error = 'Project, title, and assignee are required');
       return;
@@ -215,47 +220,22 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AuthSession>();
-    if (!RoleAccess.canAssignTask(session.user)) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.lock_outline, size: 48, color: Color(0xFFF59E0B)),
-              const SizedBox(height: 12),
-              const Text('Access Restricted', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text(
-                'Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => AppNavScope.navigate(context, '/tasks'),
-                child: const Text('Back to Tasks'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (_loadingData) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
+
+    final session = context.watch<AuthSession>();
+    final isSelf = widget.selfMode || !RoleAccess.canAssignTaskToOthers(session.user);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 24),
       children: [
         Text(
-          widget.selfMode ? 'Create My Task' : 'Assign Task',
+          isSelf ? 'Create My Task' : 'Assign Task',
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
         ),
         Text(
-          widget.selfMode
+          isSelf
               ? 'Create and schedule your own task on a project you belong to.'
               : 'Assign a task with duration and schedule for an employee.',
           style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), height: 1.35),
@@ -303,8 +283,8 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
             decoration: _inputDecoration('Task description…'),
           ),
         ),
-        if (!widget.selfMode) _buildAssigneeField(),
-        if (widget.selfMode)
+        if (!isSelf) _buildAssigneeField(),
+        if (isSelf)
           _field(
             label: 'Assignee',
             child: Container(
@@ -316,8 +296,8 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Text(
-                context.watch<AuthSession>().userName.isEmpty ? 'You' : context.watch<AuthSession>().userName,
-                style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
+                session.userName.isEmpty ? 'You' : session.userName,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF334155), fontWeight: FontWeight.w600),
               ),
             ),
           ),

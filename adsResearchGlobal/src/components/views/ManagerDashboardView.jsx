@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import { getAllReporteeIds, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const PROJECT_COLORS = {
   'In Progress': '#3b82f6',
@@ -172,6 +173,11 @@ const ManagerDashboardView = () => {
     load()
   }, [])
 
+  const reporteeIds = useMemo(
+    () => getAllReporteeIds(employees, user?._id),
+    [employees, user?._id]
+  )
+
   const stats = useMemo(() => {
     const leadsThisMonth = leads.filter((l) => isThisMonth(l.createdAt)).length
     const leadsLastMonth = leads.filter((l) => isLastMonth(l.createdAt)).length
@@ -320,6 +326,15 @@ const ManagerDashboardView = () => {
   const designation = user?.designation?.title || 'Manager'
   const totalTasks = tasks.length
 
+  const pendingApprovalCount = useMemo(() => {
+    return tasks.filter((t) => {
+      const isPending = t.approvalStatus === 'Pending' || (!t.approvalStatus && t.status === 'Pending')
+      if (!isPending) return false
+      const assigneeId = refEmployeeId(t.assignedTo)
+      return reporteeIds.has(assigneeId)
+    }).length
+  }, [tasks, reporteeIds])
+
   return (
     <div className='p-6 md:p-8 w-full bg-[#f8f9fa] min-h-full'>
       <div className='flex flex-wrap items-start justify-between gap-4 mb-6'>
@@ -330,16 +345,29 @@ const ManagerDashboardView = () => {
             <span className='text-gray-400 ml-2'>· {designation}</span>
           </p>
         </div>
-        <div className='flex items-center gap-2'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <button
+            type='button'
+            onClick={() => navigate('/assign-task')}
+            className='px-3.5 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm flex items-center gap-1.5'
+          >
+            <span>+</span> Assign Task
+          </button>
+          <button
+            type='button'
+            onClick={() => navigate('/task-approvals')}
+            className='px-3.5 py-2 text-sm font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 shadow-sm flex items-center gap-1.5'
+          >
+            <span>⏳</span> Task Approval
+            {pendingApprovalCount > 0 && (
+              <span className='px-1.5 py-0.5 text-xs rounded-full bg-white text-amber-700 font-bold'>
+                {pendingApprovalCount}
+              </span>
+            )}
+          </button>
           <div className='text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm'>
             {getMonthRangeLabel()}
           </div>
-          <button
-            type='button'
-            className='text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm hover:bg-gray-50 flex items-center gap-2'
-          >
-            <span>⚙</span> Filters
-          </button>
         </div>
       </div>
 

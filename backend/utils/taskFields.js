@@ -39,6 +39,24 @@ export const getTaskDurationAndRatingFields = (employeeRef) => ({
     type: Date,
     default: null,
   },
+  approvalStatus: {
+    type: String,
+    enum: ['None', 'Pending', 'Approved', 'Rejected'],
+    default: 'None',
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: employeeRef,
+    default: null,
+  },
+  approvedAt: {
+    type: Date,
+    default: null,
+  },
+  rejectionReason: {
+    type: String,
+    default: '',
+  },
   rating: {
     score: { type: Number, min: 1, max: 5, default: null },
     title: { type: String, default: '' },

@@ -257,8 +257,9 @@ class RoleAccess {
     return isSalesDepartment(user);
   }
 
-  /// Only Team Leaders (TLs), Managers, Admin, and Super Admin can assign tasks.
-  static bool canAssignTask(Map<String, dynamic>? user) {
+  /// Only Team Leaders (TLs), Managers, Admin, and Super Admin can assign tasks to other employees.
+  /// Normal employees can only assign tasks to themselves.
+  static bool canAssignTaskToOthers(Map<String, dynamic>? user) {
     if (user == null) return false;
     if (isAdminUser(user)) return true;
     if (isManager(user)) return true;

@@ -76,11 +76,16 @@ export const createTask = async (req, res) => {
     }
 
     const assigner = await Employee.findById(assignedBy).populate('designation');
-    if (!assigner || !canEmployeeAssignTasks(assigner)) {
+    const isManagerOrAdmin = Boolean(assigner && canEmployeeAssignTasks(assigner));
+
+    const isAssigningToOthers = assigneeIds.some((id) => String(id) !== String(assignedBy));
+    if (isAssigningToOthers && !isManagerOrAdmin) {
       return res.status(403).json({
-        message: 'Only Team Leaders, Managers, Admin, and Super Admin have the authority to assign tasks.',
+        message: 'Only Team Leaders, Managers, Admin, and Super Admin have the authority to assign tasks to other employees.',
       });
     }
+
+    const requiresApproval = !isManagerOrAdmin;
 
     await Promise.all(assigneeIds.map((employeeId) => assertEmployeeAvailableForTask(Task, employeeId)));
 
@@ -178,7 +183,7 @@ export const createTask = async (req, res) => {
       });
     }
 
-    const initialStatus = status || 'Pending';
+    const initialStatus = requiresApproval ? 'Pending' : (status || 'Pending');
     const createdTasks = [];
     for (const employeeId of assigneeIds) {
       if (initialStatus === 'In Progress') {
@@ -196,32 +201,63 @@ export const createTask = async (req, res) => {
         assignedTo: employeeId,
         assignedBy,
         status: initialStatus,
+        approvalStatus: requiresApproval ? 'Pending' : 'None',
         priority: priority || 'Medium',
         dueDate: dueDate ? new Date(dueDate) : undefined,
         scheduledStartAt: scheduledStartAt || undefined,
         scheduledEndAt: scheduledEndAt || undefined,
         estimatedDurationMinutes: estimatedDurationMinutes || null,
-        completedAt: initialStatus === 'Completed' ? new Date() : null,
+        completedAt: !requiresApproval && initialStatus === 'Completed' ? new Date() : null,
         isRecurringTemplate: false,
         recurrenceEnabled: false,
         ...applyTaskStatusTiming({ existingStatus: null, nextStatus: initialStatus }),
       });
       await task.save();
       createdTasks.push(task);
-      await handleUrgentTaskAssigned({ Task, task });
+      if (!requiresApproval) {
+        await handleUrgentTaskAssigned({ Task, task });
+      }
     }
     await syncClientProfileByProjectId(project);
     const populatedTasks = await Task.find({ _id: { $in: createdTasks.map((t) => t._id) } })
       .populate('project')
-      .populate('assignedTo')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email phone department designation reportingManager employeeCode profilePhoto',
+        populate: [{ path: 'designation' }, { path: 'reportingManager', select: 'name email' }],
+      })
       .populate('assignedBy')
+      .populate('approvedBy', 'name designation')
       .sort({ createdAt: -1 });
+
+    if (requiresApproval) {
+      try {
+        const assignerDoc = await Employee.findById(assignedBy).select('name reportingManager');
+        if (assignerDoc?.reportingManager) {
+          await notificationService.notifyEmployee({
+            employeeId: assignerDoc.reportingManager,
+            type: 'task',
+            title: 'New Task Pending Approval',
+            message: `${assignerDoc.name} created task "${title}" that requires your approval.`,
+            link: '/task-approvals',
+            metadata: { taskId: createdTasks[0]?._id },
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('Failed to notify reporting manager:', err?.message);
+      }
+    }
+
     await Promise.all(
       populatedTasks.map((task) => runTaskNotificationSideEffects({ notificationService, updated: task }))
     );
     await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
     return res.status(201).json({
-      message: assigneeIds.length > 1 ? 'Tasks assigned successfully' : 'Task assigned successfully',
+      message: requiresApproval
+        ? 'Task submitted for manager approval. Timer will start once approved.'
+        : assigneeIds.length > 1
+          ? 'Tasks assigned successfully'
+          : 'Task assigned successfully',
       task: populatedTasks[0] || null,
       tasks: populatedTasks,
     });
@@ -236,22 +272,35 @@ export const createTask = async (req, res) => {
 
 export const getTasks = async (req, res) => {
   try {
-    const { projectId, employeeId, assignedBy } = req.query;
+    const { projectId, employeeId, assignedBy, approvalStatus } = req.query;
     const key = cacheKey(COMPANY_KEY, 'tasks', {
       projectId: String(projectId || ''),
       employeeId: String(employeeId || ''),
       assignedBy: String(assignedBy || ''),
+      approvalStatus: String(approvalStatus || ''),
     });
     const { data } = await withCache(key, CACHE_TTL.tasks, async () => {
     const filter = { isRecurringTemplate: { $ne: true } };
     if (projectId) filter.project = projectId;
     if (employeeId) filter.assignedTo = employeeId;
     if (assignedBy) filter.assignedBy = assignedBy;
+    if (approvalStatus) {
+      if (approvalStatus.includes(',')) {
+        filter.approvalStatus = { $in: approvalStatus.split(',').map((s) => s.trim()) };
+      } else {
+        filter.approvalStatus = approvalStatus;
+      }
+    }
 
     const tasks = await Task.find(filter)
       .populate('project')
-      .populate('assignedTo')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email phone department designation reportingManager employeeCode profilePhoto',
+        populate: [{ path: 'designation' }, { path: 'reportingManager', select: 'name email' }],
+      })
       .populate('assignedBy')
+      .populate('approvedBy', 'name designation')
       .populate('rating.ratedBy', 'name designation')
       .sort({ createdAt: -1 })
       .lean();
@@ -329,8 +378,13 @@ export const getTaskById = async (req, res) => {
         path: 'project',
         populate: { path: 'client', select: 'clientName clientNumber mailId businessType' },
       })
-      .populate('assignedTo')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email phone department designation reportingManager employeeCode profilePhoto',
+        populate: [{ path: 'designation' }, { path: 'reportingManager', select: 'name email' }],
+      })
       .populate('assignedBy')
+      .populate('approvedBy', 'name designation')
       .populate('rating.ratedBy', 'name designation');
     if (!task) return res.status(404).json({ message: 'Task not found' });
     res.status(200).json(task);
@@ -342,7 +396,7 @@ export const getTaskById = async (req, res) => {
 export const updateTask = async (req, res) => {
   try {
     const existing = await Task.findById(req.params.id).select(
-      'project status priority assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt pausedAt pausedByUrgentTask completedAt createdAt'
+      'project status priority assignedTo assignedBy title rating scheduledStartAt scheduledEndAt estimatedDurationMinutes startedAt pausedAt pausedByUrgentTask completedAt createdAt approvalStatus'
     );
     if (!existing) return res.status(404).json({ message: 'Task not found' });
 
@@ -350,6 +404,13 @@ export const updateTask = async (req, res) => {
       ? normalizeTaskStatus(req.body.status)
       : existing.status;
     const payload = normalizeTaskPayload(req.body);
+
+    if (existing.approvalStatus === 'Pending' && nextStatus === 'In Progress' && payload.approvalStatus !== 'Approved') {
+      return res.status(400).json({
+        message: 'This task is awaiting review & approval by your reporting manager before the timer can start.',
+      });
+    }
+
     if (req.body.status !== undefined) {
       payload.status = nextStatus;
       assertForwardOnlyStatusTransition(existing.status, nextStatus);
@@ -472,5 +533,154 @@ export const deleteTask = async (req, res) => {
     res.status(200).json({ message: 'Task deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting task', error });
+  }
+};
+
+export const approveTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = normalizeTaskPayload(req.body);
+    const {
+      estimatedDurationMinutes,
+      estimatedDurationHours,
+      scheduledStartAt,
+      scheduledEndAt,
+      approvedBy,
+    } = body;
+
+    const task = await Task.findById(id).populate('assignedTo');
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    const approverId = approvedBy || req.user?._id;
+    if (approverId) {
+      const approver = await Employee.findById(approverId).populate('designation');
+      if (approver && !canEmployeeAssignTasks(approver)) {
+        return res.status(403).json({
+          message: 'Only Team Leaders, Managers, Admin, and Super Admin have authority to approve tasks.',
+        });
+      }
+    }
+
+    let duration = task.estimatedDurationMinutes;
+    if (estimatedDurationMinutes !== undefined && estimatedDurationMinutes !== null) {
+      duration = Math.max(1, Number(estimatedDurationMinutes));
+    } else if (estimatedDurationHours !== undefined && estimatedDurationHours !== null) {
+      duration = Math.max(1, Math.round(Number(estimatedDurationHours) * 60));
+    }
+
+    const previousStatus = task.status;
+    task.approvalStatus = 'Approved';
+    task.approvedBy = approverId || null;
+    task.approvedAt = new Date();
+    task.rejectionReason = '';
+    if (duration != null) task.estimatedDurationMinutes = duration;
+    if (scheduledStartAt) task.scheduledStartAt = new Date(scheduledStartAt);
+    if (scheduledEndAt) task.scheduledEndAt = new Date(scheduledEndAt);
+
+    // Requirement: after approval the task timer should start
+    task.status = 'In Progress';
+    task.startedAt = new Date();
+    task.pausedAt = null;
+    task.pausedByUrgentTask = null;
+    task.pausedByMeeting = false;
+    task.pausedByBreak = false;
+
+    await task.save();
+    await handleUrgentTaskAssigned({ Task, task });
+
+    const populated = await Task.findById(id)
+      .populate('project')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email phone department designation reportingManager employeeCode profilePhoto',
+        populate: [{ path: 'designation' }, { path: 'reportingManager', select: 'name email' }],
+      })
+      .populate('assignedBy')
+      .populate('approvedBy', 'name designation')
+      .populate('rating.ratedBy', 'name designation');
+
+    await runTaskNotificationSideEffects({
+      notificationService,
+      existing: { status: previousStatus, approvalStatus: 'Pending' },
+      updated: populated,
+    });
+
+    try {
+      const assigneeId = task.assignedTo?._id || task.assignedTo;
+      if (assigneeId) {
+        await notificationService.notifyEmployee({
+          employeeId: assigneeId,
+          type: 'task',
+          title: 'Task Approved - Timer Started',
+          message: `Your task "${task.title}" has been approved by your manager and the timer has started!`,
+          link: `/tasks/${task._id}`,
+          metadata: { taskId: task._id },
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Failed to notify employee:', err?.message);
+    }
+
+    await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
+
+    return res.status(200).json({
+      message: 'Task approved successfully and timer started',
+      task: populated,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error approving task', error });
+  }
+};
+
+export const rejectTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectionReason, rejectedBy } = req.body;
+    const task = await Task.findById(id).populate('assignedTo');
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    task.approvalStatus = 'Rejected';
+    task.rejectionReason = rejectionReason || 'Rejected by reporting manager';
+    task.approvedBy = rejectedBy || req.user?._id || null;
+    task.approvedAt = new Date();
+    task.status = 'Cancelled';
+    task.startedAt = null;
+    task.pausedAt = null;
+
+    await task.save();
+
+    const populated = await Task.findById(id)
+      .populate('project')
+      .populate({
+        path: 'assignedTo',
+        select: 'name email phone department designation reportingManager employeeCode profilePhoto',
+        populate: [{ path: 'designation' }, { path: 'reportingManager', select: 'name email' }],
+      })
+      .populate('assignedBy')
+      .populate('approvedBy', 'name designation');
+
+    try {
+      const assigneeId = task.assignedTo?._id || task.assignedTo;
+      if (assigneeId) {
+        await notificationService.notifyEmployee({
+          employeeId: assigneeId,
+          type: 'task',
+          title: 'Task Rejected',
+          message: `Your task "${task.title}" was not approved. Reason: ${task.rejectionReason}`,
+          link: `/tasks/${task._id}`,
+          metadata: { taskId: task._id },
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Failed to notify employee:', err?.message);
+    }
+
+    await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
+    return res.status(200).json({
+      message: 'Task rejected',
+      task: populated,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error rejecting task', error });
   }
 };

@@ -46,6 +46,8 @@ export const getSidebarNav = ({
             alwaysVisible: true,
             children: [
               { id: 'team-members', label: 'Team Members', path: '/my-team' },
+              { id: 'assign-task', label: 'Assign Task', path: '/assign-task' },
+              { id: 'task-approvals', label: 'Task Approval', path: '/task-approvals' },
               { id: 'team-leave', label: 'Leave', path: '/leave' },
             ],
           },
@@ -83,6 +85,7 @@ export const getSidebarNav = ({
       children: [
         { id: 'projects-list', label: 'Projects', path: '/projects', requiresProjectAccess: true },
         { id: 'tasks', label: 'Tasks', path: '/tasks', requiresFullAccess: true },
+        { id: 'task-approvals', label: 'Task Approval', path: '/task-approvals', requiresFullAccess: true },
         { id: 'milestones', label: 'Milestones', path: '/module/milestones', requiresFullAccess: true },
         { id: 'timesheets', label: 'Timesheets', path: '/module/timesheets' },
       ],
@@ -213,6 +216,7 @@ export const getSidebarNav = ({
         { id: 'my-profile', label: 'My Profile', path: '/my-profile' },
         { id: 'salary-slips', label: 'Salary Slips', path: '/salary-slips' },
         { id: 'my-tasks', label: 'My Tasks', path: '/my-tasks' },
+        { id: 'assign-task', label: 'Assign Task', path: '/assign-task' },
         { id: 'leave-calendar', label: 'Leave Calendar', path: '/leave-calendar' },
         { id: 'my-leaves', label: 'My Leaves', path: '/leave' },
         { id: 'my-attendance', label: 'My Attendance', path: '/attendance' },

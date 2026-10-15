@@ -326,6 +326,7 @@ const TasksView = ({ isMyTasks = false }) => {
 
   const isPendingAssigneeAcceptance = (task) => {
     if (!task || !user?._id || task.source === 'social_media') return false
+    if (task.approvalStatus === 'Pending') return false
     const assigneeId = task.assignedTo?._id || task.assignedTo
     return String(assigneeId) === String(user._id) && normalizeTaskStatus(task.status) === 'Pending'
   }
@@ -460,9 +461,9 @@ const TasksView = ({ isMyTasks = false }) => {
               : 'Tasks assigned to you by project managers and team leads.'}
           </p>
         </div>
-        {canAssignTask() && (
+        {(canAssignTask() || isMyTasks || Boolean(user?._id)) && (
           <button
-            onClick={() => navigate('/assign-task')}
+            onClick={() => navigate(canAssignTask() ? '/assign-task' : '/assign-task?self=1')}
             className='bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-semibold transition-colors'
           >
             + New Task
@@ -866,7 +867,29 @@ const TasksView = ({ isMyTasks = false }) => {
               </div>
               <div className='flex justify-between items-center py-2 border-b border-gray-100'>
                 <span className='text-sm text-gray-500'>Status</span>
-                {isPendingAssigneeAcceptance(viewTask) ? (
+                {viewTask.approvalStatus === 'Pending' ? (
+                  <div className='flex flex-col items-end gap-1'>
+                    <span className='px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200'>
+                      ⏳ Pending Manager Approval
+                    </span>
+                    {canAssignTask() ? (
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setViewTask(null)
+                          navigate('/task-approvals')
+                        }}
+                        className='px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold'
+                      >
+                        Review & Approve
+                      </button>
+                    ) : (
+                      <span className='text-[11px] text-gray-500 text-right'>
+                        Timer starts once manager approves
+                      </span>
+                    )}
+                  </div>
+                ) : isPendingAssigneeAcceptance(viewTask) ? (
                   <div className='flex flex-col items-end gap-1'>
                     <button
                       type='button'

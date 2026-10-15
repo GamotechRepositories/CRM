@@ -442,6 +442,13 @@ const TeamLeaderDashboardView = () => {
           >
             <span>+</span> Create Task
           </button>
+          <button
+            type='button'
+            onClick={() => navigate('/task-approvals')}
+            className='bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg px-4 py-2 shadow-sm flex items-center gap-2'
+          >
+            <span>⏳</span> Task Approval
+          </button>
         </div>
       </div>
 

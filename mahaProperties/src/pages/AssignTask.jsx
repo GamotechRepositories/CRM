@@ -126,10 +126,10 @@ const AssignTask = () => {
   const [startTimeManual, setStartTimeManual] = useState(false)
 
   const isEditMode = Boolean(taskIdFromUrl)
+  const isSelfTaskMode = !canAssignTask() || selfFromUrl === '1'
   const availabilityDate = form.dueDate || form.recurrenceStartDate || localDateKey()
-  const isSelfTaskMode = false
   const restrictProjectsToMyMembership =
-    scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
+    isSelfTaskMode || scopeFromUrl === 'my-projects' || selfFromUrl === '1' || fromMyTasks
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -144,6 +144,7 @@ const AssignTask = () => {
       }
     }
     const fetchEmployees = async () => {
+      if (isSelfTaskMode) return
       try {
         const res = await api.get('/employees')
         const list = Array.isArray(res.data) ? res.data : res.data?.data || []
@@ -154,7 +155,7 @@ const AssignTask = () => {
     }
     fetchProjects()
     fetchEmployees()
-  }, [restrictProjectsToMyMembership, user?._id])
+  }, [restrictProjectsToMyMembership, user?._id, isSelfTaskMode])
 
   useEffect(() => {
     if (projectIdFromUrl) setForm((f) => ({ ...f, project: projectIdFromUrl }))
@@ -298,12 +299,12 @@ const AssignTask = () => {
     .filter(Boolean)
 
   useEffect(() => {
-    if (isEditMode || !form.assignedTo) return
+    if (isEditMode || isSelfTaskMode || !form.assignedTo) return
     const avail = availabilityMap[String(form.assignedTo)]
     if (avail?.isAssignable === false) {
       setForm((f) => ({ ...f, assignedTo: '' }))
     }
-  }, [availabilityMap, form.assignedTo, isEditMode])
+  }, [availabilityMap, form.assignedTo, isEditMode, isSelfTaskMode])
 
   useEffect(() => {
     if (!isSelfTaskMode || !user?._id || isEditMode) return
@@ -369,7 +370,7 @@ const AssignTask = () => {
       setError('Please enter a start time')
       return
     }
-    const blockedAssignee = selectedAssignees.find((employeeId) => {
+    const blockedAssignee = !isSelfTaskMode && selectedAssignees.find((employeeId) => {
       const avail = availabilityMap[String(employeeId)]
       if (!avail || avail.isAssignable !== false) return false
       // Allow keeping the same assignee when editing even if currently marked busy
@@ -448,27 +449,6 @@ const AssignTask = () => {
     return <div className='p-8 text-sm text-gray-600'>Loading task…</div>
   }
 
-  if (!canAssignTask()) {
-    return (
-      <div className='max-w-xl mx-auto p-8 mt-12 bg-white rounded-2xl border border-gray-100 shadow-sm text-center'>
-        <div className='w-14 h-14 mx-auto rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl mb-4'>
-          ⚠️
-        </div>
-        <h2 className='text-lg font-bold text-gray-900'>Access Restricted</h2>
-        <p className='text-sm text-gray-600 mt-2'>
-          Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks.
-        </p>
-        <button
-          type='button'
-          onClick={() => navigate('/tasks')}
-          className='mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium'
-        >
-          Back to Tasks
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div className='p-8 w-full'>
       <div className='mb-8'>
@@ -534,12 +514,14 @@ const AssignTask = () => {
             <label className='block text-sm font-medium text-gray-700'>
               {isSelfTaskMode ? 'Assignee' : 'Assign To *'}
             </label>
-            <span className='text-xs text-gray-500'>
-              {availabilityLoading ? 'Checking availability…' : `Availability for ${availabilityDate}`}
-            </span>
+            {!isSelfTaskMode && (
+              <span className='text-xs text-gray-500'>
+                {availabilityLoading ? 'Checking availability…' : `Availability for ${availabilityDate}`}
+              </span>
+            )}
           </div>
           {isSelfTaskMode ? (
-            <div className='w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-700'>
+            <div className='w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-800 font-medium'>
               {user?.name || 'Current user'}
             </div>
           ) : (

@@ -27,6 +27,7 @@ import AttendanceView from '../components/views/AttendanceView'
 import AddLead from '../pages/AddLead'
 import Settings from '../pages/Settings'
 import AssignTask from '../pages/AssignTask'
+import TaskApproval from '../pages/TaskApproval'
 import TaskDetailPage from '../pages/TaskDetailPage'
 import CollaboratorsView from '../components/views/CollaboratorsView'
 import AddCollaborator from '../pages/AddCollaborator'
@@ -94,6 +95,8 @@ const router = createBrowserRouter([
             { path: 'my-projects/:projectId/dashboard', element: <ProjectDashboardView /> },
             { path: 'add-project', element: <AddProject /> },
             { path: 'assign-task', element: <AssignTask /> },
+            { path: 'task-approvals', element: <TaskApproval /> },
+            { path: 'task-approval', element: <TaskApproval /> },
             { path: 'reports', element: <ReportsView /> },
             { path: 'tasks', element: <TasksView /> },
             { path: 'tasks/:taskId', element: <TaskDetailPage /> },

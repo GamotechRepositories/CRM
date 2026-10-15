@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import ProjectsDashboardLayout from './projects/ProjectsDashboardLayout'
 
 const MyProjectsView = () => {
-  const { user, canAssignTask } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -42,7 +42,7 @@ const MyProjectsView = () => {
       error={error}
       showExport={false}
       canAddProject={false}
-      canAssignTask={canAssignTask()}
+      canAssignTask={Boolean(user?._id)}
       canEditProject={false}
       onAddProject={() => navigate('/my-projects')}
       onOpenProject={(p) => navigate(`/my-projects/${p._id}/dashboard`)}

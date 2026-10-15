@@ -8,6 +8,7 @@ import ManagerDashboardView from './ManagerDashboardView'
 import TeamLeaderDashboardView from './TeamLeaderDashboardView'
 import SiteCoordinatorDashboardView from './SiteCoordinatorDashboardView'
 import AssignedTasksTab from './AssignedTasksTab'
+import TaskApprovalView from './TaskApprovalView'
 import ChatFloatingButton from '../ChatFloatingButton'
 import {
   getDashboardKind,
@@ -19,7 +20,17 @@ import {
 
 const DashboardTabs = ({ children }) => {
   const { canAssignTask } = useAuth()
-  const [tab, setTab] = useState('overview')
+  const location = useLocation()
+  const searchParams = new URLSearchParams(location.search)
+  const initialTab = searchParams.get('tab') === 'approval' ? 'approval' : (searchParams.get('tab') === 'assigned' ? 'assigned' : 'overview')
+  const [tab, setTab] = useState(initialTab)
+
+  useEffect(() => {
+    const qTab = searchParams.get('tab')
+    if (qTab === 'approval' || qTab === 'assigned' || qTab === 'overview') {
+      setTab(qTab)
+    }
+  }, [location.search])
 
   if (!canAssignTask()) return children
 
@@ -49,9 +60,20 @@ const DashboardTabs = ({ children }) => {
           >
             Assigned Tasks
           </button>
+          <button
+            type='button'
+            onClick={() => setTab('approval')}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold border border-b-0 transition-colors ${
+              tab === 'approval'
+                ? 'bg-white text-blue-700 border-gray-200'
+                : 'bg-transparent text-gray-600 border-transparent hover:text-gray-900'
+            }`}
+          >
+            Task Approval
+          </button>
         </div>
       </div>
-      {tab === 'assigned' ? <AssignedTasksTab /> : children}
+      {tab === 'assigned' ? <AssignedTasksTab /> : tab === 'approval' ? <TaskApprovalView /> : children}
     </div>
   )
 }

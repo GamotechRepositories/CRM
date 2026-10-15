@@ -87,7 +87,10 @@ export const canManageClientsForUser = (user) => {
   return canAddProjectForUser(user)
 }
 
-/** Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks. */
+/**
+ * Only Team Leaders (TLs), Managers, Admin, and Super Admin have the authority to assign tasks to other employees.
+ * Normal employees can only assign tasks to themselves.
+ */
 export const canAssignTaskForUser = (user) => {
   if (!user) return false
   if (isAdminUser(user)) return true
@@ -242,4 +245,15 @@ export const getSidebarSectionsForUser = (user) => {
   if (isAdminUser(user)) return ALL_SECTION_IDS
   const sections = user?.access?.sidebarSections
   return sections?.length ? sections : EMPTY_SECTION_IDS
+}
+
+/** Team leaders and operational managers see the My Team sidebar section. */
+export const showsMyTeamForUser = (user) => {
+  if (!user?._id) return false
+  const accessRole = String(user?.designation?.accessRole || '').trim().toLowerCase()
+  if (accessRole === 'team_leader') return true
+  if (isOperationalManagerUser(user)) return true
+  const title = getDesignationTitle(user)
+  if (title.includes('team lead') || title === 'team leader') return true
+  return false
 }

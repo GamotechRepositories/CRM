@@ -139,6 +139,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
   const isPendingAssigneeAcceptance = useCallback(
     (t) => {
       if (!t || !user?._id || t.source === 'social_media') return false
+      if (t.approvalStatus === 'Pending') return false
       const assigneeId = t.assignedTo?._id || t.assignedTo
       return String(assigneeId) === String(user._id) && normalizeTaskStatus(t.status) === 'Pending'
     },
@@ -531,7 +532,26 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
             </div>
             <div className='flex justify-between items-center py-2 border-b border-gray-100 gap-4'>
               <span className='text-sm text-gray-500'>Status</span>
-              {isPendingAssigneeAcceptance(task) ? (
+              {task.approvalStatus === 'Pending' ? (
+                <div className='flex flex-col items-end gap-1'>
+                  <span className='px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200'>
+                    ⏳ Pending Manager Approval
+                  </span>
+                  {canAssignTask() ? (
+                    <button
+                      type='button'
+                      onClick={() => navigate('/task-approvals')}
+                      className='px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold'
+                    >
+                      Review & Approve
+                    </button>
+                  ) : (
+                    <span className='text-[11px] text-gray-500 text-right'>
+                      Timer will start once reporting manager approves.
+                    </span>
+                  )}
+                </div>
+              ) : isPendingAssigneeAcceptance(task) ? (
                 <div className='flex flex-col items-end gap-1'>
                   <button
                     type='button'

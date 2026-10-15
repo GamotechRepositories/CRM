@@ -265,7 +265,7 @@ export const getDefaultDesignationMeta = (title) => {
         canAddProject: t === 'senior software engineer',
         canEditProject: t === 'senior software engineer',
         canViewProjects: true,
-        canAssignTask: false,
+        canAssignTask: t === 'senior software engineer',
       },
     };
   }
@@ -393,8 +393,9 @@ export const buildDesignationPayload = (body = {}) => {
 };
 
 /**
- * Validates whether an employee has authority to assign tasks.
- * Authority is strictly limited to Team Leaders (TLs), Managers, Admin, and Super Admin.
+ * Validates whether an employee has authority to assign tasks to other employees.
+ * Authority to assign to other employees is strictly limited to Team Leaders (TLs), Managers, Admin, and Super Admin.
+ * Normal employees can assign tasks to themselves.
  */
 export const canEmployeeAssignTasks = (employee) => {
   if (!employee) return false;
@@ -454,4 +455,3 @@ export const canEmployeeAssignTasks = (employee) => {
 
   return false;
 };
-
