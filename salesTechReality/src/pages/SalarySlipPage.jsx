@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import { getSalaryStructure } from '../utils/salaryCalculator'
+import companyLogoFallback from '../assets/logo.jpg'
 
 const MONTH_NAMES = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -15,7 +16,6 @@ const SalarySlipPage = () => {
   const { user, canViewAllSalarySlips } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const printRef = useRef(null)
-  const slipRef = useRef(null)
 
   const viewAll = canViewAllSalarySlips()
   const urlEmployeeId = searchParams.get('employeeId') || ''
@@ -31,6 +31,84 @@ const SalarySlipPage = () => {
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(null)
+
+  const [logoSrc, setLogoSrc] = useState(companyLogoFallback)
+  const [stampSrc, setStampSrc] = useState('')
+  const [signatureSrc, setSignatureSrc] = useState('')
+
+  const getBackendOrigin = () => {
+    const base = api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5014'
+    try {
+      const u = new URL(base)
+      return `${u.protocol}//${u.host}`
+    } catch {
+      return 'http://localhost:5014'
+    }
+  }
+
+  const toBase64 = async (url) => {
+    if (!url || typeof url !== 'string') return ''
+    if (url.startsWith('data:image')) return url
+
+    let targetUrl = url
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      targetUrl = `${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(url)}`
+    }
+
+    try {
+      const res = await fetch(targetUrl)
+      if (res.ok) {
+        const blob = await res.blob()
+        return await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result || '')
+          reader.readAsDataURL(blob)
+        })
+      }
+    } catch (err) {
+      console.warn('Failed proxy image fetch for:', url, err)
+    }
+
+    try {
+      const res = await fetch(url)
+      if (res.ok) {
+        const blob = await res.blob()
+        return await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result || '')
+          reader.readAsDataURL(blob)
+        })
+      }
+    } catch {}
+
+    return url
+  }
+
+  useEffect(() => {
+    let isMounted = true
+    const loadAssets = async () => {
+      const rawLogo = company?.companyLogo || companyLogoFallback
+      if (rawLogo) {
+        const b64 = await toBase64(rawLogo)
+        if (isMounted && b64) setLogoSrc(b64)
+      }
+
+      if (company?.companyStamp) {
+        const b64 = await toBase64(company.companyStamp)
+        if (isMounted && b64) setStampSrc(b64)
+      }
+
+      if (company?.authorizedSignature) {
+        const b64 = await toBase64(company.authorizedSignature)
+        if (isMounted && b64) setSignatureSrc(b64)
+      }
+    }
+
+    loadAssets()
+    return () => {
+      isMounted = false
+    }
+  }, [company])
 
   useEffect(() => {
     if (urlEmployeeId) setEmployeeFilter(urlEmployeeId)
@@ -163,18 +241,31 @@ const SalarySlipPage = () => {
         re.lastIndex = 0
       }
     }
-    replaceParenFunc('oklch', 'transparent')
-    replaceParenFunc('oklab', 'transparent')
-    replaceParenFunc('color-mix', 'transparent')
+    replaceParenFunc('oklch', 'inherit')
+    replaceParenFunc('oklab', 'inherit')
+    replaceParenFunc('color-mix', 'inherit')
     return out
   }
 
   const handleDownload = async () => {
-    const element = slipRef.current || printRef.current
+    const element = printRef.current
     if (!element) return
     setDownloading(true)
     setDownloadError(null)
     try {
+      let activeLogo = logoSrc
+      if (!activeLogo || !activeLogo.startsWith('data:image')) {
+        activeLogo = (await toBase64(company?.companyLogo)) || (await toBase64(companyLogoFallback))
+      }
+      let activeStamp = stampSrc
+      if (!activeStamp && company?.companyStamp) {
+        activeStamp = await toBase64(company.companyStamp)
+      }
+      let activeSig = signatureSrc
+      if (!activeSig && company?.authorizedSignature) {
+        activeSig = await toBase64(company.authorizedSignature)
+      }
+
       let strippedLinkedCss = ''
       const links = document.querySelectorAll('link[rel="stylesheet"]')
       if (links.length > 0) {
@@ -209,16 +300,85 @@ const SalarySlipPage = () => {
               el.setAttribute('style', stripUnsupportedColors(s))
             }
           })
+
+          // Configure exact A4 sheet proportions for clone (794px x 1123px = 210mm x 297mm at 96 DPI)
+          clonedElement.style.width = '794px'
+          clonedElement.style.maxWidth = '794px'
+          clonedElement.style.minHeight = '1123px'
+          clonedElement.style.boxSizing = 'border-box'
+          clonedElement.style.margin = '0 auto'
+          clonedElement.style.boxShadow = 'none'
+          clonedElement.style.borderRadius = '0px'
+          clonedElement.style.border = 'none'
+          clonedElement.style.padding = '32px 36px'
+          clonedElement.style.backgroundColor = '#ffffff'
+
+          // Ensure logo uses base64 data url
+          const logoEl = clonedElement.querySelector('.company-logo-img')
+          if (logoEl && activeLogo) {
+            logoEl.src = activeLogo
+          }
+
+          // Ensure stamp uses base64 data url
+          const stampEl = clonedElement.querySelector('.company-stamp-img')
+          if (stampEl && activeStamp) {
+            stampEl.src = activeStamp
+          }
+
+          // Ensure signature uses base64 data url
+          const sigEl = clonedElement.querySelector('.company-signature-img')
+          if (sigEl && activeSig) {
+            sigEl.src = activeSig
+          }
+
+          // Ensure all text elements have opaque non-transparent color
+          clonedElement.querySelectorAll('*').forEach((node) => {
+            if (node.style && (!node.style.color || node.style.color === 'transparent')) {
+              try {
+                const comp = (clonedDoc.defaultView || window).getComputedStyle(node)
+                if (comp.color && comp.color.startsWith('rgb') && comp.color !== 'rgba(0, 0, 0, 0)') {
+                  node.style.color = comp.color
+                } else {
+                  node.style.color = '#000000'
+                }
+              } catch {
+                node.style.color = '#000000'
+              }
+            }
+          })
         },
       })
 
-      const imgWidth = 210
+      const pageWidth = 210
       const pageHeight = 297
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const imgData = canvas.toDataURL('image/jpeg', 0.95)
+      const contentHeight = (canvas.height * pageWidth) / canvas.width
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, Math.min(imgHeight, pageHeight))
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+      const imgData = canvas.toDataURL('image/jpeg', 0.98)
+
+      if (contentHeight <= pageHeight + 2) {
+        // Fits perfectly on a single A4 page
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, Math.min(contentHeight, pageHeight))
+      } else {
+        // Multi-page handling with full A4 width
+        let heightLeft = contentHeight
+        let position = 0
+
+        pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+        heightLeft -= pageHeight
+
+        while (heightLeft > 0) {
+          position = -(contentHeight - heightLeft)
+          pdf.addPage()
+          pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
+          heightLeft -= pageHeight
+        }
+      }
+
       const empName = selectedSalary?.employee?.name || user?.name || 'Employee'
       const monthLabel = MONTH_NAMES[selectedSalary?.month] || 'Salary'
       const filename = `SalarySlip-${empName.replace(/\s+/g, '_')}-${monthLabel}_${selectedSalary?.year}.pdf`
@@ -248,6 +408,10 @@ const SalarySlipPage = () => {
   return (
     <div className='p-4 md:p-8 bg-gray-50 min-h-full'>
       <style>{`
+        @page {
+          size: A4 portrait;
+          margin: 10mm;
+        }
         @media print {
           body * {
             visibility: hidden !important;
@@ -260,10 +424,11 @@ const SalarySlipPage = () => {
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
+            max-width: 100% !important;
             margin: 0 !important;
-            padding: 24px !important;
+            padding: 0 !important;
             background-color: #ffffff !important;
-            border: 1px solid #e5e7eb !important;
+            border: none !important;
             box-shadow: none !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -400,14 +565,14 @@ const SalarySlipPage = () => {
                   <div className='flex gap-2'>
                     <button
                       onClick={handlePrint}
-                      className='bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-1.5'
+                      className='bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-1.5 transition-colors'
                     >
                       <span>🖨</span> Print
                     </button>
                     <button
                       onClick={handleDownload}
                       disabled={downloading}
-                      className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5'
+                      className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5 transition-colors shadow-sm'
                     >
                       <span>📥</span> {downloading ? 'Downloading...' : 'Download PDF'}
                     </button>
@@ -420,92 +585,101 @@ const SalarySlipPage = () => {
                   </div>
                 )}
 
-                {/* Printable Salary Slip Container */}
+                {/* Printable Salary Slip Container - A4 Sheet Structure */}
                 <div
                   id='salary-slip-printable'
                   ref={printRef}
-                  className='bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden p-6 md:p-10 text-black'
+                  className='bg-white border border-gray-300 rounded-xl shadow-md overflow-hidden p-6 md:p-8 text-black max-w-[794px] mx-auto'
                   style={{ backgroundColor: '#ffffff', color: '#000000' }}
                 >
-                  <div ref={slipRef} className='space-y-6'>
-                    {/* Header: Company Info */}
-                    <div className='border-b pb-6 flex flex-wrap items-center justify-between gap-4' style={{ borderColor: '#d1d5db' }}>
-                      <div>
-                        {company?.companyLogo && (
-                          <img
-                            src={company.companyLogo}
-                            alt='Company Logo'
-                            className='h-14 w-auto max-w-[180px] object-contain mb-2'
-                          />
-                        )}
-                        <h2 className='text-xl font-bold uppercase tracking-wide' style={{ color: '#000000' }}>
-                          {company?.companyName || 'Organization Name'}
-                        </h2>
-                        {company?.address && <p className='text-xs mt-1 max-w-sm' style={{ color: '#374151' }}>{company.address}</p>}
-                        <div className='text-xs mt-1 space-x-3' style={{ color: '#4b5563' }}>
-                          {company?.email && <span>Email: {company.email}</span>}
-                          {company?.phone && <span>Phone: {company.phone}</span>}
+                  <div className='space-y-4'>
+                    {/* Header: Company Info & Official Payslip Badge */}
+                    <div className='border-b pb-4 flex flex-wrap items-start justify-between gap-4' style={{ borderColor: '#d1d5db' }}>
+                      <div className='flex items-start gap-3.5 max-w-lg'>
+                        {/* Company Logo */}
+                        <img
+                          src={logoSrc || companyLogoFallback}
+                          alt='Company Logo'
+                          className='company-logo-img h-14 w-auto max-w-[160px] object-contain flex-shrink-0 mt-0.5'
+                        />
+                        <div>
+                          <h2 className='text-base md:text-lg font-bold uppercase tracking-tight' style={{ color: '#000000' }}>
+                            {company?.companyName || 'Organization Name'}
+                          </h2>
+                          {company?.address && (
+                            <p className='text-[11px] leading-snug mt-0.5 max-w-sm' style={{ color: '#374151' }}>
+                              {company.address}
+                            </p>
+                          )}
+                          <div className='text-[10px] mt-1 space-x-3' style={{ color: '#4b5563' }}>
+                            {company?.email && <span>Email: {company.email}</span>}
+                            {company?.phone && <span>Phone: {company.phone}</span>}
+                          </div>
+                          <div className='text-[10px] space-x-3 mt-0.5' style={{ color: '#4b5563' }}>
+                            {company?.gstin && <span>GSTIN: {company.gstin}</span>}
+                            {company?.pan && <span>Company PAN: {company.pan}</span>}
+                          </div>
                         </div>
-                        {company?.gstin && <p className='text-xs' style={{ color: '#4b5563' }}>GSTIN: {company.gstin}</p>}
-                        {company?.pan && <p className='text-xs' style={{ color: '#4b5563' }}>Company PAN: {company.pan}</p>}
                       </div>
-                      <div className='text-right border-l-2 pl-4 py-1' style={{ borderColor: '#2563eb' }}>
-                        <span className='text-xs font-semibold uppercase tracking-widest block' style={{ color: '#2563eb' }}>Official Document</span>
-                        <h3 className='text-lg font-bold mt-0.5' style={{ color: '#111827' }}>PAYSLIP</h3>
-                        <p className='text-xs font-medium mt-0.5' style={{ color: '#4b5563' }}>
+                      <div className='text-right border-l-4 pl-3.5 py-0.5' style={{ borderColor: '#2563eb' }}>
+                        <span className='text-[10px] font-bold uppercase tracking-widest block' style={{ color: '#2563eb' }}>
+                          Official Document
+                        </span>
+                        <h3 className='text-xl font-extrabold tracking-tight mt-0.5' style={{ color: '#111827' }}>
+                          PAYSLIP
+                        </h3>
+                        <p className='text-xs font-semibold mt-0.5' style={{ color: '#4b5563' }}>
                           {MONTH_NAMES[selectedSalary.month]} {selectedSalary.year}
                         </p>
+                        <span className='inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mt-1' style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
+                          PAID
+                        </span>
                       </div>
                     </div>
 
                     {/* Employee & Payment Meta Grid */}
                     <div
-                      className='rounded-lg p-4 text-xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'
+                      className='rounded-lg p-3 text-[11px] grid grid-cols-2 sm:grid-cols-4 gap-2.5'
                       style={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
                     >
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee Name</span>
-                        <span className='font-bold text-sm' style={{ color: '#111827' }}>{emp.name || user?.name || '—'}</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Employee Name</span>
+                        <span className='font-bold text-xs' style={{ color: '#111827' }}>{emp.name || user?.name || '—'}</span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee Code / ID</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Employee ID</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.employeeCode || emp._id || emp.id || '—'}</span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Designation</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Designation</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>{getDesignationTitle(emp.designation)}</span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Department</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Department</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.department || '—'}</span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Date of Joining</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Date of Joining</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>
                           {emp.dateOfJoining ? new Date(emp.dateOfJoining).toLocaleDateString('en-IN') : '—'}
                         </span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Employee PAN</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Employee PAN</span>
                         <span className='font-semibold' style={{ color: '#1f2937' }}>
                           {emp.salaryPayroll?.panNumber || emp.panNumber || emp.documents?.panCard || '—'}
                         </span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Bank Account Details</span>
-                        <span className='font-semibold' style={{ color: '#1f2937' }}>{emp.salaryPayroll?.bankAccountDetails || emp.bankAccountNumber || '—'}</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Bank Account</span>
+                        <span className='font-semibold truncate block' style={{ color: '#1f2937' }}>
+                          {emp.salaryPayroll?.bankAccountDetails || emp.bankAccountNumber || '—'}
+                        </span>
                       </div>
                       <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Method</span>
-                        <span className='font-semibold' style={{ color: '#1f2937' }}>{selectedSalary.paymentMode || 'Bank Transfer'}</span>
-                      </div>
-                      <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Status</span>
-                        <span className='font-bold uppercase' style={{ color: '#15803d' }}>PAID</span>
-                      </div>
-                      <div>
-                        <span className='font-medium block' style={{ color: '#6b7280' }}>Payment Date</span>
-                        <span className='font-semibold' style={{ color: '#1f2937' }}>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Payment Mode / Date</span>
+                        <span className='font-semibold block' style={{ color: '#1f2937' }}>
+                          {selectedSalary.paymentMode || 'Bank Transfer'} •{' '}
                           {selectedSalary.paymentDate
                             ? new Date(selectedSalary.paymentDate).toLocaleDateString('en-IN')
                             : new Date(selectedSalary.updatedAt || Date.now()).toLocaleDateString('en-IN')}
@@ -515,14 +689,16 @@ const SalarySlipPage = () => {
 
                     {/* Salary Breakdown Table */}
                     <div>
-                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Earnings & Employee Deductions</h4>
+                      <h4 className='text-[11px] font-bold uppercase tracking-wider mb-1.5' style={{ color: '#1f2937' }}>
+                        Earnings & Employee Deductions
+                      </h4>
                       <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
                         <thead>
-                          <tr className='font-bold' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
-                            <th className='py-2.5 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS COMPONENT</th>
-                            <th className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>AMOUNT</th>
-                            <th className='py-2.5 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTION COMPONENT</th>
-                            <th className='py-2.5 px-3 text-right'>AMOUNT</th>
+                          <tr className='font-bold text-[10px]' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
+                            <th className='py-2 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS COMPONENT</th>
+                            <th className='py-2 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>AMOUNT</th>
+                            <th className='py-2 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTION COMPONENT</th>
+                            <th className='py-2 px-3 text-right'>AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -531,112 +707,115 @@ const SalarySlipPage = () => {
                             const ded = structure.deductions[idx]
                             return (
                               <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px]' style={{ borderRight: '1px solid #e5e7eb' }}>
                                   {comp ? comp.name : '—'}
                                 </td>
-                                <td className='py-2 px-3 text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px] text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>
                                   {comp ? formatINR(comp.amount) : '—'}
                                 </td>
-                                <td className='py-2 px-3' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px]' style={{ borderRight: '1px solid #e5e7eb' }}>
                                   {ded ? ded.name : '—'}
                                 </td>
-                                <td className='py-2 px-3 text-right font-medium'>
+                                <td className='py-1.5 px-3 text-[11px] text-right font-medium'>
                                   {ded ? formatINR(ded.amount) : '—'}
                                 </td>
                               </tr>
                             )
                           })}
-                          <tr className='font-bold' style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #d1d5db', color: '#111827' }}>
-                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS SALARY (TOTAL EARNINGS)</td>
-                            <td className='py-2.5 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(structure.grossSalary)}</td>
-                            <td className='py-2.5 px-3' style={{ borderRight: '1px solid #d1d5db' }}>TOTAL DEDUCTIONS</td>
-                            <td className='py-2.5 px-3 text-right'>{formatINR(structure.totalDeductions)}</td>
+                          <tr className='font-bold text-[11px]' style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #d1d5db', color: '#111827' }}>
+                            <td className='py-2 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS SALARY (TOTAL EARNINGS)</td>
+                            <td className='py-2 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(structure.grossSalary)}</td>
+                            <td className='py-2 px-3 text-right'>{formatINR(structure.totalDeductions)}</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
 
                     {/* Employer Contributions & CTC Details */}
-                    <div>
-                      <h4 className='text-xs font-bold uppercase tracking-wider mb-2' style={{ color: '#1f2937' }}>Employer Contributions</h4>
-                      <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
-                        <thead>
-                          <tr className='font-bold' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
-                            <th className='py-2 px-3 text-left'>CONTRIBUTION TYPE</th>
-                            <th className='py-2 px-3 text-right'>AMOUNT</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {structure.employerContributions.map((empContrib, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                              <td className='py-2 px-3'>{empContrib.name}</td>
-                              <td className='py-2 px-3 text-right font-medium'>{formatINR(empContrib.amount)}</td>
+                    {structure.employerContributions && structure.employerContributions.length > 0 && (
+                      <div>
+                        <h4 className='text-[11px] font-bold uppercase tracking-wider mb-1.5' style={{ color: '#1f2937' }}>
+                          Employer Contributions
+                        </h4>
+                        <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
+                          <thead>
+                            <tr className='font-bold text-[10px]' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
+                              <th className='py-1.5 px-3 text-left'>CONTRIBUTION TYPE</th>
+                              <th className='py-1.5 px-3 text-right'>AMOUNT</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {structure.employerContributions.map((empContrib, i) => (
+                              <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                <td className='py-1 px-3 text-[11px]'>{empContrib.name}</td>
+                                <td className='py-1 px-3 text-[11px] text-right font-medium'>{formatINR(empContrib.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
                     {/* Net Pay & CTC Summary Cards */}
-                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-2.5'>
                       <div
-                        className='rounded-lg p-3 text-center'
+                        className='rounded-lg p-2.5 text-center'
                         style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}
                       >
-                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#166534' }}>Net Salary</span>
-                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#15803d' }}>{formatINR(structure.netSalary)}</span>
+                        <span className='text-[10px] font-bold uppercase tracking-wide block' style={{ color: '#166534' }}>Net Salary</span>
+                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#15803d' }}>{formatINR(structure.netSalary)}</span>
                       </div>
                       <div
-                        className='rounded-lg p-3 text-center'
+                        className='rounded-lg p-2.5 text-center'
                         style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
                       >
-                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#1e40af' }}>Monthly CTC</span>
-                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#1d4ed8' }}>{formatINR(structure.monthlyCTC)}</span>
+                        <span className='text-[10px] font-bold uppercase tracking-wide block' style={{ color: '#1e40af' }}>Monthly CTC</span>
+                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#1d4ed8' }}>{formatINR(structure.monthlyCTC)}</span>
                       </div>
                       <div
-                        className='rounded-lg p-3 text-center'
+                        className='rounded-lg p-2.5 text-center'
                         style={{ backgroundColor: '#faf5ff', border: '1px solid #e9d5ff' }}
                       >
-                        <span className='text-[11px] font-bold uppercase tracking-wide block' style={{ color: '#6b21a8' }}>Annual CTC</span>
-                        <span className='text-lg font-extrabold block mt-0.5' style={{ color: '#7e22ce' }}>{formatINR(structure.annualCTC)}</span>
+                        <span className='text-[10px] font-bold uppercase tracking-wide block' style={{ color: '#6b21a8' }}>Annual CTC</span>
+                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#7e22ce' }}>{formatINR(structure.annualCTC)}</span>
                       </div>
                     </div>
 
                     {/* Footer: Stamp & Authorized Signature */}
-                    <div className='pt-6 flex items-end justify-between gap-6' style={{ borderTop: '1px solid #e5e7eb' }}>
+                    <div className='pt-3 flex items-end justify-between gap-4' style={{ borderTop: '1px solid #e5e7eb' }}>
                       {/* Stamp Column */}
-                      <div className='text-center min-w-[140px]'>
-                        {company?.companyStamp ? (
+                      <div className='text-center min-w-[120px]'>
+                        {stampSrc || company?.companyStamp ? (
                           <img
-                            src={company.companyStamp}
+                            src={stampSrc || company.companyStamp}
                             alt='Company Stamp'
-                            className='h-16 w-auto max-w-[140px] object-contain mx-auto'
+                            className='company-stamp-img h-14 w-auto max-w-[120px] object-contain mx-auto'
                           />
                         ) : (
-                          <div className='h-16 flex items-center justify-center text-xs border border-dashed rounded-lg px-2' style={{ color: '#9ca3af', borderColor: '#d1d5db' }}>
+                          <div className='h-12 flex items-center justify-center text-[10px] border border-dashed rounded-lg px-2' style={{ color: '#9ca3af', borderColor: '#d1d5db' }}>
                             Company Stamp
                           </div>
                         )}
-                        <p className='text-xs font-semibold mt-1' style={{ color: '#374151' }}>Company Stamp</p>
+                        <p className='text-[10px] font-semibold mt-1' style={{ color: '#374151' }}>Company Stamp</p>
                       </div>
 
                       {/* Disclaimer Note */}
-                      <div className='text-center flex-1 text-[11px] italic max-w-xs mx-auto' style={{ color: '#6b7280' }}>
+                      <div className='text-center flex-1 text-[10px] italic max-w-xs mx-auto' style={{ color: '#6b7280' }}>
                         This is a computer-generated payslip issued by {company?.companyName || 'the organization'} and does not require a physical ink signature.
                       </div>
 
                       {/* Authorized Signature Column */}
-                      <div className='text-center min-w-[140px]'>
-                        {company?.authorizedSignature ? (
+                      <div className='text-center min-w-[120px]'>
+                        {signatureSrc || company?.authorizedSignature ? (
                           <img
-                            src={company.authorizedSignature}
+                            src={signatureSrc || company.authorizedSignature}
                             alt='Authorized Signature'
-                            className='h-16 w-auto max-w-[140px] object-contain mx-auto'
+                            className='company-signature-img h-14 w-auto max-w-[120px] object-contain mx-auto'
                           />
                         ) : (
-                          <div className='border-t-2 w-32 mt-12 mb-1 mx-auto' style={{ borderColor: '#1f2937' }} />
+                          <div className='border-t-2 w-28 mt-8 mb-1 mx-auto' style={{ borderColor: '#1f2937' }} />
                         )}
-                        <p className='text-xs font-semibold mt-1' style={{ color: '#1f2937' }}>Authorized Signature</p>
+                        <p className='text-[10px] font-semibold mt-1' style={{ color: '#1f2937' }}>Authorized Signature</p>
                       </div>
                     </div>
                   </div>
