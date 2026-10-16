@@ -11,7 +11,13 @@ import { SettingsIcon, LogoutIcon } from './Icons'
 import {
   enableTaskAssignmentAlerts,
   initTaskAssignmentAudio,
+  initTaskApprovalAudio,
+  initTaskSucceedAudio,
+  initTaskRejectedAudio,
   notifyNewTaskAssigned,
+  notifyTaskWaitingApproval,
+  notifyTaskApproved,
+  notifyTaskRejected,
 } from '../utils/taskAssignmentAlert'
 import {
   connectRealtimeSocket,
@@ -77,6 +83,9 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
 
   useEffect(() => {
     initTaskAssignmentAudio()
+    initTaskApprovalAudio()
+    initTaskSucceedAudio()
+    initTaskRejectedAudio()
   }, [])
 
   useEffect(() => {
@@ -152,7 +161,39 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
     connectRealtimeSocket(user._id, { tenantId: getTenantId() })
     const unsubscribe = onTaskChanged((payload) => {
       const reason = String(payload?.reason || '')
+
+      if (reason === 'approval_required') {
+        notifyTaskWaitingApproval({
+          title: payload?.title,
+          navigate: navigateRef.current,
+        })
+        window.dispatchEvent(new CustomEvent('crm:task-updated'))
+        return
+      }
+
+      if (reason === 'approved') {
+        notifyTaskApproved({
+          title: payload?.title,
+          navigate: navigateRef.current,
+        })
+        scheduleRefresh()
+        window.dispatchEvent(new CustomEvent('crm:task-updated'))
+        return
+      }
+
+      if (reason === 'rejected') {
+        notifyTaskRejected({
+          title: payload?.title,
+          reason: payload?.rejectionReason,
+          navigate: navigateRef.current,
+        })
+        scheduleRefresh()
+        window.dispatchEvent(new CustomEvent('crm:task-updated'))
+        return
+      }
+
       scheduleRefresh({ playAlert: reason === 'assigned' })
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
     })
 
     const handleFocus = () => {

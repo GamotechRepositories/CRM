@@ -10,6 +10,7 @@ import '../utils/attendance_helpers.dart';
 import '../utils/ist_time.dart';
 import 'chat_realtime_service.dart';
 import 'notification_service.dart';
+import 'sound_effect_service.dart';
 
 /// Employee-facing reminders: new task assignments, shift check-in / check-out
 /// times (from the company profile `workingHours`), and break start / ending.
@@ -94,14 +95,36 @@ class WorkReminderService {
     _taskSub?.cancel();
     _taskSub = ChatRealtimeService.instance.taskChanges.listen((event) async {
       ApiCache.clear();
-      if (event['reason'] != 'assigned') return;
+      final reason = (event['reason'] ?? '').toString();
+      final title = (event['title'] ?? '').toString();
       final taskId = (event['taskId'] ?? '').toString();
+
+      if (reason == 'approval_required') {
+        await SoundEffectService.instance.playTaskApproval();
+        await _notifyTaskApproval(taskId, title);
+        return;
+      }
+
+      if (reason == 'approved') {
+        await SoundEffectService.instance.playTaskSucceed();
+        await _notifyTaskApproved(taskId, title);
+        return;
+      }
+
+      if (reason == 'rejected') {
+        final rejectReason = (event['rejectionReason'] ?? '').toString();
+        await SoundEffectService.instance.playTaskRejected();
+        await _notifyTaskRejected(taskId, title, rejectReason);
+        return;
+      }
+
+      if (reason != 'assigned') return;
       if (taskId.isNotEmpty) {
         final known = await _loadKnownTasks(api, userId);
         if (known != null && known.contains(taskId)) return;
         await _saveKnownTasks(api, userId, {...?known, taskId});
       }
-      await _notifyTask(taskId, (event['title'] ?? '').toString());
+      await _notifyTask(taskId, title);
     });
   }
 
@@ -145,6 +168,49 @@ class WorkReminderService {
       title: 'New task assigned',
       body: title.trim().isEmpty ? 'You have a new task. Open the app to view it.' : title.trim(),
       channel: NotificationChannel.tasks,
+    );
+  }
+
+  Future<void> _notifyTaskApproval(String taskId, String title) {
+    final id = taskId.isEmpty
+        ? _taskBaseId + DateTime.now().millisecondsSinceEpoch % 1000000
+        : _taskBaseId + (taskId.hashCode & 0x7fffffff) % 1000000;
+    return NotificationService.instance.show(
+      id: id,
+      title: 'Task Waiting for Approval',
+      body: title.trim().isEmpty
+          ? 'A new task is waiting for your review & approval.'
+          : 'Task "$title" is waiting for your review & approval.',
+      channel: NotificationChannel.taskApproval,
+    );
+  }
+
+  Future<void> _notifyTaskApproved(String taskId, String title) {
+    final id = taskId.isEmpty
+        ? _taskBaseId + DateTime.now().millisecondsSinceEpoch % 1000000
+        : _taskBaseId + (taskId.hashCode & 0x7fffffff) % 1000000;
+    return NotificationService.instance.show(
+      id: id,
+      title: 'Task Approved',
+      body: title.trim().isEmpty
+          ? 'Your task has been approved! Please accept the task to start the timer.'
+          : 'Your task "$title" has been approved! Please accept the task to start the timer.',
+      channel: NotificationChannel.taskApproved,
+    );
+  }
+
+  Future<void> _notifyTaskRejected(String taskId, String title, String reason) {
+    final id = taskId.isEmpty
+        ? _taskBaseId + DateTime.now().millisecondsSinceEpoch % 1000000
+        : _taskBaseId + (taskId.hashCode & 0x7fffffff) % 1000000;
+    final reasonSuffix = reason.trim().isNotEmpty ? ' Reason: $reason' : '';
+    return NotificationService.instance.show(
+      id: id,
+      title: 'Task Rejected',
+      body: title.trim().isEmpty
+          ? 'Your task was rejected.$reasonSuffix'
+          : 'Your task "$title" was rejected.$reasonSuffix',
+      channel: NotificationChannel.taskRejected,
     );
   }
 

@@ -22,10 +22,17 @@ import {
 } from '../../utils/urgentTaskInterrupt.js';
 import { cacheKey, withCache, invalidateTenantCache, CACHE_TTL } from '../../utils/cache.js';
 import { canEmployeeAssignTasks } from '../../utils/designationFields.js';
+import { emitTaskChanged } from '../../services/realtimeNotification.service.js';
 
 const notificationService = createNotificationService({ Notification });
 
 const COMPANY_KEY = 'mahaProperties';
+
+const toId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'object' && value._id) return String(value._id);
+  return String(value);
+};
 
 const normalizeDateStart = (value) => {
   const d = new Date(value);
@@ -233,18 +240,57 @@ export const createTask = async (req, res) => {
     if (requiresApproval) {
       try {
         const assignerDoc = await Employee.findById(assignedBy).select('name reportingManager');
+        const assigneeDocs = await Employee.find({ _id: { $in: assigneeIds } }).select('name reportingManager');
+        const allEmployees = await Employee.find({ status: 'Active' }).populate('designation');
+
+        const approverIds = new Set();
         if (assignerDoc?.reportingManager) {
-          await notificationService.notifyEmployee({
-            employeeId: assignerDoc.reportingManager,
-            type: 'task',
-            title: 'New Task Pending Approval',
-            message: `${assignerDoc.name} created task "${title}" that requires your approval.`,
-            link: '/task-approvals',
-            metadata: { taskId: createdTasks[0]?._id },
-          }).catch(() => {});
+          approverIds.add(toId(assignerDoc.reportingManager));
+        }
+        for (const aDoc of assigneeDocs) {
+          if (aDoc?.reportingManager) {
+            approverIds.add(toId(aDoc.reportingManager));
+          }
+        }
+        for (const emp of allEmployees) {
+          if (canEmployeeAssignTasks(emp)) {
+            approverIds.add(toId(emp._id));
+          }
+        }
+        approverIds.delete(toId(assignedBy));
+
+        const approverList = Array.from(approverIds);
+        if (approverList.length > 0) {
+          emitTaskChanged(approverList, {
+            reason: 'approval_required',
+            taskId: createdTasks[0]?._id,
+            title,
+            approvalStatus: 'Pending',
+            status: initialStatus,
+            assignedBy,
+            assignedTo: assigneeIds,
+          });
+
+          await Promise.all(
+            approverList.map((approverId) =>
+              notificationService.notifyEmployee({
+                employeeId: approverId,
+                type: 'task_approval_required',
+                title: 'New Task Pending Approval',
+                message: `${assignerDoc?.name || 'An employee'} created task "${title}" that requires your approval.`,
+                link: '/task-approvals',
+                priority: 'high',
+                metadata: {
+                  entityType: 'task',
+                  entityId: createdTasks[0]?._id,
+                  extra: { approvalStatus: 'Pending' },
+                },
+              }).catch(() => {})
+            )
+          );
         }
       } catch (err) {
-        console.warn('Failed to notify reporting manager:', err?.message);
+        console.warn('Failed to notify approvers:', err?.message);
       }
     }
 
@@ -577,16 +623,15 @@ export const approveTask = async (req, res) => {
     if (scheduledStartAt) task.scheduledStartAt = new Date(scheduledStartAt);
     if (scheduledEndAt) task.scheduledEndAt = new Date(scheduledEndAt);
 
-    // Requirement: after approval the task timer should start
-    task.status = 'In Progress';
-    task.startedAt = new Date();
+    // Approval approved: keep status as 'Pending' so the employee accepts first before timer starts
+    task.status = 'Pending';
+    task.startedAt = null;
     task.pausedAt = null;
     task.pausedByUrgentTask = null;
     task.pausedByMeeting = false;
     task.pausedByBreak = false;
 
     await task.save();
-    await handleUrgentTaskAssigned({ Task, task });
 
     const populated = await Task.findById(id)
       .populate('project')
@@ -606,25 +651,43 @@ export const approveTask = async (req, res) => {
     });
 
     try {
-      const assigneeId = task.assignedTo?._id || task.assignedTo;
-      if (assigneeId) {
+      const assigneeId = toId(task.assignedTo);
+      const assignerId = toId(task.assignedBy);
+      const approverIdStr = toId(approverId);
+      const recipientIds = new Set([assigneeId, assignerId].filter(Boolean));
+      if (approverIdStr) {
+        recipientIds.delete(approverIdStr);
+      }
+
+      for (const recId of recipientIds) {
+        emitTaskChanged(recId, {
+          reason: 'approved',
+          taskId: populated._id,
+          status: populated.status,
+          title: populated.title,
+          approvalStatus: 'Approved',
+        });
         await notificationService.notifyEmployee({
-          employeeId: assigneeId,
-          type: 'task',
-          title: 'Task Approved - Timer Started',
-          message: `Your task "${task.title}" has been approved by your manager and the timer has started!`,
+          employeeId: recId,
+          type: 'task_approved',
+          title: 'Task Approved',
+          message: `Your task "${task.title}" has been approved! Please accept the task to start the timer.`,
           link: `/tasks/${task._id}`,
-          metadata: { taskId: task._id },
+          metadata: {
+            entityType: 'task',
+            entityId: task._id,
+            extra: { approvalStatus: 'Approved' },
+          },
         }).catch(() => {});
       }
     } catch (err) {
-      console.warn('Failed to notify employee:', err?.message);
+      console.warn('Failed to notify employee on approval:', err?.message);
     }
 
     await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');
 
     return res.status(200).json({
-      message: 'Task approved successfully and timer started',
+      message: 'Task approved successfully. Waiting for employee acceptance to start timer.',
       task: populated,
     });
   } catch (error) {
@@ -660,19 +723,38 @@ export const rejectTask = async (req, res) => {
       .populate('approvedBy', 'name designation');
 
     try {
-      const assigneeId = task.assignedTo?._id || task.assignedTo;
-      if (assigneeId) {
+      const assigneeId = toId(task.assignedTo);
+      const assignerId = toId(task.assignedBy);
+      const rejecterId = toId(rejectedBy || req.user?._id);
+      const recipientIds = new Set([assigneeId, assignerId].filter(Boolean));
+      if (rejecterId) {
+        recipientIds.delete(rejecterId);
+      }
+
+      for (const recId of recipientIds) {
+        emitTaskChanged(recId, {
+          reason: 'rejected',
+          taskId: populated._id,
+          status: populated.status,
+          title: populated.title,
+          approvalStatus: 'Rejected',
+          rejectionReason: task.rejectionReason,
+        });
         await notificationService.notifyEmployee({
-          employeeId: assigneeId,
-          type: 'task',
+          employeeId: recId,
+          type: 'task_rejected',
           title: 'Task Rejected',
           message: `Your task "${task.title}" was not approved. Reason: ${task.rejectionReason}`,
           link: `/tasks/${task._id}`,
-          metadata: { taskId: task._id },
+          metadata: {
+            entityType: 'task',
+            entityId: task._id,
+            extra: { approvalStatus: 'Rejected', rejectionReason: task.rejectionReason },
+          },
         }).catch(() => {});
       }
     } catch (err) {
-      console.warn('Failed to notify employee:', err?.message);
+      console.warn('Failed to notify employee on rejection:', err?.message);
     }
 
     await invalidateTenantCache(COMPANY_KEY, 'tasks', 'dashboard');

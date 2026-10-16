@@ -101,22 +101,36 @@ export function emitToUser(userId, payload) {
   return true;
 }
 
-export function emitTaskChanged(userId, payload = {}) {
-  if (!io || !userId) return false;
+export function emitTaskChanged(userIds, payload = {}) {
+  if (!io || !userIds) return false;
+  const list = Array.isArray(userIds) ? userIds : [userIds];
+  const targetIds = list
+    .map((id) => (id && typeof id === 'object' && id._id ? String(id._id) : String(id || '')))
+    .filter(Boolean);
+  if (!targetIds.length) return false;
+
   const eventPayload = {
     reason: String(payload.reason || 'updated'),
     taskId: payload.taskId ? String(payload.taskId) : undefined,
     status: payload.status ? String(payload.status) : undefined,
     previousStatus: payload.previousStatus ? String(payload.previousStatus) : undefined,
     title: payload.title ? String(payload.title) : undefined,
+    approvalStatus: payload.approvalStatus ? String(payload.approvalStatus) : undefined,
+    rejectionReason: payload.rejectionReason ? String(payload.rejectionReason) : undefined,
     ts: new Date().toISOString(),
+    ...payload,
   };
-  io.to(userRoom(userId)).emit('task:changed', eventPayload);
-  logger.info('SocketDelivered', 'task:changed emitted', {
-    userId: String(userId),
-    ...eventPayload,
-  });
-  return true;
+
+  let emitted = false;
+  for (const uid of targetIds) {
+    io.to(userRoom(uid)).emit('task:changed', eventPayload);
+    logger.info('SocketDelivered', 'task:changed emitted', {
+      userId: uid,
+      ...eventPayload,
+    });
+    emitted = true;
+  }
+  return emitted;
 }
 
 const participantIdsFromConversation = (conversation) => {

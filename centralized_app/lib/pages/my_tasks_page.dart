@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +8,7 @@ import '../navigation/app_nav.dart';
 import '../utils/task_status.dart';
 import '../api/api_cache.dart';
 import '../services/notification_service.dart';
+import '../services/chat_realtime_service.dart';
 
 /// Tasks Page — supports all company tasks (`/tasks`) or user tasks (`/my-tasks`).
 class MyTasksPage extends StatefulWidget {
@@ -27,12 +30,23 @@ class _MyTasksPageState extends State<MyTasksPage> {
   DateTime? _filterDateFrom;
   DateTime? _filterDateTo;
 
+  StreamSubscription<Map<String, dynamic>>? _taskSub;
+
   @override
   void initState() {
     super.initState();
     _filterStatus = widget.initialStatus;
     NotificationService.instance.requestPermissions();
+    _taskSub = ChatRealtimeService.instance.taskChanges.listen((_) {
+      if (mounted) _load();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _taskSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -824,6 +838,21 @@ class _TaskTile extends StatelessWidget {
                           bg: sBg,
                           fg: sFg,
                         ),
+                        if (task['approvalStatus'] == 'Pending') ...[
+                          const SizedBox(width: 6),
+                          const _BadgePill(
+                            label: 'Pending Approval',
+                            bg: Color(0xFFFEF3C7),
+                            fg: Color(0xFFB45309),
+                          ),
+                        ] else if (task['approvalStatus'] == 'Approved' && status.toLowerCase() == 'pending') ...[
+                          const SizedBox(width: 6),
+                          const _BadgePill(
+                            label: 'Ready to Accept',
+                            bg: Color(0xFFDCFCE7),
+                            fg: Color(0xFF15803D),
+                          ),
+                        ],
                         if (priority.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           _BadgePill(label: priority, bg: pBg, fg: pFg),
@@ -982,6 +1011,13 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
   }
 
   Future<void> _updateStatus(String newStatus) async {
+    if (newStatus == 'In Progress' && (_task['approvalStatus'] ?? '') == 'Pending') {
+      setState(() {
+        _error = 'This task is awaiting review & approval by your manager before the timer can start.';
+      });
+      return;
+    }
+
     if (newStatus == 'In Progress' && (_isOnBreak || _task['pausedByBreak'] == true)) {
       setState(() {
         _error = 'Cannot start or resume a task while on break. Please end your break first.';
@@ -1062,6 +1098,9 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
     final status = TaskStatus.normalize(_task['status']);
     final priority = (_task['priority'] ?? 'Normal').toString();
     final project = _projectName(_task);
+    final approvalStatus = (_task['approvalStatus'] ?? '').toString();
+    final isApprovalPending = approvalStatus == 'Pending';
+    final isPendingStatus = status == 'Pending';
     final assignedToName = _assignedToName(_task);
     final assignedByName = _assignedByName(_task);
     final duration = _task['estimatedDurationMinutes'];
@@ -1226,6 +1265,112 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                   ),
                 ),
               ],
+              if (isApprovalPending) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('⏳', style: TextStyle(fontSize: 18)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Pending Manager Approval',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'This task is awaiting review & approval by your reporting manager before it can be accepted and started.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFFB45309),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (isPendingStatus) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.assignment_turned_in_rounded, size: 16, color: Color(0xFF2563EB)),
+                          SizedBox(width: 6),
+                          Text(
+                            'Task Ready to Accept',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Accept this task to start work and begin the active task timer.',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF1E3A8A), height: 1.3),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () {
+                                  if (_isOnBreak || _task['pausedByBreak'] == true) {
+                                    setState(() {
+                                      _error = 'Cannot start task while on break. End your break first.';
+                                    });
+                                    return;
+                                  }
+                                  _updateStatus('In Progress');
+                                },
+                          icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                          label: Text(_saving ? 'Accepting...' : 'Accept Task & Start Timer'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Text('Update Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF334155))),
               const SizedBox(height: 8),
               Wrap(
@@ -1234,11 +1379,13 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                 children: ['Pending', 'In Progress', 'Paused', 'Completed', 'Cancelled'].map((st) {
                   final isSel = _selectedStatus == st;
                   final isBlockedByBreak = st == 'In Progress' && (_isOnBreak || _task['pausedByBreak'] == true);
+                  final isBlockedByApproval = st == 'In Progress' && isApprovalPending;
+                  final isBlocked = isBlockedByBreak || isBlockedByApproval;
                   return ChoiceChip(
                     label: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (isBlockedByBreak) ...[
+                        if (isBlocked) ...[
                           const Icon(Icons.lock_outline_rounded, size: 12, color: Color(0xFFD97706)),
                           const SizedBox(width: 4),
                         ],
@@ -1249,17 +1396,23 @@ class _TaskDetailSheetState extends State<_TaskDetailSheet> {
                             fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
                             color: isSel
                                 ? Colors.white
-                                : (isBlockedByBreak ? const Color(0xFF94A3B8) : const Color(0xFF334155)),
+                                : (isBlocked ? const Color(0xFF94A3B8) : const Color(0xFF334155)),
                           ),
                         ),
                       ],
                     ),
                     selected: isSel,
                     selectedColor: const Color(0xFF2563EB),
-                    backgroundColor: isBlockedByBreak ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
+                    backgroundColor: isBlocked ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
                     onSelected: _saving
                         ? null
                         : (_) {
+                            if (isBlockedByApproval) {
+                              setState(() {
+                                _error = 'This task is awaiting review & approval by your manager before it can be started.';
+                              });
+                              return;
+                            }
                             if (isBlockedByBreak) {
                               setState(() {
                                 _error = 'Cannot start or resume task while on break. End your break first.';

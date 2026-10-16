@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import { getAllReporteeIds, refEmployeeId } from '../../utils/reportingHierarchy'
+import { onTaskChanged } from '../../utils/realtimeSocket'
 
 const formatMinutes = (minutes) => {
   const mins = Number(minutes)
@@ -104,6 +105,18 @@ const TaskApprovalView = () => {
 
   useEffect(() => {
     fetchTasksAndTeam()
+  }, [fetchTasksAndTeam])
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchTasksAndTeam()
+    }
+    const unsub = onTaskChanged(handleUpdate)
+    window.addEventListener('crm:task-updated', handleUpdate)
+    return () => {
+      unsub?.()
+      window.removeEventListener('crm:task-updated', handleUpdate)
+    }
   }, [fetchTasksAndTeam])
 
   // Get list of employee IDs who report to this manager
@@ -217,7 +230,7 @@ const TaskApprovalView = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t._id) === String(updated._id) ? updated : t))
       )
-      setActionSuccess(`Approved "${task.title}". Active timer started (${formatMinutes(totalMinutes)}).`)
+      setActionSuccess(`Approved "${task.title}". Waiting for employee to accept and start timer.`)
       setTimeout(() => setActionSuccess(null), 4000)
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to approve task')
@@ -276,7 +289,7 @@ const TaskApprovalView = () => {
             )}
           </div>
           <p className='text-xs sm:text-sm text-gray-500 mt-1'>
-            Review employee tasks, adjust duration, and approve to start task timer.
+            Review employee tasks, adjust duration, and approve them for employee acceptance.
           </p>
         </div>
 
@@ -584,25 +597,25 @@ const TaskApprovalView = () => {
                               onClick={() => handleApprove(task)}
                               disabled={isSubmitting || totalEditedMins <= 0}
                               className='px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-2xs flex items-center gap-1.5 disabled:opacity-50'
-                              title='Approve task and immediately start active timer'
+                              title='Approve task for employee acceptance'
                             >
                               {isSubmitting ? (
                                 <>
                                   <span className='w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin' />
-                                  <span>Starting…</span>
+                                  <span>Approving…</span>
                                 </>
                               ) : (
                                 <>
-                                  <span>▶</span>
-                                  <span>Approve & Start</span>
+                                  <span>✓</span>
+                                  <span>Approve</span>
                                 </>
                               )}
                             </button>
                           </div>
                         ) : isApproved ? (
                           <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200'>
-                            <span className='w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse' />
-                            Approved · Timer Started
+                            <span className='w-1.5 h-1.5 rounded-full bg-emerald-600' />
+                            Approved · Awaiting Acceptance
                           </span>
                         ) : (
                           <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200'>

@@ -199,6 +199,26 @@ export const createNotificationService = ({ Notification }) => {
     return createMany(items);
   };
 
+  const notifyEmployee = async ({
+    employeeId,
+    type = 'general',
+    title,
+    message,
+    link = '',
+    priority = 'normal',
+    metadata = {},
+  }) => {
+    return createOne({
+      recipientId: employeeId,
+      type,
+      title,
+      message,
+      link,
+      priority,
+      metadata,
+    });
+  };
+
   return {
     createOne,
     createMany,
@@ -208,5 +228,6 @@ export const createNotificationService = ({ Notification }) => {
     notifyTaskCompletionRating,
     notifyTaskStatusChanged,
     notifyAnnouncement,
+    notifyEmployee,
   };
 };

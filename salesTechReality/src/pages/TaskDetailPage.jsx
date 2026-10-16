@@ -547,7 +547,7 @@ const TaskDetailPage = ({ isMyTasks = false }) => {
                     </button>
                   ) : (
                     <span className='text-[11px] text-gray-500 text-right'>
-                      Timer will start once reporting manager approves.
+                      Awaiting manager approval before task can be accepted.
                     </span>
                   )}
                 </div>

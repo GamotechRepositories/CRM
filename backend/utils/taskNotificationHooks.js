@@ -14,6 +14,7 @@ const notifyAssigneeSocket = (task, reason, extra = {}) => {
     taskId: task?._id,
     status: task?.status,
     title: task?.title,
+    approvalStatus: task?.approvalStatus,
     ...extra,
   });
 };

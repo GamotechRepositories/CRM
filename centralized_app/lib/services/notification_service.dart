@@ -2,7 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-enum NotificationChannel { tasks, attendance }
+enum NotificationChannel {
+  tasks,
+  taskApproval,
+  taskApproved,
+  taskRejected,
+  attendance,
+}
 
 /// Thin wrapper over `flutter_local_notifications` (Android only).
 class NotificationService {
@@ -59,6 +65,33 @@ class NotificationService {
           channelDescription: 'Alerts when a new task is assigned to you',
           importance: Importance.high,
           priority: Priority.high,
+        ),
+      NotificationChannel.taskApproval => const AndroidNotificationDetails(
+          'crm_task_approval',
+          'Task approvals',
+          channelDescription: 'Alerts when a task requires your approval',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound('task_approval'),
+        ),
+      NotificationChannel.taskApproved => const AndroidNotificationDetails(
+          'crm_task_approved',
+          'Task approved',
+          channelDescription: 'Alerts when your task has been approved',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound('task_succeed'),
+        ),
+      NotificationChannel.taskRejected => const AndroidNotificationDetails(
+          'crm_task_rejected',
+          'Task rejected',
+          channelDescription: 'Alerts when your task was rejected',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound('task_rejected'),
         ),
       NotificationChannel.attendance => const AndroidNotificationDetails(
           'crm_attendance',
