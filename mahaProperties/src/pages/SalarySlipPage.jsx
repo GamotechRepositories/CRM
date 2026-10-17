@@ -631,6 +631,9 @@ const SalarySlipPage = () => {
                         <p className='text-xs font-semibold mt-0.5' style={{ color: '#4b5563' }}>
                           {MONTH_NAMES[selectedSalary.month]} {selectedSalary.year}
                         </p>
+                         <p className='text-[10px] font-semibold mt-1' style={{ color: '#4b5563' }}>
+                          Issued Date: {new Date().toLocaleDateString('en-IN')}
+                        </p>
                         <span className='inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mt-1' style={{ backgroundColor: '#dcfce7', color: '#15803d' }}>
                           PAID
                         </span>
@@ -677,12 +680,9 @@ const SalarySlipPage = () => {
                         </span>
                       </div>
                       <div>
-                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Payment Mode / Date</span>
+                        <span className='font-medium block text-[10px]' style={{ color: '#6b7280' }}>Payment Mode</span>
                         <span className='font-semibold block' style={{ color: '#1f2937' }}>
-                          {selectedSalary.paymentMode || 'Bank Transfer'} •{' '}
-                          {selectedSalary.paymentDate
-                            ? new Date(selectedSalary.paymentDate).toLocaleDateString('en-IN')
-                            : new Date(selectedSalary.updatedAt || Date.now()).toLocaleDateString('en-IN')}
+                          {selectedSalary.paymentMode || 'Bank Transfer'}
                         </span>
                       </div>
                     </div>
