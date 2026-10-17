@@ -623,7 +623,7 @@ const TaskApprovalView = () => {
                         ) : isApproved ? (
                           <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200'>
                             <span className='w-1.5 h-1.5 rounded-full bg-emerald-600' />
-                            Approved · Awaiting Acceptance
+                            Approved
                           </span>
                         ) : (
                           <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200'>
