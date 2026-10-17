@@ -252,6 +252,7 @@ const SalarySlipPage = () => {
     if (!element) return
     setDownloading(true)
     setDownloadError(null)
+    let fontMetricsFixStyle = null
     try {
       let activeLogo = logoSrc
       if (!activeLogo || !activeLogo.startsWith('data:image')) {
@@ -275,6 +276,16 @@ const SalarySlipPage = () => {
         )
         strippedLinkedCss = texts.map(stripUnsupportedColors).join('\n')
       }
+
+      // html2canvas measures font baselines on the LIVE document by placing a 1x1 <img>
+      // inline next to sample text. Tailwind preflight sets `img { display: block }`, which
+      // breaks that measurement and makes all text render too low in the PDF.
+      // Temporarily restore inline display for only those measurement images.
+      fontMetricsFixStyle = document.createElement('style')
+      fontMetricsFixStyle.setAttribute('data-html2canvas-fontmetrics-fix', '')
+      fontMetricsFixStyle.textContent =
+        'body > div > img[width="1"][height="1"] { display: inline !important; }'
+      document.head.appendChild(fontMetricsFixStyle)
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -387,6 +398,9 @@ const SalarySlipPage = () => {
       console.error('Salary slip PDF download failed:', err)
       setDownloadError(err?.message || 'Download failed. Try Print then Save as PDF.')
     } finally {
+      if (fontMetricsFixStyle?.parentNode) {
+        fontMetricsFixStyle.parentNode.removeChild(fontMetricsFixStyle)
+      }
       setDownloading(false)
     }
   }
@@ -696,10 +710,10 @@ const SalarySlipPage = () => {
                       <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
                         <thead>
                           <tr className='font-bold text-[10px]' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
-                            <th className='py-2 px-3 text-left w-1/2' style={{ borderRight: '1px solid #d1d5db' }}>EARNINGS COMPONENT</th>
-                            <th className='py-2 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>AMOUNT</th>
-                            <th className='py-2 px-3 text-left w-1/3' style={{ borderRight: '1px solid #d1d5db' }}>DEDUCTION COMPONENT</th>
-                            <th className='py-2 px-3 text-right'>AMOUNT</th>
+                            <th className='py-2 px-3 text-left align-middle w-1/2' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>EARNINGS COMPONENT</th>
+                            <th className='py-2 px-3 text-right align-middle' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>AMOUNT</th>
+                            <th className='py-2 px-3 text-left align-middle w-1/3' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>DEDUCTION COMPONENT</th>
+                            <th className='py-2 px-3 text-right align-middle' style={{ verticalAlign: 'middle' }}>AMOUNT</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -708,26 +722,26 @@ const SalarySlipPage = () => {
                             const ded = structure.deductions[idx]
                             return (
                               <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                <td className='py-1.5 px-3 text-[11px]' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px] align-middle' style={{ borderRight: '1px solid #e5e7eb', verticalAlign: 'middle' }}>
                                   {comp ? comp.name : '—'}
                                 </td>
-                                <td className='py-1.5 px-3 text-[11px] text-right font-medium' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px] text-right font-medium align-middle' style={{ borderRight: '1px solid #e5e7eb', verticalAlign: 'middle' }}>
                                   {comp ? formatINR(comp.amount) : '—'}
                                 </td>
-                                <td className='py-1.5 px-3 text-[11px]' style={{ borderRight: '1px solid #e5e7eb' }}>
+                                <td className='py-1.5 px-3 text-[11px] align-middle' style={{ borderRight: '1px solid #e5e7eb', verticalAlign: 'middle' }}>
                                   {ded ? ded.name : '—'}
                                 </td>
-                                <td className='py-1.5 px-3 text-[11px] text-right font-medium'>
+                                <td className='py-1.5 px-3 text-[11px] text-right font-medium align-middle' style={{ verticalAlign: 'middle' }}>
                                   {ded ? formatINR(ded.amount) : '—'}
                                 </td>
                               </tr>
                             )
                           })}
                           <tr className='font-bold text-[11px]' style={{ backgroundColor: '#f9fafb', borderTop: '1px solid #d1d5db', color: '#111827' }}>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #d1d5db' }}>GROSS SALARY (TOTAL EARNINGS)</td>
-                            <td className='py-2 px-3 text-right' style={{ borderRight: '1px solid #d1d5db' }}>{formatINR(structure.grossSalary)}</td>
-                            <td className='py-2 px-3' style={{ borderRight: '1px solid #d1d5db' }}>TOTAL DEDUCTIONS</td>
-                            <td className='py-2 px-3 text-right'>{formatINR(structure.totalDeductions)}</td>
+                            <td className='py-2 px-3 align-middle' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>GROSS SALARY (TOTAL EARNINGS)</td>
+                            <td className='py-2 px-3 text-right align-middle' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>{formatINR(structure.grossSalary)}</td>
+                            <td className='py-2 px-3 align-middle' style={{ borderRight: '1px solid #d1d5db', verticalAlign: 'middle' }}>TOTAL DEDUCTIONS</td>
+                            <td className='py-2 px-3 text-right align-middle' style={{ verticalAlign: 'middle' }}>{formatINR(structure.totalDeductions)}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -742,15 +756,15 @@ const SalarySlipPage = () => {
                         <table className='w-full text-xs rounded-lg overflow-hidden' style={{ border: '1px solid #d1d5db' }}>
                           <thead>
                             <tr className='font-bold text-[10px]' style={{ backgroundColor: '#f3f4f6', borderBottom: '1px solid #d1d5db', color: '#1f2937' }}>
-                              <th className='py-1.5 px-3 text-left'>CONTRIBUTION TYPE</th>
-                              <th className='py-1.5 px-3 text-right'>AMOUNT</th>
+                              <th className='py-1.5 px-3 text-left align-middle' style={{ verticalAlign: 'middle' }}>CONTRIBUTION TYPE</th>
+                              <th className='py-1.5 px-3 text-right align-middle' style={{ verticalAlign: 'middle' }}>AMOUNT</th>
                             </tr>
                           </thead>
                           <tbody>
                             {structure.employerContributions.map((empContrib, i) => (
                               <tr key={i} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                <td className='py-1 px-3 text-[11px]'>{empContrib.name}</td>
-                                <td className='py-1 px-3 text-[11px] text-right font-medium'>{formatINR(empContrib.amount)}</td>
+                                <td className='py-1.5 px-3 text-[11px] align-middle' style={{ verticalAlign: 'middle' }}>{empContrib.name}</td>
+                                <td className='py-1.5 px-3 text-[11px] text-right font-medium align-middle' style={{ verticalAlign: 'middle' }}>{formatINR(empContrib.amount)}</td>
                               </tr>
                             ))}
                           </tbody>
