@@ -28,6 +28,9 @@ export const runTaskNotificationSideEffects = async ({
 
   try {
     if (!existing) {
+      if (updated.approvalStatus === 'Pending') {
+        return;
+      }
       await notificationService.notifyTaskAssigned({ task: updated });
       notifyAssigneeSocket(updated, 'assigned');
       return;

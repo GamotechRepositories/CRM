@@ -628,66 +628,88 @@ const TasksView = ({ isMyTasks = false }) => {
                 </td>
               </tr>
             ) : (
-              filteredTasks.map((task) => (
-                <tr
-                  key={task._id}
-                  onClick={() => setViewTask(task)}
-                  className='border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer'
-                >
-                  <td className={`py-4 px-6 ${isMyTasks ? 'w-[300px] max-w-[300px]' : ''}`}>
-                    <p className={`text-sm font-medium text-gray-900 ${isMyTasks ? 'line-clamp-2' : ''}`}>
-                      {task.title}
-                    </p>
-                    {task.source === 'social_media' && (
-                      <p className='text-xs text-indigo-700 mt-0.5'>
-                        {task.contentType || 'Post'} • {task.platform || 'Platform'} • {task.socialPostStatus || 'Scheduled'}
+              filteredTasks.map((task) => {
+                const isWaitingForApproval = task.approvalStatus === 'Pending'
+                const isApproved =
+                  task.approvalStatus === 'Approved' && normalizeTaskStatus(task.status) === 'Pending'
+                const rowColorClass = isWaitingForApproval
+                  ? 'bg-yellow-100 hover:bg-yellow-200/80 border-b border-yellow-300 border-l-4 border-l-yellow-500'
+                  : isApproved
+                    ? 'bg-green-100 hover:bg-green-200/80 border-b border-green-300 border-l-4 border-l-green-600'
+                    : 'border-b border-gray-100 hover:bg-gray-50'
+
+                return (
+                  <tr
+                    key={task._id}
+                    onClick={() => setViewTask(task)}
+                    className={`${rowColorClass} transition-colors cursor-pointer`}
+                  >
+                    <td className={`py-4 px-6 ${isMyTasks ? 'w-[300px] max-w-[300px]' : ''}`}>
+                      <p className={`text-sm font-medium text-gray-900 ${isMyTasks ? 'line-clamp-2' : ''}`}>
+                        {task.title}
                       </p>
-                    )}
-                    {task.description && (
-                      <p className={`text-sm text-gray-500 mt-0.5 ${isMyTasks ? 'line-clamp-2' : 'line-clamp-1'}`}>
-                        {task.description}
-                      </p>
-                    )}
-                  </td>
-                  <td className='py-4 px-6 text-gray-700 text-sm'>
-                    {task.project?.projectName || '—'}
-                  </td>
-                  <td className='py-4 px-6'>
-                    <PersonShortName name={task.assignedTo?.name} />
-                  </td>
-                  <td className='py-4 px-6'>
-                    <PersonShortName name={task.assignedBy?.name} />
-                  </td>
-                  <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.createdAt)}</td>
-                  <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.updatedAt)}</td>
-                  <td className='py-4 px-6 text-gray-700 text-sm'>
-                    {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
-                  </td>
-                  <td className='py-4 px-6'>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>
-                      {task.priority}
-                    </span>
-                  </td>
-                  <td className='py-4 px-6'>
-                    <div className='flex flex-col gap-0.5'>
-                      <span className={`inline-flex items-center gap-1 w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
-                        {normalizeTaskStatus(task.status) || task.status}
-                        {task.pausedByMeeting && (
-                          <span className='text-[10px] font-medium opacity-90'>(In Meeting)</span>
-                        )}
-                        {task.pausedByBreak && (
-                          <span className='text-[10px] font-medium opacity-90'>(On Break)</span>
-                        )}
-                      </span>
-                      {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
-                        <span className='text-xs text-blue-700'>
-                          {formatTaskDuration(getTaskRemainingMinutes(task))} left
-                        </span>
+                      {task.source === 'social_media' && (
+                        <p className='text-xs text-indigo-700 mt-0.5'>
+                          {task.contentType || 'Post'} • {task.platform || 'Platform'} • {task.socialPostStatus || 'Scheduled'}
+                        </p>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      {task.description && (
+                        <p className={`text-sm text-gray-500 mt-0.5 ${isMyTasks ? 'line-clamp-2' : 'line-clamp-1'}`}>
+                          {task.description}
+                        </p>
+                      )}
+                    </td>
+                    <td className='py-4 px-6 text-gray-700 text-sm'>
+                      {task.project?.projectName || '—'}
+                    </td>
+                    <td className='py-4 px-6'>
+                      <PersonShortName name={task.assignedTo?.name} />
+                    </td>
+                    <td className='py-4 px-6'>
+                      <PersonShortName name={task.assignedBy?.name} />
+                    </td>
+                    <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.createdAt)}</td>
+                    <td className='py-4 px-6 text-gray-700 text-sm whitespace-nowrap'>{fmtDateTime(task.updatedAt)}</td>
+                    <td className='py-4 px-6 text-gray-700 text-sm'>
+                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
+                    </td>
+                    <td className='py-4 px-6'>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </span>
+                    </td>
+                    <td className='py-4 px-6'>
+                      <div className='flex flex-col gap-1'>
+                        {isWaitingForApproval ? (
+                          <span className='inline-flex items-center gap-1 w-fit px-3 py-1 rounded-full text-xs font-semibold bg-yellow-200 text-yellow-900 border border-yellow-400'>
+                            ⏳ Waiting for Approval
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 w-fit px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                            {normalizeTaskStatus(task.status) || task.status}
+                            {task.pausedByMeeting && (
+                              <span className='text-[10px] font-medium opacity-90'>(In Meeting)</span>
+                            )}
+                            {task.pausedByBreak && (
+                              <span className='text-[10px] font-medium opacity-90'>(On Break)</span>
+                            )}
+                          </span>
+                        )}
+                        {isApproved && (
+                          <span className='inline-flex items-center gap-1 w-fit px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-green-200 text-green-900 border border-green-400'>
+                            ✓ Approved
+                          </span>
+                        )}
+                        {(normalizeTaskStatus(task.status) === 'In Progress' || normalizeTaskStatus(task.status) === 'Paused') && getTaskRemainingMinutes(task) != null && (
+                          <span className='text-xs text-blue-700'>
+                            {formatTaskDuration(getTaskRemainingMinutes(task))} left
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </table>

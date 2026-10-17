@@ -230,6 +230,7 @@ const TaskApprovalView = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t._id) === String(updated._id) ? updated : t))
       )
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
       setActionSuccess(`Approved "${task.title}". Waiting for employee to accept and start timer.`)
       setTimeout(() => setActionSuccess(null), 4000)
     } catch (err) {
@@ -253,6 +254,7 @@ const TaskApprovalView = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t._id) === String(updated._id) ? updated : t))
       )
+      window.dispatchEvent(new CustomEvent('crm:task-updated'))
       setActionSuccess(`Task "${rejectingTask.title}" rejected.`)
       setTimeout(() => setActionSuccess(null), 4000)
       setRejectingTask(null)
@@ -426,7 +428,13 @@ const TaskApprovalView = () => {
                   return (
                     <tr
                       key={task._id}
-                      className='hover:bg-blue-50/20 transition-colors group'
+                      className={`${
+                        isPending
+                          ? 'bg-yellow-50/90 hover:bg-yellow-100/80 border-l-4 border-l-yellow-400'
+                          : isApproved
+                            ? 'bg-green-50/90 hover:bg-green-100/80 border-l-4 border-l-green-500'
+                            : 'hover:bg-blue-50/20'
+                      } transition-colors group`}
                     >
                       {/* 1. Task Title */}
                       <td className='py-3.5 px-4 max-w-[280px]'>

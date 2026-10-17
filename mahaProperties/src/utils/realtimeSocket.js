@@ -3,6 +3,21 @@ import { io } from 'socket.io-client'
 let socket = null
 let connectedUserId = null
 let connectedTenantId = null
+const taskChangedHandlers = new Set()
+
+const attachTaskChangedForwarder = (sock) => {
+  if (!sock) return
+  sock.off('task:changed')
+  sock.on('task:changed', (payload) => {
+    taskChangedHandlers.forEach((fn) => {
+      try {
+        fn(payload)
+      } catch (err) {
+        console.error('Error in task:changed handler:', err)
+      }
+    })
+  })
+}
 
 /** API base like https://host/api/v1/tenant → socket origin https://host */
 export const getSocketOrigin = () => {
@@ -59,6 +74,7 @@ export const connectRealtimeSocket = (userId, options = {}) => {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 10000,
   })
+  attachTaskChangedForwarder(socket)
   connectedUserId = id
   connectedTenantId = tenantId
   return socket
@@ -77,10 +93,10 @@ export const disconnectRealtimeSocket = () => {
 
 /** Subscribe to task list changes for the current user. Returns unsubscribe. */
 export const onTaskChanged = (handler) => {
-  if (!socket || typeof handler !== 'function') return () => {}
-  socket.on('task:changed', handler)
+  if (typeof handler !== 'function') return () => {}
+  taskChangedHandlers.add(handler)
   return () => {
-    socket?.off('task:changed', handler)
+    taskChangedHandlers.delete(handler)
   }
 }
 

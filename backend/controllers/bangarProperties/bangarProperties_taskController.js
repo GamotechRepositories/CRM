@@ -242,14 +242,26 @@ export const createTask = async (req, res) => {
         const assignerDoc = await Employee.findById(assignedBy).select('name reportingManager');
         const assigneeDocs = await Employee.find({ _id: { $in: assigneeIds } }).select('name reportingManager');
         const allEmployees = await Employee.find({ status: 'Active' }).populate('designation');
+        const empById = new Map(allEmployees.map((emp) => [toId(emp._id), emp]));
 
         const approverIds = new Set();
+        const addManagerChain = (startMgrId) => {
+          let currId = toId(startMgrId);
+          const visited = new Set();
+          while (currId && !visited.has(currId)) {
+            visited.add(currId);
+            approverIds.add(currId);
+            const mgrEmp = empById.get(currId);
+            currId = toId(mgrEmp?.reportingManager);
+          }
+        };
+
         if (assignerDoc?.reportingManager) {
-          approverIds.add(toId(assignerDoc.reportingManager));
+          addManagerChain(assignerDoc.reportingManager);
         }
         for (const aDoc of assigneeDocs) {
           if (aDoc?.reportingManager) {
-            approverIds.add(toId(aDoc.reportingManager));
+            addManagerChain(aDoc.reportingManager);
           }
         }
         for (const emp of allEmployees) {
@@ -259,12 +271,23 @@ export const createTask = async (req, res) => {
         }
         approverIds.delete(toId(assignedBy));
 
-        const approverList = Array.from(approverIds);
+        const firstPopulated = populatedTasks[0] || null;
+        const employeeName =
+          firstPopulated?.assignedTo?.name ||
+          assigneeDocs[0]?.name ||
+          assignerDoc?.name ||
+          'Employee';
+        const projectName = firstPopulated?.project?.projectName || '';
+
+        const approverList = Array.from(approverIds).filter(Boolean);
         if (approverList.length > 0) {
           emitTaskChanged(approverList, {
             reason: 'approval_required',
             taskId: createdTasks[0]?._id,
             title,
+            employeeName,
+            assignedByName: assignerDoc?.name || employeeName,
+            projectName,
             approvalStatus: 'Pending',
             status: initialStatus,
             assignedBy,

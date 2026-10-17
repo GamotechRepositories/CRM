@@ -8,6 +8,7 @@ import { getDashboardKind } from '../config/dashboardRoutes'
 import { showsMyTeamForUser } from '../config/authPermissions'
 import { SidebarSectionIcon } from '../config/sidebarIcons'
 import { SettingsIcon, LogoutIcon } from './Icons'
+import { getAllReporteeIds, refEmployeeId } from '../utils/reportingHierarchy'
 import {
   enableTaskAssignmentAlerts,
   initTaskAssignmentAudio,
@@ -24,6 +25,27 @@ import {
   getTenantId,
   onTaskChanged,
 } from '../utils/realtimeSocket'
+
+const getDismissedApprovalIds = (userId) => {
+  if (!userId || typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(`crm_dismissed_approval_tasks_${userId}`)
+    const parsed = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(parsed) ? parsed.map(String) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+const saveDismissedApprovalIds = (userId, idsSet) => {
+  if (!userId || typeof window === 'undefined') return
+  try {
+    const arr = Array.from(idsSet).slice(-500)
+    window.localStorage.setItem(`crm_dismissed_approval_tasks_${userId}`, JSON.stringify(arr))
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 const MenuToggleIcon = () => (
   <svg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' strokeWidth={1.5} stroke='currentColor' className='size-6'>
@@ -78,9 +100,24 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
 
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [pendingMyTasksCount, setPendingMyTasksCount] = useState(0)
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
+  const [approvalPopupQueue, setApprovalPopupQueue] = useState([])
   const [alertsEnabled, setAlertsEnabled] = useState(false)
   const alertsEnabledRef = useRef(false)
   const navigateRef = useRef(navigate)
+  const notifiedApprovalIdsRef = useRef(new Set())
+  const employeesCacheRef = useRef(null)
+
+  const dismissApprovalPopup = () => {
+    if (user?._id && approvalPopupQueue.length > 0) {
+      const dismissed = getDismissedApprovalIds(user._id)
+      approvalPopupQueue.forEach((item) => {
+        if (item.taskId) dismissed.add(String(item.taskId))
+      })
+      saveDismissedApprovalIds(user._id, dismissed)
+    }
+    setApprovalPopupQueue([])
+  }
 
   useEffect(() => {
     alertsEnabledRef.current = alertsEnabled
@@ -126,17 +163,29 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
     let previousPendingCount = null
     let inFlight = false
     let refreshTimer = null
+    employeesCacheRef.current = null
 
     const fetchPendingMyTasks = async ({ playAlert = false } = {}) => {
       if (!user?._id) {
-        if (!cancelled) setPendingMyTasksCount(0)
+        if (!cancelled) {
+          setPendingMyTasksCount(0)
+          setPendingApprovalsCount(0)
+          setApprovalPopupQueue([])
+        }
         return
       }
       if (inFlight) return
       inFlight = true
       try {
-        const res = await api.get('/tasks', { params: { employeeId: user._id } })
-        const list = Array.isArray(res.data) ? res.data : []
+        const [myTasksRes, allTasksRes, empRes] = await Promise.all([
+          api.get('/tasks', { params: { employeeId: user._id } }),
+          api.get('/tasks').catch(() => ({ data: [] })),
+          employeesCacheRef.current
+            ? Promise.resolve({ data: employeesCacheRef.current })
+            : api.get('/employees').catch(() => ({ data: [] })),
+        ])
+
+        const list = Array.isArray(myTasksRes.data) ? myTasksRes.data : []
         const pendingCount = list.filter((task) => String(task?.status || '').trim() === 'Pending').length
         if (
           playAlert &&
@@ -151,6 +200,83 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         }
         previousPendingCount = pendingCount
         if (!cancelled) setPendingMyTasksCount(pendingCount)
+
+        const rawEmployees = Array.isArray(empRes.data)
+          ? empRes.data
+          : empRes.data?.data || []
+        if (rawEmployees.length > 0) {
+          employeesCacheRef.current = rawEmployees
+        }
+        const reporteeIds = getAllReporteeIds(rawEmployees, user._id)
+        const allTasks = (Array.isArray(allTasksRes.data) ? allTasksRes.data : []).filter(
+          (t) => !String(t?._id || '').startsWith('social-media-')
+        )
+
+        const managerPendingApprovalTasks = allTasks.filter((t) => {
+          if (t.approvalStatus !== 'Pending') return false
+          const assigneeId = refEmployeeId(t.assignedTo)
+          const assignerId = refEmployeeId(t.assignedBy)
+          if (assignerId && String(assignerId) === String(user._id)) return false
+
+          const directMgrAssignee = refEmployeeId(t.assignedTo?.reportingManager)
+          const directMgrAssigner = refEmployeeId(t.assignedBy?.reportingManager)
+          if (
+            directMgrAssignee === String(user._id) ||
+            directMgrAssigner === String(user._id) ||
+            reporteeIds.has(assigneeId) ||
+            reporteeIds.has(assignerId) ||
+            fullAccess
+          ) {
+            return true
+          }
+          return false
+        })
+
+        if (!cancelled) {
+          setPendingApprovalsCount(managerPendingApprovalTasks.length)
+          const dismissed = getDismissedApprovalIds(user._id)
+          const unseenApprovalTasks = managerPendingApprovalTasks.filter(
+            (t) => !dismissed.has(String(t._id))
+          )
+
+          let newlyNotified = null
+          for (const t of unseenApprovalTasks) {
+            const tid = String(t._id)
+            if (!notifiedApprovalIdsRef.current.has(tid)) {
+              notifiedApprovalIdsRef.current.add(tid)
+              if (!newlyNotified) newlyNotified = t
+            }
+          }
+
+          if (newlyNotified) {
+            notifyTaskWaitingApproval({
+              title: newlyNotified.title,
+              navigate: navigateRef.current,
+            })
+          }
+
+          const activePendingIds = new Set(managerPendingApprovalTasks.map((t) => String(t._id)))
+          setApprovalPopupQueue((prev) => {
+            const byId = new Map()
+            for (const t of unseenApprovalTasks) {
+              const tid = String(t._id)
+              byId.set(tid, {
+                id: tid,
+                taskId: tid,
+                title: t.title || 'New Task',
+                employeeName: t.assignedTo?.name || t.assignedBy?.name || 'Employee',
+                projectName: t.project?.projectName || '',
+              })
+            }
+            for (const existing of prev) {
+              const tid = String(existing.taskId || '')
+              if (tid && !byId.has(tid) && activePendingIds.has(tid) && !dismissed.has(tid)) {
+                byId.set(tid, existing)
+              }
+            }
+            return Array.from(byId.values())
+          })
+        }
       } catch {
         if (!cancelled) setPendingMyTasksCount(0)
       } finally {
@@ -165,17 +291,37 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       }, 150)
     }
 
-    // Initial badge load only — further updates come from Socket.IO.
     fetchPendingMyTasks()
     connectRealtimeSocket(user._id, { tenantId: getTenantId() })
     const unsubscribe = onTaskChanged((payload) => {
       const reason = String(payload?.reason || '')
 
       if (reason === 'approval_required') {
-        notifyTaskWaitingApproval({
-          title: payload?.title,
-          navigate: navigateRef.current,
-        })
+        const tid = payload?.taskId ? String(payload.taskId) : ''
+        const dismissed = getDismissedApprovalIds(user._id)
+        if (!tid || !dismissed.has(tid)) {
+          if (!tid || !notifiedApprovalIdsRef.current.has(tid)) {
+            if (tid) notifiedApprovalIdsRef.current.add(tid)
+            notifyTaskWaitingApproval({
+              title: payload?.title,
+              navigate: navigateRef.current,
+            })
+          }
+          setApprovalPopupQueue((prev) => {
+            if (tid && prev.some((item) => String(item.taskId) === tid)) return prev
+            return [
+              {
+                id: tid || `approval-${Date.now()}`,
+                taskId: tid,
+                title: payload?.title || 'New Task',
+                employeeName: payload?.employeeName || payload?.assignedByName || 'Employee',
+                projectName: payload?.projectName || '',
+              },
+              ...prev,
+            ]
+          })
+        }
+        scheduleRefresh()
         window.dispatchEvent(new CustomEvent('crm:task-updated'))
         return
       }
@@ -205,19 +351,28 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
       window.dispatchEvent(new CustomEvent('crm:task-updated'))
     })
 
+    const handleTaskUpdatedEvent = () => {
+      scheduleRefresh()
+    }
     const handleFocus = () => {
-      // One catch-up fetch if the tab was away (missed socket while sleeping).
       if (!document.hidden) fetchPendingMyTasks()
     }
+    const pollInterval = window.setInterval(() => {
+      if (!document.hidden) fetchPendingMyTasks()
+    }, 10000)
+
+    window.addEventListener('crm:task-updated', handleTaskUpdatedEvent)
     window.addEventListener('focus', handleFocus)
 
     return () => {
       cancelled = true
       if (refreshTimer) window.clearTimeout(refreshTimer)
+      window.clearInterval(pollInterval)
       unsubscribe()
+      window.removeEventListener('crm:task-updated', handleTaskUpdatedEvent)
       window.removeEventListener('focus', handleFocus)
     }
-  }, [user?._id])
+  }, [user?._id, fullAccess])
 
   const toggleSection = (id) => {
     setExpanded((prev) => (prev[id] ? {} : { [id]: true }))
@@ -246,6 +401,11 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
                 {pendingMyTasksCount > 99 ? '99+' : pendingMyTasksCount}
               </span>
             )}
+            {child.id === 'task-approvals' && pendingApprovalsCount > 0 && (
+              <span className='ml-auto inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-semibold text-white'>
+                {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+              </span>
+            )}
           </>
         ) : (
           <span className='w-1.5 h-1.5 rounded-full bg-[#94A3B8]' />
@@ -255,7 +415,99 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
   }
 
   return (
-    <aside className={`bg-[#0F172A] text-[#E5E7EB] text-sm h-screen flex flex-col shadow-2xl border-r border-[#1E293B] transition-all duration-200 flex-shrink-0 print:hidden ${isOpen ? 'w-64' : 'w-16'}`}>
+    <>
+      {approvalPopupQueue.length > 0 && (
+        <div
+          className='fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]'
+          role='dialog'
+          aria-modal='true'
+          aria-labelledby='task-approval-popup-title'
+        >
+          <div className='bg-white rounded-2xl shadow-2xl border border-amber-200 max-w-md w-full overflow-hidden'>
+            <div className='bg-gradient-to-r from-amber-500 to-yellow-500 px-5 py-4 flex items-center justify-between text-white'>
+              <div className='flex items-center gap-2.5'>
+                <span className='w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-lg shadow-inner'>
+                  🔔
+                </span>
+                <div>
+                  <h3 id='task-approval-popup-title' className='text-sm font-bold leading-tight'>
+                    New Task Waiting for Approval
+                  </h3>
+                  <p className='text-[11px] text-amber-50'>
+                    {approvalPopupQueue.length === 1
+                      ? 'A new task has been added for your approval'
+                      : `${approvalPopupQueue.length} new tasks are waiting for your approval`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type='button'
+                onClick={dismissApprovalPopup}
+                className='w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 flex items-center justify-center text-white text-sm font-bold transition-colors'
+                aria-label='Close notification'
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className='p-5 space-y-3 max-h-[60vh] overflow-y-auto'>
+              {approvalPopupQueue.slice(0, 4).map((item) => (
+                <div
+                  key={item.id}
+                  className='p-3.5 rounded-xl bg-yellow-50 border border-yellow-300 space-y-1.5'
+                >
+                  <div className='flex items-start justify-between gap-2'>
+                    <p className='text-sm font-bold text-gray-900 leading-snug'>
+                      {item.title}
+                    </p>
+                    <span className='shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-200 text-yellow-900 border border-yellow-400'>
+                      ⏳ Waiting for Approval
+                    </span>
+                  </div>
+                  {item.employeeName && (
+                    <p className='text-xs text-gray-700'>
+                      <span className='font-semibold text-gray-500'>Employee:</span>{' '}
+                      <span className='font-semibold text-gray-900'>{item.employeeName}</span>
+                    </p>
+                  )}
+                  {item.projectName && (
+                    <p className='text-xs text-gray-600'>
+                      <span className='font-semibold text-gray-500'>Project:</span> {item.projectName}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {approvalPopupQueue.length > 4 && (
+                <p className='text-xs text-center text-amber-800 font-semibold'>
+                  + {approvalPopupQueue.length - 4} more task(s) waiting for approval
+                </p>
+              )}
+            </div>
+
+            <div className='px-5 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2.5'>
+              <button
+                type='button'
+                onClick={dismissApprovalPopup}
+                className='px-4 py-2 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 transition-colors'
+              >
+                Dismiss
+              </button>
+              <button
+                type='button'
+                onClick={() => {
+                  dismissApprovalPopup()
+                  navigate('/task-approvals')
+                }}
+                className='px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5'
+              >
+                <span>✓</span>
+                <span>Review & Approve</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <aside className={`bg-[#0F172A] text-[#E5E7EB] text-sm h-screen flex flex-col shadow-2xl border-r border-[#1E293B] transition-all duration-200 flex-shrink-0 print:hidden ${isOpen ? 'w-64' : 'w-16'}`}>
       <div className='px-3 py-4 border-b border-[#1E293B] flex items-center justify-center shrink-0'>
         {isOpen ? (
           <div className='w-full flex items-center justify-between px-2'>
@@ -368,6 +620,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         </div>
       </div>
     </aside>
+    </>
   )
 }
 
