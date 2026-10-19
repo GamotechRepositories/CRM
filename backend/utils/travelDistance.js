@@ -51,7 +51,8 @@ export const totalTrackedDistanceKm = (trackPoints = []) => {
 
 /**
  * Path km between two timestamps using GPS breadcrumbs (not straight-line).
- * Falls back to haversine between fallbackFrom/fallbackTo when trail is sparse.
+ * When intermediate breadcrumbs are sparse, applies the 1.35x road curvature factor
+ * rather than pure Euclidean displacement.
  */
 export const pathDistanceBetweenTimes = (
   trackPoints = [],
@@ -88,16 +89,119 @@ export const pathDistanceBetweenTimes = (
     }
   }
 
-  if (chain.length >= 2) return pathDistanceKm(chain);
+  if (chain.length >= 2) {
+    const raw = pathDistanceKm(chain);
+    // If no intermediate breadcrumbs exist between from and to, apply the 1.35x road curvature factor
+    return mid.length === 0 ? roundKm(raw * 1.35) : raw;
+  }
   if (
     Number.isFinite(from.latitude)
     && Number.isFinite(from.longitude)
     && Number.isFinite(to.latitude)
     && Number.isFinite(to.longitude)
   ) {
-    return roundKm(haversineKm(from.latitude, from.longitude, to.latitude, to.longitude));
+    return roundKm(haversineKm(from.latitude, from.longitude, to.latitude, to.longitude) * 1.35);
   }
   return 0;
+};
+
+/**
+ * Fetch real driving road route, geometry coordinates, distance, and road names using OSRM.
+ * Falls back to dense GPS breadcrumbs or 1.35x road curvature factor if network/API fails.
+ */
+export const fetchRoadRoute = async (points = []) => {
+  const coords = (Array.isArray(points) ? points : [])
+    .map(toCoord)
+    .filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude));
+
+  if (coords.length < 2) {
+    return {
+      distanceKm: 0,
+      durationMinutes: 0,
+      routeUsed: '',
+      routeSummary: '',
+      roadNames: [],
+      coordinates: coords,
+    };
+  }
+
+  let sampled = coords;
+  if (coords.length > 25) {
+    sampled = [coords[0]];
+    const step = (coords.length - 2) / 23;
+    for (let i = 1; i <= 23; i += 1) {
+      sampled.push(coords[Math.round(i * step)]);
+    }
+    sampled.push(coords[coords.length - 1]);
+  }
+
+  const coordStr = sampled.map((c) => `${c.longitude},${c.latitude}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson&steps=true`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (resp.ok) {
+      const data = await resp.json();
+      const route = data?.routes?.[0];
+      if (route) {
+        const roadNamesSet = new Set();
+        (route.legs || []).forEach((leg) => {
+          (leg.steps || []).forEach((step) => {
+            const name = String(step?.name || '').trim();
+            if (name && !name.toLowerCase().startsWith('unnamed')) {
+              roadNamesSet.add(name);
+            }
+          });
+        });
+        const roadNames = Array.from(roadNamesSet);
+        const legSummaries = (route.legs || [])
+          .map((l) => l.summary)
+          .filter(Boolean)
+          .join(', ');
+
+        const routeSummary =
+          legSummaries || (roadNames.length ? roadNames.slice(0, 3).join(', ') : 'Direct road route');
+        const routeUsed = routeSummary ? `Via ${routeSummary}` : 'Driving road route';
+
+        const rawCoords = route.geometry?.coordinates || [];
+        const coordinates = rawCoords.map(([lon, lat]) => ({
+          latitude: lat,
+          longitude: lon,
+        }));
+
+        return {
+          distanceKm: roundKm((route.distance || 0) / 1000),
+          durationMinutes: Math.round((route.duration || 0) / 60),
+          routeUsed,
+          routeSummary,
+          roadNames,
+          coordinates: coordinates.length ? coordinates : coords,
+        };
+      }
+    }
+  } catch {
+    /* Fallback to road curvature calculation */
+  }
+
+  let fallbackDistance = 0;
+  if (coords.length >= 4) {
+    fallbackDistance = pathDistanceKm(coords);
+  } else {
+    fallbackDistance = roundKm(pathDistanceKm(coords) * 1.35);
+  }
+
+  return {
+    distanceKm: fallbackDistance,
+    durationMinutes: Math.round(fallbackDistance * 2.5),
+    routeUsed: 'Driving road route',
+    routeSummary: 'Connecting road route',
+    roadNames: [],
+    coordinates: coords,
+  };
 };
 
 /** Default reimbursement rate (INR per km). Override with TRAVEL_RATE_PER_KM. */

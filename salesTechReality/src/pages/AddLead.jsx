@@ -37,7 +37,7 @@ const AddLead = ({ readOnly = false }) => {
   const { id } = useParams()
   const isEdit = Boolean(id)
   const location = useLocation()
-  const { user } = useAuth()
+  const { user, canManageLeads } = useAuth()
   const [form, setForm] = useState({
     name: '',
     businessName: '',
@@ -378,6 +378,11 @@ const AddLead = ({ readOnly = false }) => {
       }
       // Never send assignedTo overwrite when setting Site Visit from sales form
       delete payload.assignedTo
+      // Employees only see leads assigned to them, so self-assign leads they create.
+      // Managers' new leads stay unassigned for distribution.
+      if (!isEdit && !canManageLeads() && user?._id) {
+        payload.assignedTo = user._id
+      }
       if (form.status !== 'Site Visit') {
         delete payload.siteCoordinator
         delete payload.siteVisitEvidence

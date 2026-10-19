@@ -124,6 +124,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
   const [liveTrack, setLiveTrack] = useState([])
   const [travelHistory, setTravelHistory] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [routeDetails, setRouteDetails] = useState(null)
 
   const todayYmd = localYmd()
   const isViewingToday = date === todayYmd
@@ -202,24 +203,24 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
     }
 
     let cancelled = false
+    let watchId = null
 
-    const recordTrack = async () => {
-      const loc = await getCurrentLocation({ skipGeocode: true })
-      if (cancelled || loc.failed) return
+    const recordTrackPoint = async (lat, lon) => {
+      if (cancelled) return
       try {
         const res = await api.post('/site-visits/record-track', {
           employeeId: user._id,
           date,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
+          latitude: lat,
+          longitude: lon,
         })
         if (cancelled) return
         if (res.data?.recorded) {
           setLiveTrack((prev) => [
             ...prev,
             {
-              latitude: loc.latitude,
-              longitude: loc.longitude,
+              latitude: lat,
+              longitude: lon,
               recordedAt: new Date().toISOString(),
               source: 'track',
             },
@@ -234,7 +235,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                   estimatedExpense: Math.round(
                     res.data.totalDistanceKm * (prev.ratePerKm || 12)
                   ),
-                  distanceMode: 'gps_trail',
+                  distanceMode: 'road_route',
                 }
               : prev
           )
@@ -244,14 +245,44 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
       }
     }
 
-    recordTrack()
-    const trackTimer = setInterval(recordTrack, 20000)
+    const recordCurrent = async () => {
+      const loc = await getCurrentLocation({ skipGeocode: true })
+      if (!cancelled && !loc.failed) {
+        await recordTrackPoint(loc.latitude, loc.longitude)
+      }
+    }
+
+    recordCurrent()
+
+    // Real-time hardware motion tracking via watchPosition
+    if (typeof navigator !== 'undefined' && navigator.geolocation?.watchPosition) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const lat = pos?.coords?.latitude
+            const lon = pos?.coords?.longitude
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              recordTrackPoint(lat, lon)
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 4000, timeout: 20000 }
+        )
+      } catch {
+        /* fallback to interval */
+      }
+    }
+
+    const trackTimer = setInterval(recordCurrent, 20000)
     const refreshTimer = setInterval(() => {
       if (!cancelled) load()
     }, 45000)
 
     return () => {
       cancelled = true
+      if (watchId != null && navigator.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId)
+      }
       clearInterval(trackTimer)
       clearInterval(refreshTimer)
     }
@@ -326,10 +357,20 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
       }
       if (action === 'start') {
         await api.post('/site-visits/start-journey', payload)
-        setSuccess('Journey started. GPS tracking is on — drive normally and check in at each site.')
+        setSuccess('Journey started. GPS tracking is active — drive normally along your route.')
       } else {
+        if (routeDetails?.routeUsed) payload.routeUsed = routeDetails.routeUsed
+        if (routeDetails?.routeSummary) payload.routeSummary = routeDetails.routeSummary
+        if (routeDetails?.roadNames?.length) payload.roadNames = routeDetails.roadNames
+        if (routeDetails?.distanceKm > 0) payload.roadDistanceKm = routeDetails.distanceKm
+        if (routeDetails?.roadCoordinates?.length) {
+          payload.routeCoordinates = routeDetails.roadCoordinates.map(([lat, lng]) => ({
+            latitude: lat,
+            longitude: lng,
+          }))
+        }
         await api.post('/site-visits/end-journey', payload)
-        setSuccess('Journey ended. You can allocate travel expense for the full route.')
+        setSuccess('Journey ended. Traveled road path and route used recorded successfully.')
       }
       await load()
       await loadHistory()
@@ -553,11 +594,23 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
               </p>
             ) : null}
             {endedJourneys.length > 0 ? (
-              <ul className='mt-2 space-y-1'>
+              <ul className='mt-2 space-y-1.5'>
                 {endedJourneys.map((j) => (
-                  <li key={j.id} className='text-xs text-gray-600'>
-                    Journey {j.journeyNumber}: {formatTime(j.startedAt)} → {formatTime(j.endedAt)} ·{' '}
-                    {j.distanceKm ?? 0} km
+                  <li key={j.id} className='text-xs text-gray-700 bg-slate-50 border border-slate-200/80 rounded-lg p-2.5'>
+                    <div className='flex items-center justify-between'>
+                      <span className='font-semibold text-gray-900'>
+                        Journey {j.journeyNumber}: {formatTime(j.startedAt)} → {formatTime(j.endedAt)}
+                      </span>
+                      <span className='font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded'>
+                        {j.distanceKm ?? j.totalDistanceKm ?? 0} km (road)
+                      </span>
+                    </div>
+                    {j.routeUsed ? (
+                      <p className='text-[11px] text-gray-600 mt-1 flex items-center gap-1'>
+                        <span className='font-medium text-blue-800'>Route:</span>
+                        <span>{j.routeUsed}</span>
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -606,13 +659,17 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         />
         <Kpi
           label='Distance travelled'
-          value={loading ? '—' : journeyStarted ? `${timelineData?.totalDistanceKm ?? 0} km` : '0 km'}
+          value={
+            loading
+              ? '—'
+              : journeyStarted
+                ? `${timelineData?.totalDistanceKm || routeDetails?.distanceKm || 0} km`
+                : '0 km'
+          }
           hint={
             journeyStarted
-              ? timelineData?.distanceMode === 'gps_trail'
-                ? 'Actual GPS path · @ ₹' + (timelineData?.ratePerKm ?? 12) + '/km'
-                : `@ ₹${timelineData?.ratePerKm ?? 12}/km`
-              : 'Calculated after start'
+              ? `Actual road distance · @ ₹${timelineData?.ratePerKm ?? 12}/km`
+              : 'Calculated along actual road path'
           }
         />
         <Kpi
@@ -688,11 +745,16 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         <TravelRouteMap
           points={timeline}
           trackPoints={mapTrackPoints}
+          routeCoordinates={timelineData?.routeCoordinates || []}
+          routeUsed={timelineData?.routeUsed || ''}
+          routeSummary={timelineData?.routeSummary || ''}
+          roadNames={timelineData?.roadNames || []}
           routeUrl={journeyStarted ? timelineData?.routeUrl : null}
-          height={400}
+          height={420}
+          onRouteDetails={(details) => setRouteDetails(details)}
           emptyMessage={
             journeyStarted
-              ? 'Move to your first stop — GPS trail will appear as you travel.'
+              ? 'Move to your first stop — GPS trail and driving route will appear as you travel.'
               : 'Start your journey to display the route map.'
           }
         />
@@ -704,7 +766,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
             <h2 className='text-sm font-semibold text-gray-900'>Travel timeline</h2>
             <p className='text-xs text-gray-500 mt-0.5'>
               {journeyStarted
-                ? 'Important stops · segment km along your actual GPS path'
+                ? 'Important stops · segment km along your actual road route'
                 : 'Start journey to begin the timeline and distance'}
             </p>
           </div>
@@ -735,6 +797,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                 const departure = point.departureTime || point.checkOutAt
                 const durationMinutes = point.durationMinutes
                 const segmentKm = point.segmentKm ?? point.distanceFromPrevKm ?? 0
+                const routeName = point.routeUsed || (isEnd && timelineData?.routeUsed) || ''
 
                 return (
                   <div key={`${point.type}-${point.siteVisitId || idx}`} className='px-5 py-4 flex gap-3.5 hover:bg-gray-50/60 transition-colors'>
@@ -772,6 +835,13 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                           <span className='text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded'>Origin</span>
                         ) : null}
                       </div>
+
+                      {routeName ? (
+                        <p className='text-[11px] text-blue-700 font-medium mt-1 flex items-center gap-1'>
+                          <span>🛣️</span>
+                          <span>{routeName}</span>
+                        </p>
+                      ) : null}
 
                       <div className='flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-600'>
                         <span className='inline-flex items-center gap-1 font-medium'>

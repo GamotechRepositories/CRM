@@ -200,14 +200,12 @@ const LeadsView = () => {
           ) : (
             <p className='text-sm text-gray-500 mr-2'>Showing leads assigned to you</p>
           )}
-          {canManage ? (
-            <button
-              onClick={() => navigate('/add-lead')}
-              className='bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium'
-            >
-              + Add Lead
-            </button>
-          ) : null}
+          <button
+            onClick={() => navigate('/add-lead')}
+            className='bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium'
+          >
+            + Add Lead
+          </button>
         </div>
       </div>
 

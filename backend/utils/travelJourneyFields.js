@@ -30,6 +30,18 @@ export const getTravelJourneySchemaFields = ({ employeeRef }) => ({
   endLatitude: { type: Number, default: null },
   endLongitude: { type: Number, default: null },
   endAddress: { type: String, default: '' },
+  /** What route is used (e.g. "Via Western Express Hwy, SV Road"). */
+  routeUsed: { type: String, default: '' },
+  routeSummary: { type: String, default: '' },
+  roadNames: [{ type: String }],
+  totalDistanceKm: { type: Number, default: 0 },
+  /** Driving route geometry points along actual streets. */
+  routeCoordinates: [
+    {
+      latitude: { type: Number },
+      longitude: { type: Number },
+    },
+  ],
   /** GPS breadcrumbs recorded while journey is active (actual path travelled). */
   trackPoints: [
     {
@@ -70,6 +82,8 @@ export const getTravelJourneySchemaFields = ({ employeeRef }) => ({
       departureTime: { type: Date, default: null },
       durationMinutes: { type: Number, default: 0 },
       distanceFromPrevKm: { type: Number, default: 0 },
+      routeUsed: { type: String, default: '' },
+      roadNames: [{ type: String }],
       status: { type: String, default: 'scheduled' },
       notes: { type: String, default: '' },
       recordedAt: { type: Date, default: Date.now },

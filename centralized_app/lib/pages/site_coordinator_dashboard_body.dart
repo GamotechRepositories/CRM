@@ -535,25 +535,47 @@ class _JourneyPanel extends StatelessWidget {
             ...endedJourneys.map((j) {
               final num = j['journeyNumber'] ?? (endedJourneys.indexOf(j) + 1);
               final km = j['distanceKm'] ?? 0;
+              final routeUsed = (j['routeUsed'] as String?)?.trim() ?? '';
               return Container(
                 margin: const EdgeInsets.only(bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.check_circle_outline, size: 12, color: Color(0xFF10B981)),
-                    const SizedBox(width: 4),
-                    Text('Trip $num: ', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
-                    Text(
-                      '${_scFormatTime(j['startedAt'])} → ${_scFormatTime(j['endedAt'])}',
-                      style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 12, color: Color(0xFF10B981)),
+                        const SizedBox(width: 4),
+                        Text('Trip $num: ', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF334155))),
+                        Text(
+                          '${_scFormatTime(j['startedAt'])} → ${_scFormatTime(j['endedAt'])}',
+                          style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                        ),
+                        const Spacer(),
+                        Text('$km km', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                      ],
                     ),
-                    const Spacer(),
-                    Text('$km km', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    if (routeUsed.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.alt_route, size: 11, color: Color(0xFF2563EB)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              routeUsed,
+                              style: const TextStyle(fontSize: 9, color: Color(0xFF2563EB), fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               );

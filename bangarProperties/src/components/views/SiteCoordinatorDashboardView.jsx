@@ -34,6 +34,19 @@ const formatTime = (d) => {
 const formatINR = (n) =>
   `₹ ${Math.round(Number(n) || 0).toLocaleString('en-IN')}`
 
+const formatDayLabel = (dateYmd) => {
+  if (!dateYmd) return '—'
+  const [y, m, d] = String(dateYmd).split('-').map(Number)
+  if (!y || !m || !d) return dateYmd
+  return new Intl.DateTimeFormat('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  }).format(new Date(Date.UTC(y, m - 1, d, 12, 0, 0)))
+}
+
 /** Reverse-geocode coord-only addresses for timeline / visit rows. */
 const PlaceAddress = ({ address, latitude, longitude, className = 'text-xs text-gray-600 mt-1 line-clamp-2' }) => {
   const [place, setPlace] = useState(() => (address && !isCoordOnlyAddress(address) ? address : ''))
@@ -109,6 +122,27 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
   const [timelineData, setTimelineData] = useState(null)
   const [upcoming, setUpcoming] = useState([])
   const [liveTrack, setLiveTrack] = useState([])
+  const [travelHistory, setTravelHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [routeDetails, setRouteDetails] = useState(null)
+
+  const todayYmd = localYmd()
+  const isViewingToday = date === todayYmd
+
+  const loadHistory = useCallback(async () => {
+    if (!user?._id) return
+    setHistoryLoading(true)
+    try {
+      const res = await api.get('/site-visits/travel-history', {
+        params: { employeeId: user._id, limit: 60 },
+      })
+      setTravelHistory(Array.isArray(res.data?.days) ? res.data.days : [])
+    } catch {
+      setTravelHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [user?._id])
 
   const load = useCallback(async () => {
     if (!user?._id) return
@@ -143,6 +177,15 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
     load()
   }, [load])
 
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory])
+
+  const pastTravelDays = useMemo(
+    () => travelHistory.filter((day) => day.dateYmd && day.dateYmd !== todayYmd),
+    [travelHistory, todayYmd]
+  )
+
   const journeys = timelineData?.journeys || []
   const journeyCount = timelineData?.journeyCount ?? journeys.length
   const journey =
@@ -154,30 +197,30 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
   const endedJourneys = journeys.filter((j) => j.status === 'ended')
 
   useEffect(() => {
-    if (!journeyActive) {
+    if (!journeyActive || !isViewingToday) {
       setLiveTrack([])
       return undefined
     }
 
     let cancelled = false
+    let watchId = null
 
-    const recordTrack = async () => {
-      const loc = await getCurrentLocation({ skipGeocode: true })
-      if (cancelled || loc.failed) return
+    const recordTrackPoint = async (lat, lon) => {
+      if (cancelled) return
       try {
         const res = await api.post('/site-visits/record-track', {
           employeeId: user._id,
           date,
-          latitude: loc.latitude,
-          longitude: loc.longitude,
+          latitude: lat,
+          longitude: lon,
         })
         if (cancelled) return
         if (res.data?.recorded) {
           setLiveTrack((prev) => [
             ...prev,
             {
-              latitude: loc.latitude,
-              longitude: loc.longitude,
+              latitude: lat,
+              longitude: lon,
               recordedAt: new Date().toISOString(),
               source: 'track',
             },
@@ -192,7 +235,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                   estimatedExpense: Math.round(
                     res.data.totalDistanceKm * (prev.ratePerKm || 12)
                   ),
-                  distanceMode: 'gps_trail',
+                  distanceMode: 'road_route',
                 }
               : prev
           )
@@ -202,18 +245,48 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
       }
     }
 
-    recordTrack()
-    const trackTimer = setInterval(recordTrack, 20000)
+    const recordCurrent = async () => {
+      const loc = await getCurrentLocation({ skipGeocode: true })
+      if (!cancelled && !loc.failed) {
+        await recordTrackPoint(loc.latitude, loc.longitude)
+      }
+    }
+
+    recordCurrent()
+
+    // Real-time hardware motion tracking via watchPosition
+    if (typeof navigator !== 'undefined' && navigator.geolocation?.watchPosition) {
+      try {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const lat = pos?.coords?.latitude
+            const lon = pos?.coords?.longitude
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              recordTrackPoint(lat, lon)
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 4000, timeout: 20000 }
+        )
+      } catch {
+        /* fallback to interval */
+      }
+    }
+
+    const trackTimer = setInterval(recordCurrent, 20000)
     const refreshTimer = setInterval(() => {
       if (!cancelled) load()
     }, 45000)
 
     return () => {
       cancelled = true
+      if (watchId != null && navigator.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId)
+      }
       clearInterval(trackTimer)
       clearInterval(refreshTimer)
     }
-  }, [journeyActive, user?._id, date, load])
+  }, [journeyActive, isViewingToday, user?._id, date, load])
 
   const mapTrackPoints = useMemo(() => {
     const server = timelineData?.trackPoints || []
@@ -257,6 +330,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         setSuccess(action === 'check-in' ? 'Checked in — distance added to journey.' : 'Checked out.')
       }
       await load()
+      await loadHistory()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Location action failed')
     } finally {
@@ -283,12 +357,23 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
       }
       if (action === 'start') {
         await api.post('/site-visits/start-journey', payload)
-        setSuccess('Journey started. GPS tracking is on — drive normally and check in at each site.')
+        setSuccess('Journey started. GPS tracking is active — drive normally along your route.')
       } else {
+        if (routeDetails?.routeUsed) payload.routeUsed = routeDetails.routeUsed
+        if (routeDetails?.routeSummary) payload.routeSummary = routeDetails.routeSummary
+        if (routeDetails?.roadNames?.length) payload.roadNames = routeDetails.roadNames
+        if (routeDetails?.distanceKm > 0) payload.roadDistanceKm = routeDetails.distanceKm
+        if (routeDetails?.roadCoordinates?.length) {
+          payload.routeCoordinates = routeDetails.roadCoordinates.map(([lat, lng]) => ({
+            latitude: lat,
+            longitude: lng,
+          }))
+        }
         await api.post('/site-visits/end-journey', payload)
-        setSuccess('Journey ended. You can allocate travel expense for the full route.')
+        setSuccess('Journey ended. Traveled road path and route used recorded successfully.')
       }
       await load()
+      await loadHistory()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Journey action failed')
     } finally {
@@ -322,11 +407,19 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         `Travel expense allocated: ${formatINR(res.data?.amount)} for ${res.data?.totalDistanceKm} km.`
       )
       await load()
+      await loadHistory()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to allocate expense')
     } finally {
       setAllocating(false)
     }
+  }
+
+  const selectHistoryDay = (dateYmd) => {
+    if (!dateYmd) return
+    setDate(dateYmd)
+    setSuccess('')
+    setError('')
   }
 
   const timeline = timelineData?.timeline || []
@@ -367,13 +460,86 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
           />
           <button
             type='button'
-            onClick={load}
+            onClick={() => {
+              load()
+              loadHistory()
+            }}
             className='rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50'
           >
             Refresh
           </button>
+          {!isViewingToday ? (
+            <button
+              type='button'
+              onClick={() => selectHistoryDay(todayYmd)}
+              className='rounded-xl bg-slate-800 text-white px-3 py-2 text-sm font-medium hover:bg-slate-900'
+            >
+              Back to today
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {!isViewingToday ? (
+        <div className='rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900'>
+          Viewing travel history for <strong>{formatDayLabel(date)}</strong>. Map and timeline below
+          are for this day. Use <strong>Back to today</strong> to start or continue live tracking.
+        </div>
+      ) : null}
+
+      <section className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
+        <div className='px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2'>
+          <div>
+            <h2 className='text-sm font-semibold text-gray-900'>Past travel history</h2>
+            <p className='text-xs text-gray-500 mt-0.5'>
+              Previous days with recorded journeys — tap a row to open map, timeline, and distance
+            </p>
+          </div>
+          {historyLoading ? (
+            <span className='text-xs text-gray-400'>Loading…</span>
+          ) : (
+            <span className='text-xs text-gray-500'>{pastTravelDays.length} day(s)</span>
+          )}
+        </div>
+        <div className='max-h-64 overflow-y-auto divide-y divide-gray-50'>
+          {historyLoading ? (
+            <p className='p-6 text-sm text-gray-500'>Loading history…</p>
+          ) : pastTravelDays.length === 0 ? (
+            <p className='p-6 text-sm text-gray-500'>
+              No past travel days yet. Completed journeys will appear here.
+            </p>
+          ) : (
+            pastTravelDays.map((day) => {
+              const selected = day.dateYmd === date
+              return (
+                <button
+                  key={day.dateYmd}
+                  type='button'
+                  onClick={() => selectHistoryDay(day.dateYmd)}
+                  className={`w-full text-left px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 transition-colors ${
+                    selected ? 'bg-indigo-50/80' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div>
+                    <p className='font-medium text-gray-900 text-sm'>{formatDayLabel(day.dateYmd)}</p>
+                    <p className='text-xs text-gray-500 mt-0.5'>
+                      {day.journeyCount} journey{day.journeyCount === 1 ? '' : 's'}
+                      {day.endedCount > 0 ? ` · ${day.endedCount} completed` : ''}
+                      {day.activeCount > 0 ? ' · 1 active' : ''}
+                    </p>
+                  </div>
+                  <div className='text-right'>
+                    <p className='text-sm font-bold text-gray-900 tabular-nums'>{day.totalDistanceKm} km</p>
+                    <p className='text-xs text-gray-500 tabular-nums'>
+                      Est. {formatINR(day.estimatedExpense)}
+                    </p>
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </div>
+      </section>
 
       {error && (
         <div className='rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700'>{error}</div>
@@ -388,14 +554,20 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         <div className='flex flex-wrap items-start justify-between gap-4'>
           <div className='min-w-0'>
             <h2 className='text-sm font-semibold text-gray-900'>
-              Today&apos;s journeys
+              {isViewingToday ? 'Today&apos;s journeys' : `Journeys · ${formatDayLabel(date)}`}
               {journeyCount > 0 ? (
                 <span className='ml-2 text-xs font-normal text-gray-500'>({journeyCount} total)</span>
               ) : null}
             </h2>
             {!loading && !journeyStarted ? (
               <p className='text-sm text-amber-800 mt-1'>
-                No journeys yet. Tap <strong>Start journey</strong> to begin tracking.
+                {isViewingToday
+                  ? (
+                      <>
+                        No journeys yet. Tap <strong>Start journey</strong> to begin tracking.
+                      </>
+                    )
+                  : 'No journeys recorded for this date.'}
               </p>
             ) : null}
             {journeyActive ? (
@@ -422,18 +594,30 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
               </p>
             ) : null}
             {endedJourneys.length > 0 ? (
-              <ul className='mt-2 space-y-1'>
+              <ul className='mt-2 space-y-1.5'>
                 {endedJourneys.map((j) => (
-                  <li key={j.id} className='text-xs text-gray-600'>
-                    Journey {j.journeyNumber}: {formatTime(j.startedAt)} → {formatTime(j.endedAt)} ·{' '}
-                    {j.distanceKm ?? 0} km
+                  <li key={j.id} className='text-xs text-gray-700 bg-slate-50 border border-slate-200/80 rounded-lg p-2.5'>
+                    <div className='flex items-center justify-between'>
+                      <span className='font-semibold text-gray-900'>
+                        Journey {j.journeyNumber}: {formatTime(j.startedAt)} → {formatTime(j.endedAt)}
+                      </span>
+                      <span className='font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded'>
+                        {j.distanceKm ?? j.totalDistanceKm ?? 0} km (road)
+                      </span>
+                    </div>
+                    {j.routeUsed ? (
+                      <p className='text-[11px] text-gray-600 mt-1 flex items-center gap-1'>
+                        <span className='font-medium text-blue-800'>Route:</span>
+                        <span>{j.routeUsed}</span>
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             ) : null}
           </div>
           <div className='flex flex-wrap gap-2'>
-            {!journeyActive ? (
+            {isViewingToday && !journeyActive ? (
               <button
                 type='button'
                 disabled={loading || Boolean(journeyBusy)}
@@ -447,7 +631,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                     : 'Start journey'}
               </button>
             ) : null}
-            {journeyActive ? (
+            {isViewingToday && journeyActive ? (
               <button
                 type='button'
                 disabled={loading || Boolean(journeyBusy)}
@@ -475,13 +659,17 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         />
         <Kpi
           label='Distance travelled'
-          value={loading ? '—' : journeyStarted ? `${timelineData?.totalDistanceKm ?? 0} km` : '0 km'}
+          value={
+            loading
+              ? '—'
+              : journeyStarted
+                ? `${timelineData?.totalDistanceKm || routeDetails?.distanceKm || 0} km`
+                : '0 km'
+          }
           hint={
             journeyStarted
-              ? timelineData?.distanceMode === 'gps_trail'
-                ? 'Actual GPS path · @ ₹' + (timelineData?.ratePerKm ?? 12) + '/km'
-                : `@ ₹${timelineData?.ratePerKm ?? 12}/km`
-              : 'Calculated after start'
+              ? `Actual road distance · @ ₹${timelineData?.ratePerKm ?? 12}/km`
+              : 'Calculated along actual road path'
           }
         />
         <Kpi
@@ -512,6 +700,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
           disabled={
             allocating
             || loading
+            || !isViewingToday
             || !journeyStarted
             || journeyActive
             || !(timelineData?.totalDistanceKm > 0)
@@ -556,11 +745,16 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
         <TravelRouteMap
           points={timeline}
           trackPoints={mapTrackPoints}
+          routeCoordinates={timelineData?.routeCoordinates || []}
+          routeUsed={timelineData?.routeUsed || ''}
+          routeSummary={timelineData?.routeSummary || ''}
+          roadNames={timelineData?.roadNames || []}
           routeUrl={journeyStarted ? timelineData?.routeUrl : null}
-          height={400}
+          height={420}
+          onRouteDetails={(details) => setRouteDetails(details)}
           emptyMessage={
             journeyStarted
-              ? 'Move to your first stop — GPS trail will appear as you travel.'
+              ? 'Move to your first stop — GPS trail and driving route will appear as you travel.'
               : 'Start your journey to display the route map.'
           }
         />
@@ -572,7 +766,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
             <h2 className='text-sm font-semibold text-gray-900'>Travel timeline</h2>
             <p className='text-xs text-gray-500 mt-0.5'>
               {journeyStarted
-                ? 'Important stops · segment km along your actual GPS path'
+                ? 'Important stops · segment km along your actual road route'
                 : 'Start journey to begin the timeline and distance'}
             </p>
           </div>
@@ -592,58 +786,102 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                 const isStart = point.type === 'journey_start'
                 const isEnd = point.type === 'journey_end'
                 const label =
-                  point.visitorName
+                  point.name
+                  || point.visitorName
                   || (isStart
-                    ? `Journey ${point.journeyNumber || ''} start`.trim()
+                    ? `Journey ${point.journeyNumber || ''} Start`.trim()
                     : isEnd
-                      ? `Journey ${point.journeyNumber || ''} end`.trim()
+                      ? `Journey ${point.journeyNumber || ''} End`.trim()
                       : point.property?.title || 'Site visit')
+                const arrival = point.arrivalTime || point.checkInAt
+                const departure = point.departureTime || point.checkOutAt
+                const durationMinutes = point.durationMinutes
+                const segmentKm = point.segmentKm ?? point.distanceFromPrevKm ?? 0
+                const routeName = point.routeUsed || (isEnd && timelineData?.routeUsed) || ''
+
                 return (
-                  <div key={`${point.type}-${point.siteVisitId || idx}`} className='px-5 py-4 flex gap-3'>
-                    <div className='flex flex-col items-center pt-1'>
+                  <div key={`${point.type}-${point.siteVisitId || idx}`} className='px-5 py-4 flex gap-3.5 hover:bg-gray-50/60 transition-colors'>
+                    <div className='flex flex-col items-center pt-0.5'>
                       <span
-                        className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center ${
-                          isStart || isEnd
-                            ? 'bg-slate-800 text-white'
-                            : 'bg-indigo-100 text-indigo-700'
+                        className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shadow-sm ${
+                          isStart
+                            ? 'bg-emerald-600 text-white'
+                            : isEnd
+                              ? 'bg-red-600 text-white'
+                              : 'bg-indigo-600 text-white'
                         }`}
                       >
-                        {isStart ? 'S' : isEnd ? 'E' : idx}
+                        {isStart ? 'S' : isEnd ? 'E' : point.stopNumber || idx}
                       </span>
                       {idx < timeline.length - 1 ? (
-                        <span className='w-px flex-1 bg-indigo-100 mt-1 min-h-[24px]' />
+                        <span className='w-0.5 flex-1 bg-indigo-100 mt-1 min-h-[32px]' />
                       ) : null}
                     </div>
-                    <div className='min-w-0 flex-1'>
+                    <div className='min-w-0 flex-1 bg-white p-3.5 rounded-xl border border-gray-100 shadow-sm'>
                       <div className='flex flex-wrap items-center justify-between gap-2'>
-                        <p className='font-medium text-gray-900 truncate'>{label}</p>
-                        {!isStart ? (
-                          <span className='text-xs font-semibold text-amber-700 tabular-nums'>
-                            +{point.segmentKm || 0} km
+                        <div className='flex items-center gap-2 flex-wrap'>
+                          <p className='font-semibold text-gray-900 text-sm'>{label}</p>
+                          {point.stopNumber && !isStart && !isEnd ? (
+                            <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100'>
+                              Stop {point.stopNumber}
+                            </span>
+                          ) : null}
+                        </div>
+                        {!isStart && segmentKm > 0 ? (
+                          <span className='inline-flex items-center text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200'>
+                            +{segmentKm} km
                           </span>
-                        ) : (
-                          <span className='text-xs font-semibold text-slate-500'>Origin</span>
-                        )}
+                        ) : isStart ? (
+                          <span className='text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded'>Origin</span>
+                        ) : null}
                       </div>
-                      <p className='text-xs text-gray-500 mt-0.5'>
-                        {formatTime(point.checkInAt)}
-                        {point.checkOutAt ? ` → ${formatTime(point.checkOutAt)}` : ''}
-                        {point.city ? ` · ${point.city}` : ''}
-                      </p>
+
+                      {routeName ? (
+                        <p className='text-[11px] text-blue-700 font-medium mt-1 flex items-center gap-1'>
+                          <span>🛣️</span>
+                          <span>{routeName}</span>
+                        </p>
+                      ) : null}
+
+                      <div className='flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-600'>
+                        <span className='inline-flex items-center gap-1 font-medium'>
+                          <svg className='w-3.5 h-3.5 text-gray-400' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
+                          </svg>
+                          {arrival && departure ? (
+                            `${formatTime(arrival)} – ${formatTime(departure)}`
+                          ) : arrival ? (
+                            isStart ? `Started at ${formatTime(arrival)}` : `Arrived at ${formatTime(arrival)}`
+                          ) : departure ? (
+                            `Ended at ${formatTime(departure)}`
+                          ) : '—'}
+                          {point.city ? ` · ${point.city}` : ''}
+                        </span>
+
+                        {durationMinutes > 0 ? (
+                          <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold text-[11px] border border-indigo-100'>
+                            Stayed {durationMinutes} min
+                          </span>
+                        ) : null}
+                      </div>
+
                       <PlaceAddress
                         address={point.address}
                         latitude={point.latitude}
                         longitude={point.longitude}
-                        className='block text-xs text-gray-600 mt-1 line-clamp-2'
+                        className='block text-xs text-gray-500 mt-2 line-clamp-2'
                       />
                       {point.mapsUrl ? (
                         <a
                           href={point.mapsUrl}
                           target='_blank'
                           rel='noopener noreferrer'
-                          className='inline-block mt-2 text-xs font-medium text-indigo-600 hover:underline'
+                          className='inline-flex items-center gap-1 mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline'
                         >
-                          View on Google Maps
+                          <span>Open in Google Maps</span>
+                          <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14' />
+                          </svg>
                         </a>
                       ) : null}
                     </div>
@@ -656,11 +894,13 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
 
         <section className='bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden'>
           <div className='px-5 py-4 border-b border-gray-100'>
-            <h2 className='text-sm font-semibold text-gray-900'>Today&apos;s assigned visits</h2>
+            <h2 className='text-sm font-semibold text-gray-900'>
+              {isViewingToday ? "Today's assigned visits" : `Site visits · ${formatDayLabel(date)}`}
+            </h2>
             <p className='text-xs text-gray-500 mt-0.5'>
               {journeyStarted
                 ? 'Check in on arrival · check out when leaving'
-                : 'You can still check in, but distance starts only after Start journey'}
+                : 'Start journey on scheduled visit or use Start journey above to begin tracking'}
             </p>
           </div>
           <div className='divide-y divide-gray-50'>
@@ -703,18 +943,33 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
                           </a>
                         ) : null}
                         {!checkedIn ? (
-                          <button
-                            type='button'
-                            disabled={Boolean(busyId)}
-                            onClick={() => captureAndPost(visit._id, 'check-in')}
-                            className='rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
-                          >
-                            {busyId === `${visit._id}:check-in` ? '…' : 'Check in'}
-                          </button>
+                          <div className='flex items-center gap-1.5'>
+                            {!journeyActive ? (
+                              <button
+                                type='button'
+                                disabled={Boolean(journeyBusy) || !isViewingToday}
+                                onClick={() => startOrEndJourney('start')}
+                                className='rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1 shadow-sm'
+                              >
+                                <svg className='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M13 10V3L4 14h7v7l9-11h-7z' />
+                                </svg>
+                                <span>{journeyBusy === 'start' ? 'Starting…' : 'Start Journey'}</span>
+                              </button>
+                            ) : null}
+                            <button
+                              type='button'
+                              disabled={Boolean(busyId) || !isViewingToday}
+                              onClick={() => captureAndPost(visit._id, 'check-in')}
+                              className='rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
+                            >
+                              {busyId === `${visit._id}:check-in` ? '…' : 'Check in'}
+                            </button>
+                          </div>
                         ) : !checkedOut ? (
                           <button
                             type='button'
-                            disabled={Boolean(busyId)}
+                            disabled={Boolean(busyId) || !isViewingToday}
                             onClick={() => captureAndPost(visit._id, 'check-out')}
                             className='rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-900 disabled:opacity-50'
                           >

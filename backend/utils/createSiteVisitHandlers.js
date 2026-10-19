@@ -4,6 +4,7 @@ import {
   getTravelRatePerKm,
   pathDistanceBetweenTimes,
   totalTrackedDistanceKm,
+  fetchRoadRoute,
   haversineKm,
   roundKm,
 } from './travelDistance.js';
@@ -109,11 +110,18 @@ const serializeJourney = (journey, journeyNumber = null) => {
         departureTime: s.departureTime,
         durationMinutes: s.durationMinutes || 0,
         distanceFromPrevKm: s.distanceFromPrevKm || 0,
+        routeUsed: s.routeUsed || '',
+        roadNames: Array.isArray(s.roadNames) ? s.roadNames : [],
         status: s.status || '',
         notes: s.notes || '',
         recordedAt: s.recordedAt,
       }))
     : [];
+
+  const distanceKm =
+    Number(journey.totalDistanceKm) > 0
+      ? roundKm(journey.totalDistanceKm)
+      : roundKm(totalTrackedDistanceKm(journey.trackPoints));
 
   return {
     id: journey._id,
@@ -129,7 +137,12 @@ const serializeJourney = (journey, journeyNumber = null) => {
     endLongitude: journey.endLongitude,
     endAddress: journey.endAddress || '',
     trackPointCount: journey.trackPoints?.length || 0,
-    distanceKm: roundKm(totalTrackedDistanceKm(journey.trackPoints)),
+    distanceKm,
+    totalDistanceKm: distanceKm,
+    routeUsed: journey.routeUsed || '',
+    routeSummary: journey.routeSummary || '',
+    roadNames: Array.isArray(journey.roadNames) ? journey.roadNames : [],
+    routeCoordinates: Array.isArray(journey.routeCoordinates) ? journey.routeCoordinates : [],
     stops,
     stopCount: stops.length,
     mapsUrl:
@@ -345,7 +358,11 @@ const mergeTrackPointsFromJourneys = (journeys = []) => {
 
 const totalDistanceForJourneys = (journeys = []) => {
   const tracked = roundKm(
-    journeys.reduce((sum, j) => sum + totalTrackedDistanceKm(j.trackPoints), 0)
+    journeys.reduce((sum, j) => {
+      const roadKm = Number(j.totalDistanceKm);
+      if (Number.isFinite(roadKm) && roadKm > 0) return sum + roadKm;
+      return sum + totalTrackedDistanceKm(j.trackPoints);
+    }, 0)
   );
   return tracked;
 };
@@ -680,6 +697,55 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
           { latitude: coords.latitude, longitude: coords.longitude }
         );
       }
+      // Calculate real road route and roads used across traveled stops
+      const waypoints = [];
+      if (journey.startLatitude != null && journey.startLongitude != null) {
+        waypoints.push({ latitude: journey.startLatitude, longitude: journey.startLongitude });
+      }
+      (journey.stops || []).forEach((s) => {
+        if (
+          s.latitude != null &&
+          s.longitude != null &&
+          s.type !== 'journey_start' &&
+          s.type !== 'journey_end'
+        ) {
+          waypoints.push({ latitude: s.latitude, longitude: s.longitude });
+        }
+      });
+      const endPt = coords || { latitude: journey.endLatitude, longitude: journey.endLongitude };
+      if (endPt?.latitude != null && endPt?.longitude != null) {
+        waypoints.push({ latitude: endPt.latitude, longitude: endPt.longitude });
+      }
+
+      let roadRoute = null;
+      const clientRoadKm = Number(req.body.roadDistanceKm);
+      if (req.body.routeUsed || (Number.isFinite(clientRoadKm) && clientRoadKm > 0)) {
+        roadRoute = {
+          distanceKm: Number.isFinite(clientRoadKm) && clientRoadKm > 0 ? roundKm(clientRoadKm) : 0,
+          durationMinutes: Number(req.body.durationMinutes) || 0,
+          routeUsed: String(req.body.routeUsed || '').trim(),
+          routeSummary: String(req.body.routeSummary || '').trim(),
+          roadNames: Array.isArray(req.body.roadNames) ? req.body.roadNames : [],
+          coordinates: Array.isArray(req.body.routeCoordinates) ? req.body.routeCoordinates : [],
+        };
+      } else if (waypoints.length >= 2) {
+        roadRoute = await fetchRoadRoute(waypoints);
+      }
+
+      if (roadRoute) {
+        if (roadRoute.routeUsed) journey.routeUsed = roadRoute.routeUsed;
+        if (roadRoute.routeSummary) journey.routeSummary = roadRoute.routeSummary;
+        if (roadRoute.roadNames?.length) journey.roadNames = roadRoute.roadNames;
+        if (roadRoute.coordinates?.length) journey.routeCoordinates = roadRoute.coordinates;
+        if (roadRoute.distanceKm > 0) {
+          journey.totalDistanceKm = roadRoute.distanceKm;
+        }
+      }
+
+      if (!journey.totalDistanceKm || journey.totalDistanceKm <= 0) {
+        journey.totalDistanceKm = totalTrackedDistanceKm(journey.trackPoints);
+      }
+
       journey.stops.push({
         stopNumber: journey.stops.length + 1,
         type: 'journey_end',
@@ -691,6 +757,8 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         departureTime: now,
         durationMinutes: 0,
         distanceFromPrevKm: roundKm(lastSegKm),
+        routeUsed: roadRoute?.routeUsed || journey.routeUsed || '',
+        roadNames: roadRoute?.roadNames || journey.roadNames || [],
         status: 'completed',
         recordedAt: now,
       });
@@ -946,6 +1014,12 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         }
       }
 
+      const latestJourneyWithRoute = journeys.slice().reverse().find((j) => j.routeUsed || (Array.isArray(j.roadNames) && j.roadNames.length > 0));
+      const routeUsed = latestJourneyWithRoute?.routeUsed || activeJourney?.routeUsed || '';
+      const routeSummary = latestJourneyWithRoute?.routeSummary || activeJourney?.routeSummary || '';
+      const roadNames = latestJourneyWithRoute?.roadNames?.length ? latestJourneyWithRoute.roadNames : (activeJourney?.roadNames || []);
+      const routeCoordinates = latestJourneyWithRoute?.routeCoordinates?.length ? latestJourneyWithRoute.routeCoordinates : (activeJourney?.routeCoordinates || []);
+
       return res.status(200).json({
         date: dayStart.toISOString(),
         employeeId,
@@ -954,13 +1028,17 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
         estimatedExpense,
         currency: 'INR',
         routeUrl,
+        routeUsed,
+        routeSummary,
+        roadNames,
+        routeCoordinates,
         journey: journeyPayload,
         journeys: journeysPayload,
         journeyCount: journeys.length,
         activeJourneyId: activeJourney?._id || null,
         journeyStarted,
         trackPoints,
-        distanceMode: trackedKm > 0 ? 'gps_trail' : 'segment_fallback',
+        distanceMode: 'road_route',
         visits,
         timeline: enrichedTimeline,
       });
