@@ -41,6 +41,18 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
 
   String get _dateKey => AttendanceHelpers.todayKey(_date);
 
+  bool get _isViewingToday {
+    final now = DateTime.now();
+    return _date.year == now.year && _date.month == now.month && _date.day == now.day;
+  }
+
+  bool get _isPastDate {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(_date.year, _date.month, _date.day);
+    return target.isBefore(today);
+  }
+
   Future<void> _load() async {
     final session = context.read<AuthSession>();
     final api = session.api;
@@ -100,6 +112,18 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
     final session = context.read<AuthSession>();
     final api = session.api;
     if (api == null) return;
+
+    if (action == 'start') {
+      if (_isPastDate) {
+        setState(() => _error = 'Journeys cannot be started or scheduled for past dates.');
+        return;
+      }
+      if (!_isViewingToday) {
+        setState(() => _error = 'Journeys can only be started for today. Please switch to today.');
+        return;
+      }
+    }
+
     final loc = await _requireLocation();
     if (loc == null) return;
 
@@ -141,6 +165,12 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
     final session = context.read<AuthSession>();
     final api = session.api;
     if (api == null) return;
+
+    if (_isPastDate) {
+      setState(() => _error = 'Cannot check in or check out visits for past dates.');
+      return;
+    }
+
     final loc = await _requireLocation();
     if (loc == null) return;
 
@@ -276,10 +306,50 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
               ),
             ),
+            if (!_isViewingToday) ...[
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () async {
+                        setState(() => _date = DateTime.now());
+                        await _load();
+                      },
+                icon: const Icon(Icons.today, size: 14),
+                label: const Text('Back to today', style: TextStyle(fontSize: 11)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E293B),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+              ),
+            ],
             const SizedBox(width: 8),
             IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh, size: 18)),
           ],
         ),
+        if (_isPastDate) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFC7D2FE)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.history, size: 16, color: Color(0xFF4338CA)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Viewing travel history for $_dateKey. Journeys cannot be started or scheduled for past dates. Tap "Back to today" to start live GPS tracking.',
+                    style: const TextStyle(fontSize: 10.5, color: Color(0xFF3730A3), height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 8),
           _Banner(text: _error!, color: const Color(0xFFFEF2F2), textColor: const Color(0xFFB91C1C)),
@@ -299,6 +369,9 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
           startAddress: journeyMap?['startAddress']?.toString(),
           endedAt: journeyMap?['endedAt'],
           journeyBusy: _journeyBusy,
+          isPastDate: _isPastDate,
+          isViewingToday: _isViewingToday,
+          dateKey: _dateKey,
           onStart: () => _startOrEndJourney('start'),
           onEnd: () => _startOrEndJourney('end'),
         ),
@@ -381,8 +454,10 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
         ),
         const SizedBox(height: 8),
         _Panel(
-          title: "Today's assigned visits",
-          subtitle: journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey on visit to track distance',
+          title: _isViewingToday ? "Today's assigned visits" : "Assigned visits · $_dateKey",
+          subtitle: _isPastDate
+              ? 'Past site visits (read-only)'
+              : (journeyStarted ? 'Check in on arrival · check out when leaving' : 'Start journey on visit to track distance'),
           child: _loading
               ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
               : _visits.isEmpty
@@ -394,6 +469,7 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
                           busyKey: _busyKey,
                           journeyStarted: journeyStarted,
                           journeyActive: journeyActive,
+                          isPastDate: _isPastDate,
                           onStartJourney: () => _startOrEndJourney('start'),
                           onCheckIn: () => _visitAction('${visit['_id']}', 'check-in'),
                           onCheckOut: () => _visitAction('${visit['_id']}', 'check-out'),
@@ -460,6 +536,9 @@ class _JourneyPanel extends StatelessWidget {
     required this.startAddress,
     required this.endedAt,
     required this.journeyBusy,
+    this.isPastDate = false,
+    this.isViewingToday = true,
+    this.dateKey = '',
     required this.onStart,
     required this.onEnd,
   });
@@ -473,6 +552,9 @@ class _JourneyPanel extends StatelessWidget {
   final String? startAddress;
   final dynamic endedAt;
   final String? journeyBusy;
+  final bool isPastDate;
+  final bool isViewingToday;
+  final String dateKey;
   final VoidCallback onStart;
   final VoidCallback onEnd;
 
@@ -501,7 +583,9 @@ class _JourneyPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                journeyCount > 0 ? "Today's journeys ($journeyCount total)" : "Today's journey",
+                isViewingToday
+                    ? (journeyCount > 0 ? "Today's journeys ($journeyCount total)" : "Today's journey")
+                    : (journeyCount > 0 ? "Journeys · $dateKey ($journeyCount total)" : "Journeys · $dateKey"),
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
               if (journeyActive)
@@ -525,7 +609,12 @@ class _JourneyPanel extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           if (!loading && !journeyStarted)
-            const Text('No journeys yet. Tap Start journey to begin GPS tracking.', style: TextStyle(fontSize: 10, color: Color(0xFFB45309))),
+            Text(
+              isViewingToday
+                  ? 'No journeys yet. Tap Start journey to begin GPS tracking.'
+                  : 'No journeys recorded for this date.',
+              style: const TextStyle(fontSize: 10, color: Color(0xFFB45309)),
+            ),
           if (journeyActive)
             Text(
               'Trip ${activeJourney['journeyNumber'] ?? journeyCount} active since ${_scFormatTime(activeSince)}${activeAddr != null && activeAddr.isNotEmpty ? ' · $activeAddr' : ''}',
@@ -593,8 +682,30 @@ class _JourneyPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (!journeyActive)
+              if (isPastDate)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.lock_clock, size: 13, color: Color(0xFFB45309)),
+                      SizedBox(width: 6),
+                      Text(
+                        'Journeys cannot be started or scheduled for past dates',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                      ),
+                    ],
+                  ),
+                )
+              else if (!journeyActive && isViewingToday)
                 FilledButton.icon(
                   onPressed: loading || journeyBusy != null ? null : onStart,
                   icon: const Icon(Icons.navigation, size: 12),
@@ -936,6 +1047,7 @@ class _VisitTile extends StatelessWidget {
     required this.busyKey,
     required this.journeyStarted,
     required this.journeyActive,
+    this.isPastDate = false,
     required this.onStartJourney,
     required this.onCheckIn,
     required this.onCheckOut,
@@ -945,6 +1057,7 @@ class _VisitTile extends StatelessWidget {
   final String? busyKey;
   final bool journeyStarted;
   final bool journeyActive;
+  final bool isPastDate;
   final VoidCallback onStartJourney;
   final VoidCallback onCheckIn;
   final VoidCallback onCheckOut;
@@ -1019,7 +1132,19 @@ class _VisitTile extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              if (!checkedIn) ...[
+              if (isPastDate)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    checkedOut ? 'Completed' : (checkedIn ? 'Checked in (Past)' : 'Past date visit'),
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                  ),
+                )
+              else if (!checkedIn) ...[
                 if (!journeyActive)
                   FilledButton.icon(
                     onPressed: busyKey != null ? null : onStartJourney,

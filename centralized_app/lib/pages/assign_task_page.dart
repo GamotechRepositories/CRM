@@ -181,6 +181,11 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
       setState(() => _error = 'Project, title, and assignee are required');
       return;
     }
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    if (_dueDate != null && DateTime(_dueDate!.year, _dueDate!.month, _dueDate!.day).isBefore(today)) {
+      setState(() => _error = 'Cannot schedule for a past date');
+      return;
+    }
     if (_durationMinutes == null || _durationMinutes! <= 0) {
       setState(() => _error = 'Please enter task duration in minutes');
       return;
@@ -354,10 +359,12 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                 label: 'Due date',
                 child: OutlinedButton(
                   onPressed: () async {
+                    final now = DateTime.now();
+                    final today = DateTime(now.year, now.month, now.day);
                     final picked = await showDatePicker(
                       context: context,
-                      initialDate: _dueDate ?? DateTime.now(),
-                      firstDate: DateTime(2020),
+                      initialDate: (_dueDate != null && _dueDate!.isAfter(today)) ? _dueDate! : today,
+                      firstDate: today,
                       lastDate: DateTime(2100),
                     );
                     if (picked != null) {
@@ -806,10 +813,13 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
               label: 'End date (optional)',
               child: OutlinedButton(
                 onPressed: () async {
+                  final now = DateTime.now();
+                  final today = DateTime(now.year, now.month, now.day);
+                  final minDate = (_dueDate != null && _dueDate!.isAfter(today)) ? _dueDate! : today;
                   final picked = await showDatePicker(
                     context: context,
-                    initialDate: _recurrenceEnd ?? (_dueDate ?? DateTime.now()).add(const Duration(days: 30)),
-                    firstDate: _dueDate ?? DateTime.now(),
+                    initialDate: _recurrenceEnd ?? minDate.add(const Duration(days: 30)),
+                    firstDate: minDate,
                     lastDate: DateTime(2100),
                   );
                   if (picked != null) setState(() => _recurrenceEnd = picked);

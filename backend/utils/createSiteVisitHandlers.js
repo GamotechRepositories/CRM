@@ -535,8 +535,14 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
       }
 
       const now = new Date();
+      const todayStart = startOfBusinessDay(now);
       const dateVal = req.body.date ? new Date(req.body.date) : now;
       const dayStart = startOfBusinessDay(dateVal);
+
+      if (dayStart < todayStart) {
+        return res.status(400).json({ message: 'Journeys cannot be started or scheduled for past dates' });
+      }
+
       const active = await findActiveJourneyForDay(TravelJourney, employeeId, dayStart);
 
       if (active?.startedAt) {
