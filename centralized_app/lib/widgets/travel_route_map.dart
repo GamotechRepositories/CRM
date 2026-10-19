@@ -2,27 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
-import '../config/app_env.dart';
 import '../utils/travel_map_helpers.dart';
 
-/// In-dashboard route map — Google Maps embed/Web when possible, OSM fallback.
+/// In-app Google Maps route viewer — renders authentic Google Maps tiles,
+/// actual driving road paths, custom Google pins, route HUD and satellite toggle.
 class TravelRouteMap extends StatefulWidget {
   const TravelRouteMap({
     super.key,
     required this.points,
+    this.routeCoordinates,
     this.routeUrl,
-    this.height = 280,
-    this.emptyMessage = 'No route points yet.',
+    this.routeUsed,
+    this.routeSummary,
+    this.totalDistanceKm,
+    this.height = 250,
+    this.emptyMessage = 'No route points yet. Start journey to track route.',
   });
 
   final List<Map<String, dynamic>> points;
+  final dynamic routeCoordinates;
   final String? routeUrl;
+  final String? routeUsed;
+  final String? routeSummary;
+  final num? totalDistanceKm;
   final double height;
   final String emptyMessage;
 
-  /// Opens the route in the external Google Maps app.
+  /// Opens the driving route in the official Google Maps application.
   static Future<void> openDirections(
     BuildContext context, {
     String? routeUrl,
@@ -47,8 +54,12 @@ class TravelRouteMap extends StatefulWidget {
 }
 
 class _TravelRouteMapState extends State<TravelRouteMap> {
-  WebViewController? _webController;
-  bool _webLoading = true;
+  final MapController _mapController = MapController();
+  bool _isSatellite = false;
+  List<LatLng> _drivingRoute = [];
+  String? _resolvedRouteUsed;
+  num? _resolvedDistanceKm;
+  bool _isFetchingRoute = false;
 
   List<TravelMapPoint> get _valid => TravelMapHelpers.validPoints(widget.points);
 
@@ -59,77 +70,108 @@ class _TravelRouteMapState extends State<TravelRouteMap> {
     return TravelMapHelpers.buildGoogleMapsDirectionsUrl(_valid);
   }
 
-  String? get _embedUrl {
-    final key = AppEnv.googleMapsApiKey;
-    if (key.isEmpty) return null;
-    return TravelMapHelpers.buildGoogleMapsEmbedUrl(_valid, key);
+  @override
+  void initState() {
+    super.initState();
+    _initRouteData();
   }
 
   @override
   void didUpdateWidget(covariant TravelRouteMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.points != widget.points || oldWidget.routeUrl != widget.routeUrl) {
-      _initWebView();
+    if (oldWidget.points != widget.points ||
+        oldWidget.routeCoordinates != widget.routeCoordinates ||
+        oldWidget.routeUsed != widget.routeUsed ||
+        oldWidget.totalDistanceKm != widget.totalDistanceKm) {
+      _initRouteData();
+      _fitBounds();
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _initWebView();
-  }
+  void _initRouteData() {
+    _resolvedRouteUsed = widget.routeUsed ?? widget.routeSummary;
+    _resolvedDistanceKm = widget.totalDistanceKm;
 
-  void _initWebView() {
-    // Maps Embed API only works inside an <iframe> — never as a top-level page.
-    final embed = _embedUrl;
-    if (embed == null || _valid.isEmpty) {
+    // 1. Try extracting explicit road coordinates from backend
+    final passedCoords = TravelMapHelpers.extractRouteCoordinates(widget.routeCoordinates);
+    if (passedCoords.isNotEmpty) {
       setState(() {
-        _webController = null;
-        _webLoading = false;
+        _drivingRoute = passedCoords;
       });
       return;
     }
 
-    setState(() => _webLoading = true);
-    final safeSrc = embed
-        .replaceAll('&', '&amp;')
-        .replaceAll('"', '&quot;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-    final html = '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f8fafc; }
-    iframe { border: 0; width: 100%; height: 100%; display: block; }
-  </style>
-</head>
-<body>
-  <iframe
-    src="$safeSrc"
-    title="Google Maps travel route"
-    loading="lazy"
-    referrerpolicy="no-referrer-when-downgrade"
-    allowfullscreen
-  ></iframe>
-</body>
-</html>
-''';
+    // 2. If valid points are 2+, fetch driving road trajectory
+    if (_valid.length >= 2) {
+      _fetchRoadRoute();
+    } else {
+      setState(() {
+        _drivingRoute = _valid.map((p) => LatLng(p.lat, p.lng)).toList();
+      });
+    }
+  }
 
-    _webController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFFF8FAFC))
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) {
-            if (mounted) setState(() => _webLoading = false);
-          },
-        ),
-      )
-      ..loadHtmlString(html, baseUrl: 'https://localhost/');
+  Future<void> _fetchRoadRoute() async {
+    if (_isFetchingRoute) return;
+    _isFetchingRoute = true;
+    try {
+      final res = await TravelMapHelpers.fetchDrivingRoute(_valid);
+      if (!mounted) return;
+      if (res != null) {
+        final coords = res['coordinates'] as List<LatLng>? ?? [];
+        setState(() {
+          if (coords.isNotEmpty) {
+            _drivingRoute = coords;
+          }
+          if (_resolvedRouteUsed == null || _resolvedRouteUsed!.isEmpty) {
+            _resolvedRouteUsed = res['routeUsed']?.toString();
+          }
+          if (_resolvedDistanceKm == null || _resolvedDistanceKm == 0) {
+            _resolvedDistanceKm = res['distanceKm'] as num?;
+          }
+        });
+      } else {
+        setState(() {
+          _drivingRoute = _valid.map((p) => LatLng(p.lat, p.lng)).toList();
+        });
+      }
+    } finally {
+      _isFetchingRoute = false;
+    }
+  }
+
+  void _fitBounds() {
+    final pts = _drivingRoute.isNotEmpty
+        ? _drivingRoute
+        : _valid.map((p) => LatLng(p.lat, p.lng)).toList();
+    if (pts.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        if (pts.length == 1) {
+          _mapController.move(pts.first, 15.0);
+          return;
+        }
+
+        final bounds = LatLngBounds.fromPoints(pts);
+        final latSpan = (bounds.north - bounds.south).abs();
+        final lngSpan = (bounds.east - bounds.west).abs();
+
+        if (latSpan < 0.0001 && lngSpan < 0.0001) {
+          _mapController.move(pts.first, 15.0);
+          return;
+        }
+
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 48),
+            maxZoom: 16.5,
+          ),
+        );
+      } catch (_) {}
+    });
   }
 
   Future<void> _openInGoogleMaps() async {
@@ -147,67 +189,304 @@ class _TravelRouteMapState extends State<TravelRouteMap> {
   @override
   Widget build(BuildContext context) {
     if (_valid.isEmpty) {
-      return SizedBox(
+      return Container(
         height: widget.height,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(
-              widget.emptyMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.map_outlined, size: 28, color: Color(0xFF94A3B8)),
+                const SizedBox(height: 8),
+                Text(
+                  widget.emptyMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+              ],
             ),
           ),
         ),
       );
     }
 
-    final useGoogleWeb = _webController != null;
+    final allPoints = _valid.map((p) => LatLng(p.lat, p.lng)).toList();
+    final roadPoints = _drivingRoute.isNotEmpty ? _drivingRoute : allPoints;
+
+    LatLng center = allPoints.first;
+    double initialZoom = 14.5;
+    LatLngBounds? initialBounds;
+
+    if (roadPoints.length > 1) {
+      final b = LatLngBounds.fromPoints(roadPoints);
+      final latDiff = (b.north - b.south).abs();
+      final lngDiff = (b.east - b.west).abs();
+      if (latDiff > 0.0001 || lngDiff > 0.0001) {
+        initialBounds = b;
+      }
+    }
+
+    final displayRouteUsed = _resolvedRouteUsed ?? widget.routeUsed ?? widget.routeSummary;
+    final displayDistance = _resolvedDistanceKm ?? widget.totalDistanceKm;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Stack(
         children: [
           SizedBox(
             height: widget.height,
             width: double.infinity,
-            child: useGoogleWeb
-                ? WebViewWidget(controller: _webController!)
-                : _OsmRouteMap(points: _valid),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: initialZoom,
+                initialCameraFit: initialBounds != null
+                    ? CameraFit.bounds(
+                        bounds: initialBounds,
+                        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 48),
+                        maxZoom: 16.5,
+                      )
+                    : null,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: _isSatellite
+                      ? 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+                      : 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+                  subdomains: const ['0', '1', '2', '3'],
+                  userAgentPackageName: 'com.google.android.apps.maps',
+                  maxZoom: 20,
+                ),
+                if (roadPoints.length > 1)
+                  PolylineLayer(
+                    polylines: [
+                      // Google Maps blue route casing
+                      Polyline(
+                        points: roadPoints,
+                        color: const Color(0xFF1558B0),
+                        strokeWidth: 5.5,
+                      ),
+                      // Core Google Maps driving line
+                      Polyline(
+                        points: roadPoints,
+                        color: const Color(0xFF1A73E8),
+                        strokeWidth: 3.5,
+                      ),
+                    ],
+                  ),
+                MarkerLayer(
+                  markers: [
+                    for (var i = 0; i < _valid.length; i++)
+                      _buildGoogleMarker(
+                        _valid[i],
+                        allPoints[i],
+                        isStart: i == 0,
+                        isEnd: i == _valid.length - 1 && _valid.length > 1,
+                        index: i,
+                        totalCount: _valid.length,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          if (useGoogleWeb && _webLoading)
-            Positioned.fill(
+
+          // Top HUD — Route Used & Driving Distance
+          if ((displayRouteUsed != null && displayRouteUsed.isNotEmpty) ||
+              (displayDistance != null && displayDistance > 0))
+            Positioned(
+              left: 8,
+              top: 8,
+              right: 80,
               child: Container(
-                color: const Color(0xFFF8FAFC),
-                alignment: Alignment.center,
-                child: const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x1F000000), blurRadius: 4, offset: Offset(0, 1)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.navigation, size: 13, color: Color(0xFF1A73E8)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        displayRouteUsed != null && displayRouteUsed.isNotEmpty
+                            ? displayRouteUsed
+                            : 'Driving Route',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (displayDistance != null && displayDistance > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFFBFDBFE), width: 0.5),
+                        ),
+                        child: Text(
+                          '${displayDistance.toStringAsFixed(1)} km',
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
+
+          // Top-right Satellite Toggle button
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(8),
+              elevation: 2,
+              child: InkWell(
+                onTap: () => setState(() => _isSatellite = !_isSatellite),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isSatellite ? Icons.map_outlined : Icons.satellite_alt_outlined,
+                        size: 13,
+                        color: const Color(0xFF1A73E8),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isSatellite ? 'Map' : 'Satellite',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A73E8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Re-center floating button
+          Positioned(
+            right: 8,
+            bottom: 46,
+            child: Material(
+              color: Colors.white.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(20),
+              elevation: 2,
+              child: InkWell(
+                onTap: _fitBounds,
+                borderRadius: BorderRadius.circular(20),
+                child: const Padding(
+                  padding: EdgeInsets.all(7),
+                  child: Icon(Icons.my_location, size: 16, color: Color(0xFF1A73E8)),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom-left Google Maps watermark
+          Positioned(
+            left: 8,
+            bottom: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.88),
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x14000000), blurRadius: 2),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Text(
+                    'G',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF4285F4)),
+                  ),
+                  Text(
+                    'o',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFEA4335)),
+                  ),
+                  Text(
+                    'o',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFFBBC05)),
+                  ),
+                  Text(
+                    'g',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF4285F4)),
+                  ),
+                  Text(
+                    'l',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF34A853)),
+                  ),
+                  Text(
+                    'e',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFEA4335)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom-right Open in Google Maps button
           if (_directionsUrl != null)
             Positioned(
               right: 8,
               bottom: 8,
               child: Material(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: const Color(0xFF1A73E8),
                 borderRadius: BorderRadius.circular(8),
                 elevation: 2,
                 child: InkWell(
                   onTap: _openInGoogleMaps,
                   borderRadius: BorderRadius.circular(8),
                   child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.map_outlined, size: 16, color: Color(0xFF4338CA)),
-                        SizedBox(width: 6),
+                        Icon(Icons.directions, size: 14, color: Colors.white),
+                        SizedBox(width: 5),
                         Text(
-                          'Open in Google Maps',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF4338CA)),
+                          'Google Maps',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -219,61 +498,71 @@ class _TravelRouteMapState extends State<TravelRouteMap> {
       ),
     );
   }
-}
 
-class _OsmRouteMap extends StatelessWidget {
-  const _OsmRouteMap({required this.points});
+  Marker _buildGoogleMarker(
+    TravelMapPoint point,
+    LatLng latLng, {
+    required bool isStart,
+    required bool isEnd,
+    required int index,
+    required int totalCount,
+  }) {
+    final pinColor = isStart
+        ? const Color(0xFF1E8E3E) // Google Maps Start Green
+        : isEnd
+            ? const Color(0xFFD93025) // Google Maps Destination Red
+            : const Color(0xFF1A73E8); // Google Maps Waypoint Blue
 
-  final List<TravelMapPoint> points;
+    final pinLetter = isStart
+        ? 'A'
+        : isEnd
+            ? (totalCount == 2 ? 'B' : 'E')
+            : '$index';
 
-  @override
-  Widget build(BuildContext context) {
-    final latLngs = points.map((p) => LatLng(p.lat, p.lng)).toList();
-    final bounds = LatLngBounds.fromPoints(latLngs);
-
-    return FlutterMap(
-      options: MapOptions(
-        initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(40)),
-        interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
-      ),
-      children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.satishbangargroup.crm',
-        ),
-        if (latLngs.length > 1)
-          PolylineLayer(
-            polylines: [
-              Polyline(
-                points: latLngs,
-                color: const Color(0xFF4F46E5),
-                strokeWidth: 4,
+    return Marker(
+      point: latLng,
+      width: 44,
+      height: 48,
+      alignment: Alignment.topCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: pinColor,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+              boxShadow: const [
+                BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 2)),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              pinLetter,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
               ),
-            ],
+            ),
           ),
-        MarkerLayer(
-          markers: [
-            for (var i = 0; i < points.length; i++)
-              Marker(
-                point: latLngs[i],
-                width: 28,
-                height: 28,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: i == 0 || i == points.length - 1 ? const Color(0xFF0F172A) : const Color(0xFF4F46E5),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    i == 0 ? 'S' : (i == points.length - 1 && points.length > 1 ? 'E' : '$i'),
-                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.white),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
+          Container(
+            width: 2,
+            height: 5,
+            color: pinColor,
+          ),
+          Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: pinColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -28,6 +29,12 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _intervalCtrl = TextEditingController(text: '1');
+  final _durationCtrl = TextEditingController(text: '60');
+
+  Timer? _clockTimer;
+  DateTime _liveNow = DateTime.now();
+  bool _startTimeManual = false;
+  TimeOfDay? _manualStartTime;
 
   List<Map<String, dynamic>> _projects = [];
   List<Map<String, dynamic>> _employees = [];
@@ -37,8 +44,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   String? _assigneeId;
   String _priority = 'Medium';
   DateTime? _dueDate;
-  TimeOfDay? _startTime;
-  int? _durationMinutes;
+  int? _durationMinutes = 60;
   bool _recurring = false;
   String _recurrenceType = 'daily';
   DateTime? _recurrenceEnd;
@@ -53,17 +59,44 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   void initState() {
     super.initState();
     _dueDate = DateTime.now();
-    _startTime = const TimeOfDay(hour: 9, minute: 0);
-    _durationMinutes = 30;
+    _durationMinutes = 60;
+    _startTimeManual = false;
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _liveNow = DateTime.now());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
   @override
   void dispose() {
+    _clockTimer?.cancel();
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _intervalCtrl.dispose();
+    _durationCtrl.dispose();
     super.dispose();
+  }
+
+  TimeOfDay get _effectiveStartTime =>
+      (_startTimeManual && _manualStartTime != null)
+          ? _manualStartTime!
+          : TimeOfDay(hour: _liveNow.hour, minute: _liveNow.minute);
+
+  DateTime get _effectiveStartDateTime {
+    if (!_startTimeManual) return _liveNow;
+    final base = _dueDate ?? DateTime.now();
+    return DateTime(
+      base.year,
+      base.month,
+      base.day,
+      _effectiveStartTime.hour,
+      _effectiveStartTime.minute,
+    );
+  }
+
+  DateTime? get _scheduledEndDateTime {
+    if (_durationMinutes == null || _durationMinutes! <= 0) return null;
+    return _effectiveStartDateTime.add(Duration(minutes: _durationMinutes!));
   }
 
   Future<void> _bootstrap() async {
@@ -149,11 +182,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
       return;
     }
     if (_durationMinutes == null || _durationMinutes! <= 0) {
-      setState(() => _error = 'Select task duration');
-      return;
-    }
-    if (_startTime == null) {
-      setState(() => _error = 'Select start time');
+      setState(() => _error = 'Please enter task duration in minutes');
       return;
     }
 
@@ -163,7 +192,9 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
       return;
     }
 
-    final scheduledStartAt = _buildScheduledStartAt(_scheduleDate, _startTime!);
+    final scheduledStartAt = !_startTimeManual
+        ? DateTime.now().toIso8601String()
+        : _buildScheduledStartAt(_scheduleDate, _effectiveStartTime);
     if (scheduledStartAt == null) {
       setState(() => _error = 'Invalid schedule date/time');
       return;
@@ -205,8 +236,10 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
         _titleCtrl.clear();
         _descCtrl.clear();
         if (!widget.selfMode) _assigneeId = null;
-        _durationMinutes = 30;
-        _startTime = const TimeOfDay(hour: 9, minute: 0);
+        _durationMinutes = 60;
+        _durationCtrl.text = '60';
+        _startTimeManual = false;
+        _manualStartTime = null;
         _recurring = false;
       });
     } catch (e) {
@@ -342,54 +375,10 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
             ),
           ],
         ),
-        _field(
-          label: 'Schedule *',
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _startTime ?? const TimeOfDay(hour: 9, minute: 0),
-                        );
-                        if (picked != null) setState(() => _startTime = picked);
-                      },
-                      icon: const Icon(Icons.schedule, size: 14),
-                      label: Text(
-                        _startTime == null ? 'Start time' : _startTime!.format(context),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(40)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      initialValue: _durationMinutes,
-                      decoration: _inputDecoration('Duration'),
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
-                      items: _durations
-                          .map((m) => DropdownMenuItem(value: m, child: Text(_formatDuration(m), style: const TextStyle(fontSize: 11))))
-                          .toList(),
-                      onChanged: (v) => setState(() => _durationMinutes = v),
-                    ),
-                  ),
-                ],
-              ),
-              if (_loadingAvailability)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text('Checking availability…', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
-                  ),
-                ),
-            ],
-          ),
-        ),
+
+        // Schedule Section — Identical to web AssignTask.jsx
+        _buildScheduleSection(_scheduleDate),
+
         _buildRecurringSection(),
         if (_error != null) ...[
           const SizedBox(height: 8),
@@ -426,6 +415,286 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
     );
   }
 
+  Widget _buildScheduleSection(String availabilityDate) {
+    final startDt = _effectiveStartDateTime;
+    final endDt = _scheduledEndDateTime;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF), // Indigo 50
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0E7FF)), // Indigo 100
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Live time header with ticker
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'LIVE TIME',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF4338CA),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatClockWithSeconds(_liveNow),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              if (_startTimeManual)
+                OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _startTimeManual = false;
+                      _manualStartTime = null;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF4338CA),
+                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Use live time',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Start time & duration inputs
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Start Time
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Start Time *',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _effectiveStartTime,
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            _startTimeManual = true;
+                            _manualStartTime = picked;
+                          });
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 38,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _effectiveStartTime.format(context),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+                            ),
+                            const Icon(Icons.access_time, size: 15, color: Color(0xFF64748B)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _startTimeManual
+                          ? 'Manual start time for $availabilityDate.'
+                          : 'Syncing with live time for $availabilityDate.',
+                      style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Duration (minutes)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Duration (minutes) *',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _durationCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        decoration: _inputDecoration('e.g. 60').copyWith(
+                          fillColor: Colors.white,
+                          filled: true,
+                        ),
+                        onChanged: (val) {
+                          final n = int.tryParse(val.trim());
+                          setState(() => _durationMinutes = (n != null && n > 0) ? n : null);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _durationMinutes != null && _durationMinutes! > 0
+                          ? 'Estimated: ${_formatDurationLong(_durationMinutes!)}'
+                          : 'Enter duration in minutes.',
+                      style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Quick Duration Chips
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final m in _durations) ...[
+                  InkWell(
+                    onTap: () {
+                      _durationCtrl.text = '$m';
+                      setState(() => _durationMinutes = m);
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _durationMinutes == m ? const Color(0xFF4338CA) : Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _durationMinutes == m ? const Color(0xFF4338CA) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      child: Text(
+                        _formatDuration(m),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _durationMinutes == m ? Colors.white : const Color(0xFF475569),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Schedule Preview (Start & End)
+          if (endDt != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.only(top: 10),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFE0E7FF))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE0E7FF)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Scheduled start', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatClockWithSeconds(startDt),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace',
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFE0E7FF)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Scheduled end', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatClockWithSeconds(endDt),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace',
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildAssigneeField() {
     return _field(
       label: 'Assign to *',
@@ -448,14 +717,22 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                 value: id,
                 enabled: !unavailable,
                 child: Text(
-                  '$name${title.toString().isEmpty ? '' : ' ($title)'}${unavailable ? ' [Unavailable]' : suffix}',
-                  style: const TextStyle(fontSize: 11),
+                  title.isNotEmpty ? '$name ($title)$suffix' : '$name$suffix',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: unavailable ? const Color(0xFF94A3B8) : const Color(0xFF0F172A),
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               );
             }).toList(),
             onChanged: (v) => setState(() => _assigneeId = v),
           ),
+          if (_loadingAvailability)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text('Loading availability…', style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8))),
+            ),
           if (_assigneeId != null && _availability[_assigneeId!] != null) ...[
             const SizedBox(height: 6),
             _AvailabilityCard(data: _availability[_assigneeId!]!),
@@ -467,7 +744,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
 
   Widget _buildRecurringSection() {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: 4, bottom: 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
@@ -475,23 +752,21 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Auto Task', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                    Text('Create a recurring task automatically', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
-                  ],
-                ),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Auto Task', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+                  Text('Create a recurring task automatically', style: TextStyle(fontSize: 9, color: Color(0xFF64748B))),
+                ],
               ),
-              Switch.adaptive(
+              Switch(
                 value: _recurring,
                 onChanged: (v) => setState(() => _recurring = v),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ],
           ),
@@ -499,42 +774,52 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                SizedBox(
-                  width: 64,
-                  child: TextField(
-                    controller: _intervalCtrl,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(fontSize: 11),
-                    decoration: _inputDecoration('Every'),
+                Expanded(
+                  child: _field(
+                    label: 'Repeat every',
+                    child: TextField(
+                      controller: _intervalCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(fontSize: 11),
+                      decoration: _inputDecoration('1'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _recurrenceType,
-                    decoration: _inputDecoration(null),
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
-                    items: _recurrenceTypes
-                        .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2, style: const TextStyle(fontSize: 11))))
-                        .toList(),
-                    onChanged: (v) => setState(() => _recurrenceType = v ?? 'daily'),
+                  child: _field(
+                    label: 'Interval',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _recurrenceType,
+                      decoration: _inputDecoration(null),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF334155)),
+                      items: _recurrenceTypes
+                          .map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2, style: const TextStyle(fontSize: 11))))
+                          .toList(),
+                      onChanged: (v) => setState(() => _recurrenceType = v ?? 'daily'),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _recurrenceEnd ?? (_dueDate ?? DateTime.now()).add(const Duration(days: 30)),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime(2100),
-                );
-                if (picked != null) setState(() => _recurrenceEnd = picked);
-              },
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(36), textStyle: const TextStyle(fontSize: 10)),
-              child: Text(_recurrenceEnd == null ? 'End date (optional)' : 'Ends ${_ymd(_recurrenceEnd!)}'),
+            _field(
+              label: 'End date (optional)',
+              child: OutlinedButton(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _recurrenceEnd ?? (_dueDate ?? DateTime.now()).add(const Duration(days: 30)),
+                    firstDate: _dueDate ?? DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) setState(() => _recurrenceEnd = picked);
+                },
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(38),
+                  textStyle: const TextStyle(fontSize: 11),
+                ),
+                child: Text(_recurrenceEnd == null ? 'No end date' : _ymd(_recurrenceEnd!)),
+              ),
             ),
           ],
         ],
@@ -544,9 +829,9 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
 
   Widget _field({required String label, required Widget child}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
           const SizedBox(height: 4),
@@ -616,6 +901,15 @@ String? _buildScheduledStartAt(String dateStr, TimeOfDay start) {
   return dt.toIso8601String();
 }
 
+String _formatClockWithSeconds(DateTime dt) {
+  final hour = dt.hour;
+  final minute = dt.minute;
+  final second = dt.second;
+  final period = hour >= 12 ? 'PM' : 'AM';
+  final h12 = hour % 12 == 0 ? 12 : hour % 12;
+  return '${h12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:${second.toString().padLeft(2, '0')} $period';
+}
+
 String _formatDuration(int minutes) {
   if (minutes >= 60) {
     final h = minutes ~/ 60;
@@ -623,4 +917,13 @@ String _formatDuration(int minutes) {
     return m == 0 ? '${h}h' : '${h}h ${m}m';
   }
   return '${minutes}m';
+}
+
+String _formatDurationLong(int minutes) {
+  if (minutes <= 0) return '0 mins';
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  if (h > 0 && m > 0) return '$h hr $m mins';
+  if (h > 0) return '$h hr${h > 1 ? 's' : ''}';
+  return '$m mins';
 }

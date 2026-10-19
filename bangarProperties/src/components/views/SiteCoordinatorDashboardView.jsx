@@ -126,6 +126,19 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [routeDetails, setRouteDetails] = useState(null)
 
+  const handleRouteDetails = useCallback((details) => {
+    setRouteDetails((prev) => {
+      if (
+        prev?.distanceKm === details?.distanceKm &&
+        prev?.routeUsed === details?.routeUsed &&
+        prev?.durationMinutes === details?.durationMinutes
+      ) {
+        return prev
+      }
+      return details
+    })
+  }, [])
+
   const todayYmd = localYmd()
   const isViewingToday = date === todayYmd
 
@@ -751,7 +764,7 @@ const SiteCoordinatorDashboardView = ({ embedded = false } = {}) => {
           roadNames={timelineData?.roadNames || []}
           routeUrl={journeyStarted ? timelineData?.routeUrl : null}
           height={420}
-          onRouteDetails={(details) => setRouteDetails(details)}
+          onRouteDetails={handleRouteDetails}
           emptyMessage={
             journeyStarted
               ? 'Move to your first stop — GPS trail and driving route will appear as you travel.'

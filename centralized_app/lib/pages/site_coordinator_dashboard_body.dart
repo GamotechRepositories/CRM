@@ -256,6 +256,9 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
       final estimatedExpense = _timelineData?['estimatedExpense'] ?? 0;
       final ratePerKm = _timelineData?['ratePerKm'] ?? 12;
       final routeUrl = _timelineData?['routeUrl']?.toString();
+      final routeUsed = _timelineData?['routeUsed']?.toString();
+      final routeSummary = _timelineData?['routeSummary']?.toString();
+      final routeCoordinates = _timelineData?['routeCoordinates'];
 
       final children = <Widget>[
         const Text(
@@ -330,7 +333,9 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
         const SizedBox(height: 8),
         _Panel(
           title: 'Route map',
-          subtitle: 'Interactive map and driving directions',
+          subtitle: (routeUsed != null && routeUsed.isNotEmpty)
+              ? routeUsed
+              : 'Google Maps driving route and directions',
           action: (routeUrl != null && routeUrl.isNotEmpty)
               ? InkWell(
                   onTap: () => TravelRouteMap.openDirections(context, routeUrl: routeUrl, points: timeline),
@@ -344,11 +349,15 @@ class _SiteCoordinatorDashboardBodyState extends State<SiteCoordinatorDashboardB
                 )
               : null,
           child: SizedBox(
-            height: 220,
+            height: 250,
             child: TravelRouteMap(
               points: timeline,
+              routeCoordinates: routeCoordinates,
               routeUrl: journeyStarted ? routeUrl : null,
-              height: 220,
+              routeUsed: routeUsed,
+              routeSummary: routeSummary,
+              totalDistanceKm: totalKm is num ? totalKm : num.tryParse('$totalKm'),
+              height: 250,
             ),
           ),
         ),

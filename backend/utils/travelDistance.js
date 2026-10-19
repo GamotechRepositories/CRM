@@ -106,7 +106,8 @@ export const pathDistanceBetweenTimes = (
 };
 
 /**
- * Fetch real driving road route, geometry coordinates, distance, and road names using OSRM.
+ * Fetch real driving road route, geometry coordinates, distance, and road names.
+ * Uses Google Maps Directions API when GOOGLE_MAPS_API_KEY is available.
  * Falls back to dense GPS breadcrumbs or 1.35x road curvature factor if network/API fails.
  */
 export const fetchRoadRoute = async (points = []) => {
@@ -125,6 +126,72 @@ export const fetchRoadRoute = async (points = []) => {
     };
   }
 
+  const googleKey =
+    process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.VITE_GOOGLE_MAPS_API_KEY ||
+    'AIzaSyDUl80lXwVlYlbZhB6qzQZ2lFbxpc2De2Q';
+
+  // 1. Try Google Maps Directions API
+  if (googleKey) {
+    try {
+      const origin = `${coords[0].latitude},${coords[0].longitude}`;
+      const dest = `${coords[coords.length - 1].latitude},${coords[coords.length - 1].longitude}`;
+      const waypoints = coords
+        .slice(1, -1)
+        .slice(0, 20)
+        .map((c) => `${c.latitude},${c.longitude}`)
+        .join('|');
+      let gUrl = `https://maps.googleapis.com/maps/api/directions/json?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&key=${encodeURIComponent(googleKey)}&mode=driving`;
+      if (waypoints) gUrl += `&waypoints=${encodeURIComponent(waypoints)}`;
+
+      const gCtrl = new AbortController();
+      const gTimeout = setTimeout(() => gCtrl.abort(), 4000);
+      const gResp = await fetch(gUrl, { signal: gCtrl.signal });
+      clearTimeout(gTimeout);
+
+      if (gResp.ok) {
+        const gData = await gResp.json();
+        const route = gData?.routes?.[0];
+        if (route && Array.isArray(route.legs) && route.legs.length > 0) {
+          const totalMeters = route.legs.reduce((acc, leg) => acc + (leg.distance?.value || 0), 0);
+          const totalSecs = route.legs.reduce((acc, leg) => acc + (leg.duration?.value || 0), 0);
+          const legSummaries = route.legs.map((l) => l.summary).filter(Boolean).join(', ');
+          const routeSummary = route.summary || legSummaries || 'Google Maps driving route';
+          const routeUsed = routeSummary ? `Via ${routeSummary}` : 'Google Maps driving route';
+
+          const roadSet = new Set();
+          route.legs.forEach((leg) => {
+            (leg.steps || []).forEach((step) => {
+              const text = String(step.html_instructions || step.instructions || '')
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+              const match = text.match(/(?:on|onto|toward|towards|along)\s+([^,\.]+)/i);
+              if (match && match[1]) {
+                const road = match[1].trim();
+                if (road.length > 2 && !road.toLowerCase().startsWith('unnamed')) {
+                  roadSet.add(road);
+                }
+              }
+            });
+          });
+
+          return {
+            distanceKm: roundKm(totalMeters / 1000),
+            durationMinutes: Math.round(totalSecs / 60),
+            routeUsed,
+            routeSummary,
+            roadNames: Array.from(roadSet),
+            coordinates: coords,
+          };
+        }
+      }
+    } catch {
+      /* Fallback to OSRM / road curvature calculation */
+    }
+  }
+
+  // 2. Secondary fallback via OSRM
   let sampled = coords;
   if (coords.length > 25) {
     sampled = [coords[0]];
