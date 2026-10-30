@@ -35,7 +35,7 @@ const CentralAdminShell = ({ activeNav = 'home', children }) => {
           </div>
         </div>
 
-        <nav className='flex-1 px-3 py-4 space-y-1 overflow-y-auto'>
+        <nav className='sidebar-scrollbar-hide flex-1 px-3 py-4 space-y-1 overflow-y-auto'>
           {NAV_ITEMS.map((item) => {
             const active = activeNav === item.id
             return (

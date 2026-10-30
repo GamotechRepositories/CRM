@@ -67,12 +67,13 @@ router.put('/companies/:tenantId/clients/:clientId', updateTenantClient);
 router.post('/companies/:tenantId/projects', createTenantProject);
 router.put('/companies/:tenantId/projects/:projectId', updateTenantProject);
 router.post('/companies/:tenantId/leads', createTenantLead);
+// Named lead routes must precede :leadId so they are not treated as lead IDs.
+router.get('/companies/:tenantId/leads/distribution-preview', getTenantDistributionPreview);
+router.post('/companies/:tenantId/leads/distribute', distributeTenantLeads);
+router.post('/companies/:tenantId/leads/import-csv', importTenantLeadCsv);
 router.put('/companies/:tenantId/leads/:leadId', updateTenantLead);
 router.get('/companies/:tenantId/leads/:leadId', getTenantLead);
 router.delete('/companies/:tenantId/leads/:leadId', deleteTenantLead);
-router.post('/companies/:tenantId/leads/import-csv', importTenantLeadCsv);
-router.get('/companies/:tenantId/leads/distribution-preview', getTenantDistributionPreview);
-router.post('/companies/:tenantId/leads/distribute', distributeTenantLeads);
 router.post('/companies/:tenantId/uploads/presign', createTenantPresignedUpload);
 router.get('/companies/:tenantId/locations/states', getTenantStates);
 router.get('/companies/:tenantId/locations/cities', getTenantCities);

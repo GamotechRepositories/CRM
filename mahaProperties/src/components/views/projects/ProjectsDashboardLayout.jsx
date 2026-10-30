@@ -386,8 +386,8 @@ const ProjectsDashboardLayout = ({
               <div className='flex items-center gap-4'>
                 <div className='h-40 w-40 shrink-0'>
                   <ResponsiveContainer width='100%' height='100%'>
-                    <PieChart>
-                      <Pie data={chartData} dataKey='value' cx='50%' cy='50%' innerRadius={42} outerRadius={62} paddingAngle={2}>
+                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie data={chartData} dataKey='value' cx='50%' cy='50%' innerRadius='52.5%' outerRadius='77.5%' paddingAngle={2}>
                         {chartData.map((d) => <Cell key={d.name} fill={d.color} />)}
                       </Pie>
                       <Tooltip />

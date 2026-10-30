@@ -1357,8 +1357,8 @@ const AttendanceView = () => {
                 <p className='text-xs text-gray-500 mb-4'>{canViewTeam ? 'This week' : 'My week'}</p>
                 <div className='h-44'>
                   <ResponsiveContainer width='100%' height='100%'>
-                    <PieChart>
-                      <Pie data={weekChartData} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius={48} outerRadius={68} paddingAngle={2}>
+                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                      <Pie data={weekChartData} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius='54.55%' outerRadius='77.27%' paddingAngle={2}>
                         {weekChartData.map((entry, index) => (
                           <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                         ))}

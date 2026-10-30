@@ -256,12 +256,12 @@ const HRDashboardView = () => {
           <div className='h-52'>
             {stats.deptChart.length ? (
               <ResponsiveContainer width='100%' height='100%'>
-                <PieChart>
-                  <Pie data={stats.deptChart} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius={45} outerRadius={70} paddingAngle={2}>
+                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                  <Pie data={stats.deptChart} dataKey='value' nameKey='name' cx='50%' cy='50%' innerRadius='50%' outerRadius='77.78%' paddingAngle={2}>
                     {stats.deptChart.map((_, i) => <Cell key={i} fill={DEPT_COLORS[i % DEPT_COLORS.length]} />)}
                   </Pie>
                   <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: '0.6875rem' }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -276,8 +276,8 @@ const HRDashboardView = () => {
             <div className='h-40 w-40 shrink-0'>
               {attendancePie.length ? (
                 <ResponsiveContainer width='100%' height='100%'>
-                  <PieChart>
-                    <Pie data={attendancePie} dataKey='value' cx='50%' cy='50%' innerRadius={35} outerRadius={55}>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie data={attendancePie} dataKey='value' cx='50%' cy='50%' innerRadius='43.75%' outerRadius='68.75%'>
                       {attendancePie.map((d) => <Cell key={d.name} fill={d.color} />)}
                     </Pie>
                   </PieChart>

@@ -436,8 +436,8 @@ const ManagerDashboardView = () => {
             <>
               <div className='h-44 relative'>
                 <ResponsiveContainer width='100%' height='100%'>
-                  <PieChart>
-                    <Pie data={stats.projectChart} dataKey='value' cx='50%' cy='50%' innerRadius={48} outerRadius={68} paddingAngle={3}>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie data={stats.projectChart} dataKey='value' cx='50%' cy='50%' innerRadius='54.55%' outerRadius='77.27%' paddingAngle={3}>
                       {stats.projectChart.map((d) => (
                         <Cell key={d.name} fill={d.color} />
                       ))}

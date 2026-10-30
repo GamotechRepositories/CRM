@@ -534,7 +534,7 @@ const Sidebar = ({ isOpen = true, onToggle }) => {
         )}
       </div>
 
-      <nav className={`sidebar-scrollbar-desktop-hide flex-1 py-3 overflow-y-auto overflow-x-hidden ${isOpen ? 'px-3' : 'px-2'}`}>
+      <nav className={`sidebar-scrollbar-hide flex-1 py-3 overflow-y-auto overflow-x-hidden ${isOpen ? 'px-3' : 'px-2'}`}>
         <div className='space-y-1'>
           {sections.map((section) => {
             if (section.type === 'link') {

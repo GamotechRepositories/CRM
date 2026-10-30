@@ -158,14 +158,14 @@ const DonutChart = ({ data, total, centerLabel, centerValue, colors }) => (
   <div className='flex flex-col sm:flex-row items-center gap-4'>
     <div className='h-44 w-44 relative shrink-0'>
       <ResponsiveContainer width='100%' height='100%'>
-        <PieChart>
+        <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <Pie
             data={data}
             dataKey='value'
             cx='50%'
             cy='50%'
-            innerRadius={52}
-            outerRadius={72}
+            innerRadius='59.09%'
+            outerRadius='81.82%'
             paddingAngle={3}
             cornerRadius={4}
             stroke='none'

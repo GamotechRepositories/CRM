@@ -184,7 +184,7 @@ const AdminCompanyShell = ({ activeNav = 'dashboard', children }) => {
           </div>
         </div>
 
-        <nav className='flex-1 px-3 py-4 space-y-1 overflow-y-auto'>
+        <nav className='sidebar-scrollbar-hide flex-1 px-3 py-4 space-y-1 overflow-y-auto'>
           {navItems.map((item) => {
             if (item.type === 'group') {
               const groupActive = item.children.some((child) => child.id === activeNav)

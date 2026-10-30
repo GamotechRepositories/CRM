@@ -531,8 +531,8 @@ const TeamLeaderDashboardView = () => {
             <>
               <div className='h-40 relative'>
                 <ResponsiveContainer width='100%' height='100%'>
-                  <PieChart>
-                    <Pie data={stats.taskChart} dataKey='value' cx='50%' cy='50%' innerRadius={46} outerRadius={64} paddingAngle={3}>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie data={stats.taskChart} dataKey='value' cx='50%' cy='50%' innerRadius='57.5%' outerRadius='80%' paddingAngle={3}>
                       {stats.taskChart.map((d) => (
                         <Cell key={d.name} fill={d.color} />
                       ))}
