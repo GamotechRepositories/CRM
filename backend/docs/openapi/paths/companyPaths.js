@@ -118,6 +118,7 @@ export function buildCompanyPaths() {
     ['Company · Collaborators', 'collaborator', '/collaborators'],
     ['Company · Salaries', 'salary', '/salaries'],
     ['Company · Billing', 'billing record', '/billing'],
+    ['Company · Orders', 'sales order', '/order'],
     ['Company · Quotations', 'quotation', '/quotations'],
     ['Company · Expenses', 'expense', '/expenses'],
     ['Company · Assets', 'asset', '/assets'],
@@ -260,6 +261,19 @@ export function buildCompanyPaths() {
       get: { tags: ['Company · Billing'], summary: 'Billing tracking per client', parameters: [...companyParams, { name: 'clientId', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Tracking data' } } },
     },
   });
+
+  // Orders mirror billing payloads but use independent records and numbering.
+  const orderPath = paths['/api/v1/{company}/order'];
+  orderPath.get.parameters.push(
+    { name: 'clientId', in: 'query', schema: { type: 'string' } },
+    { name: 'billType', in: 'query', schema: { type: 'string', enum: ['GST', 'Non-GST'] } },
+  );
+  orderPath.post.description = 'Creates a sales order in a separate tenant order collection. Does not create an invoice or update client billing totals. Returns { message, order }; orderNumber is generated as TENANT-ORD-FY-NNN.';
+  orderPath.post.requestBody.content['application/json'].schema = { $ref: '#/components/schemas/SalesOrderInput' };
+  paths['/api/v1/{company}/order/{id}'].put.requestBody.content['application/json'].schema = { $ref: '#/components/schemas/SalesOrderInput' };
+  paths['/api/v1/{company}/order/tracking/{clientId}'] = {
+    get: { tags: ['Company · Orders'], summary: 'Order tracking per client', parameters: [...companyParams, { name: 'clientId', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Order-only tracking data' } } },
+  };
 
   // Asset assign
   Object.assign(paths, {

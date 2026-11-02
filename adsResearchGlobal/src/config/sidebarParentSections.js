@@ -5,7 +5,6 @@ export const SIDEBAR_PARENT_SECTIONS = [
   { id: 'projects', label: 'Projects', icon: '📁' },
   { id: 'employees', label: 'Employees', icon: '👨' },
   { id: 'finance', label: 'Finance', icon: '💰' },
-  { id: 'inventory', label: 'Inventory', icon: '📦' },
   { id: 'sales', label: 'Sales', icon: '🛒' },
   { id: 'marketing', label: 'Marketing', icon: '📢' },
   { id: 'documents', label: 'Documents', icon: '📄' },

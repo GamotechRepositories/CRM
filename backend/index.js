@@ -154,6 +154,7 @@ const routeFiles = [
   'leaveRoute',
   'holidayRoute',
   'billingRoute',
+  'orderRoute',
   'quotationRoute',
   'documentRoute',
   'companyRoute',

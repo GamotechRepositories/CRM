@@ -114,20 +114,6 @@ export const getSidebarNav = ({
         { id: 'expenses', label: 'Expenses', path: '/expenses' },
         { id: 'payments', label: 'Revenue', path: '/revenue' },
         { id: 'payroll', label: 'Payroll', path: '/salaries' },
-        { id: 'gst', label: 'GST / Taxes', path: '/module/gst' },
-      ],
-    },
-    {
-      id: 'inventory',
-      label: 'Inventory',
-      icon: '📦',
-      type: 'group',
-      requiresFullAccess: true,
-      children: [
-        { id: 'products', label: 'Products', path: '/module/products' },
-        { id: 'stock', label: 'Stock', path: '/module/stock' },
-        { id: 'purchase-orders', label: 'Purchase Orders', path: '/module/purchase-orders' },
-        { id: 'suppliers', label: 'Suppliers', path: '/module/suppliers' },
       ],
     },
     {
@@ -136,7 +122,7 @@ export const getSidebarNav = ({
       icon: '🛒',
       type: 'group',
       children: [
-        { id: 'orders', label: 'Orders', path: '/module/orders', requiresFullAccess: true },
+        { id: 'orders', label: 'Orders', path: '/orders', requiresFullAccess: true },
         { id: 'customers', label: 'Customers', path: '/clients', requiresClientAccess: true },
         { id: 'pipeline', label: 'Sales Pipeline', path: '/lead-management' },
       ],
@@ -148,9 +134,6 @@ export const getSidebarNav = ({
       type: 'group',
       children: [
         { id: 'campaigns', label: 'Campaigns', path: '/campaigns', requiresFullAccess: true },
-        { id: 'email', label: 'Email', path: '/module/email', requiresFullAccess: true },
-        { id: 'sms', label: 'SMS', path: '/module/sms', requiresFullAccess: true },
-        { id: 'whatsapp', label: 'WhatsApp', path: '/module/whatsapp', requiresFullAccess: true },
         { id: 'social', label: 'Social Media', path: '/social-calendar' },
       ],
     },

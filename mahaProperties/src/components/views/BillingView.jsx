@@ -1,9 +1,12 @@
+import { itemTotals } from '../InvoiceItems'
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate } from 'react-router-dom'
 import { EditIcon, DeleteIcon } from '../Icons'
 
-const BillingView = () => {
+const BillingView = ({ isOrder = false }) => {
+  const resource = isOrder ? '/order' : '/billing'
+  const listPath = isOrder ? '/orders' : '/billings'
   const [billings, setBillings] = useState([])
   const [clients, setClients] = useState([])
   const [tracking, setTracking] = useState([])
@@ -32,7 +35,7 @@ const BillingView = () => {
       const params = {}
       if (filterType) params.billType = filterType
       if (filterClientId) params.clientId = filterClientId
-      const res = await api.get('/billing', { params })
+      const res = await api.get(resource, { params })
       setBillings(Array.isArray(res.data) ? res.data : [])
     } catch (err) {
       setError(err.message || 'Error fetching billings')
@@ -43,7 +46,7 @@ const BillingView = () => {
 
   useEffect(() => {
     fetchBillings()
-  }, [filterType, filterClientId])
+  }, [filterType, filterClientId, resource])
 
   useEffect(() => {
     if (!filterClientId) {
@@ -52,19 +55,19 @@ const BillingView = () => {
     }
     const fetchTracking = async () => {
       try {
-        const res = await api.get(`/billing/tracking/${filterClientId}`)
+        const res = await api.get(`${resource}/tracking/${filterClientId}`)
         setTracking(res.data?.tracking || [])
       } catch (err) {
         setTracking([])
       }
     }
     fetchTracking()
-  }, [filterClientId, billings])
+  }, [filterClientId, billings, resource])
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this billing record?')) return
+    if (!window.confirm(isOrder ? 'Delete this order?' : 'Delete this billing record?')) return
     try {
-      await api.delete(`/billing/${id}`)
+      await api.delete(`${resource}/${id}`)
       fetchBillings()
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Error deleting')
@@ -116,8 +119,8 @@ const BillingView = () => {
     <div className='p-4 md:p-5'>
       <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
         <div>
-          <h1 className='text-2xl font-bold text-gray-900'>Billing</h1>
-          <p className='text-gray-600 text-sm mt-1'>Manage GST and Non-GST bills.</p>
+          <h1 className='text-2xl font-bold text-gray-900'>{isOrder ? 'Orders' : 'Billing'}</h1>
+          <p className='text-gray-600 text-sm mt-1'>{isOrder ? 'Manage GST and Non-GST orders.' : 'Manage GST and Non-GST bills.'}</p>
         </div>
         <div className='flex flex-wrap items-center gap-3'>
           <select
@@ -140,10 +143,10 @@ const BillingView = () => {
             <option value='Non-GST'>Non-GST</option>
           </select>
           <button
-            onClick={() => navigate('/add-billing')}
+            onClick={() => navigate(isOrder ? '/add-order' : '/add-billing')}
             className='bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700'
           >
-            Add Billing
+            {isOrder ? 'Add Order' : 'Add Billing'}
           </button>
         </div>
       </div>
@@ -194,7 +197,7 @@ const BillingView = () => {
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Company</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client</th>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Paid (this bill)</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>{isOrder ? 'Received (this order)' : 'Paid (this bill)'}</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Remaining</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Actions</th>
               </tr>
@@ -203,12 +206,12 @@ const BillingView = () => {
               {billings.length === 0 ? (
                 <tr>
                   <td colSpan={6} className='px-4 py-10 text-center text-gray-500'>
-                    No billing records. Add one to get started.
+                    No {isOrder ? 'orders' : 'billing records'}. Add one to get started.
                   </td>
                 </tr>
               ) : (
                 billings.map((b) => {
-                  const totalRemaining = cumulativeRemainingMap[b._id] ?? (b.projects || []).reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
+                  const totalRemaining = isOrder && b.items?.length ? Math.max(0, itemTotals(b.items, b.billType === 'GST').total - (Number(b.paymentDetails?.amount) || 0)) : cumulativeRemainingMap[b._id] ?? (b.projects || []).reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
                   return (
                   <tr key={b._id} className='border-b hover:bg-gray-50'>
                     <td className='px-4 py-3'>
@@ -222,15 +225,15 @@ const BillingView = () => {
                     <td className='px-4 py-3 font-medium text-gray-900'>{totalRemaining != null ? `₹${Number(totalRemaining).toLocaleString('en-IN')}` : '—'}</td>
                     <td className='px-4 py-3 flex flex-wrap gap-2 items-center'>
                       <button
-                        onClick={() => navigate(`/billings/${b._id}/invoice`)}
+                        onClick={() => navigate(`${listPath}/${b._id}/${isOrder ? 'order' : 'invoice'}`)}
                         className='inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-green-600 text-green-700 text-sm font-medium hover:bg-green-50'
-                        title='Generate Invoice'
+                        title={isOrder ? 'View Order' : 'Generate Invoice'}
                       >
                         <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' /></svg>
-                        Generate Invoice
+                        {isOrder ? 'View Order' : 'Generate Invoice'}
                       </button>
                       <button
-                        onClick={() => navigate(`/billings/edit/${b._id}`)}
+                        onClick={() => navigate(`${listPath}/edit/${b._id}`)}
                         className='p-1.5 rounded-lg text-blue-600 hover:bg-blue-50'
                         title='Edit'
                       >

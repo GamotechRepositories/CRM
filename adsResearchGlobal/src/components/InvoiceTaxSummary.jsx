@@ -33,7 +33,7 @@ export function groupTaxes(rows) {
   })
 }
 
-export default function InvoiceTaxSummary({ rows, totals, isGst, received = 0 }) {
+export default function InvoiceTaxSummary({ rows, totals, isGst, received = 0, documentLabel = 'Invoice' }) {
   const groups = groupTaxes(rows)
   const cgst = round(groups.reduce((sum, group) => sum + group.cgst, 0))
   const sgst = round(groups.reduce((sum, group) => sum + group.sgst, 0))
@@ -58,7 +58,7 @@ export default function InvoiceTaxSummary({ rows, totals, isGst, received = 0 })
     </div>}
     <section aria-label='Invoice totals and balance' style={{ width: '100%', marginTop: 12, border: '1px solid #646779' }}>
       <dl><div style={{ display: 'flex', justifyContent: 'space-between', padding: 6, fontWeight: 700 }}><dt>Total</dt><dd>₹ {number(totals.total)}</dd></div></dl>
-      <h3 style={{ borderTop: '1px solid #646779', borderBottom: '1px solid #646779', padding: 6, background: '#f4f4f5', fontWeight: 700 }}>Invoice Amount in Words:</h3>
+      <h3 style={{ borderTop: '1px solid #646779', borderBottom: '1px solid #646779', padding: 6, background: '#f4f4f5', fontWeight: 700 }}>{documentLabel} Amount in Words:</h3>
       <p style={{ padding: 6, lineHeight: 1.6 }}>{amountInWords(totals.total)}</p>
       <dl style={{ borderTop: '1px solid #646779', padding: 6 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><dt>Received</dt><dd>₹ {number(paid)}</dd></div>

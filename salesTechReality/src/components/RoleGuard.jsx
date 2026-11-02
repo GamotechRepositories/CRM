@@ -9,6 +9,8 @@ const HR_ONLY_PATHS = [
   '/salaries',
   '/add-salary',
   '/billings',
+  '/orders',
+  '/add-order',
   '/campaigns',
   '/reports',
   '/calendar',

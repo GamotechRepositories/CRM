@@ -348,6 +348,28 @@ export const components = {
         data: { type: 'object', additionalProperties: true },
       },
     },
+    SalesOrderInput: {
+      type: 'object',
+      required: ['billType', 'client'],
+      properties: {
+        billType: { type: 'string', enum: ['GST', 'Non-GST'] },
+        client: { type: 'string', description: 'Client ObjectId in the same tenant' },
+        orderDate: { type: ['string', 'null'], format: 'date' },
+        placeOfSupply: { type: 'string' },
+        company: { type: 'object', additionalProperties: true },
+        companyLogo: { type: 'string' },
+        companyGst: { type: 'object', additionalProperties: true },
+        clientGst: { type: 'object', additionalProperties: true },
+        items: { type: 'array', items: { type: 'object', required: ['name', 'quantity', 'price'], properties: {
+          name: { type: 'string' }, description: { type: 'string' },
+          hsnSac: { type: 'string' }, serviceName: { type: 'string' },
+          quantity: { type: 'number', minimum: 0.001 }, unit: { type: 'string' },
+          price: { type: 'number', minimum: 0 }, gstRate: { type: 'number', minimum: 0, maximum: 100 },
+        } } },
+        paymentDetails: { type: 'object', additionalProperties: true },
+        authorizedSignature: { type: 'string' }, termsAndConditions: { type: 'string' },
+      },
+    },
     GenericResource: {
       type: 'object',
       description: 'Generic CRM resource — fields vary by module',

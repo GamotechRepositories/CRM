@@ -1,12 +1,31 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../api/axios'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DeleteIcon } from '../Icons'
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 const SalariesView = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit' }).formatToParts(new Date())
+  const currentMonth = `${today.find((part) => part.type === 'year').value}-${today.find((part) => part.type === 'month').value}`
+  const requestedMonth = searchParams.get('month') || ''
+  const selectedMonth = /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : currentMonth
+  const [year, month] = selectedMonth.split('-').map(Number)
+  const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const selectMonth = (value) => {
+    if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(value)) return
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('month', value)
+      return next
+    })
+  }
+  const moveMonth = (offset) => {
+    const date = new Date(Date.UTC(year, month - 1 + offset, 1))
+    selectMonth(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`)
+  }
   const [salaries, setSalaries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -14,6 +33,7 @@ const SalariesView = () => {
   const fetchSalaries = async () => {
     try {
       setLoading(true)
+      setError(null)
       const res = await api.get('/salaries')
       const payload = res.data
       const list = Array.isArray(payload) ? payload : payload?.data || payload?.salaries || []
@@ -49,9 +69,11 @@ const SalariesView = () => {
     }
   }
 
+  const monthlySalaries = salaries.filter((salary) => Number(salary.month) === month && Number(salary.year) === year)
+
   return (
-    <div className='p-8'>
-      <div className='flex items-center justify-between mb-6'>
+    <div className='p-4 md:p-8'>
+      <div className='flex flex-wrap items-center justify-between gap-4 mb-6'>
         <div>
           <h1 className='text-2xl font-bold text-gray-900'>Salaries</h1>
           <p className='text-gray-600 mt-1 text-sm'>Manage employee salary records and payment status.</p>
@@ -62,6 +84,18 @@ const SalariesView = () => {
         >
           Add Salary
         </button>
+      </div>
+
+      <div className='mb-5 flex flex-wrap items-end justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4'>
+        <div className='flex flex-wrap items-end gap-2'>
+          <button type='button' aria-label='Previous salary month' onClick={() => moveMonth(-1)} className='min-h-11 rounded-md border border-gray-300 px-3 text-sm hover:bg-gray-50'>Previous</button>
+          <label className='text-sm font-medium text-gray-700'>Salary month
+            <input type='month' min='1000-01' max='9999-12' value={selectedMonth} onChange={(e) => selectMonth(e.target.value)} className='mt-1 block min-h-11 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500' />
+          </label>
+          <button type='button' aria-label='Next salary month' onClick={() => moveMonth(1)} className='min-h-11 rounded-md border border-gray-300 px-3 text-sm hover:bg-gray-50'>Next</button>
+          <button type='button' onClick={() => selectMonth(currentMonth)} className='min-h-11 rounded-md px-3 text-sm font-medium text-blue-700 hover:bg-blue-50'>This month</button>
+        </div>
+        <p aria-live='polite' className='text-sm text-gray-600'>{monthLabel}{!loading && !error ? ` · ${monthlySalaries.length} salary records` : ''}</p>
       </div>
 
       {loading ? (
@@ -84,14 +118,14 @@ const SalariesView = () => {
               </tr>
             </thead>
             <tbody>
-              {salaries.length === 0 ? (
+              {monthlySalaries.length === 0 ? (
                 <tr>
                   <td colSpan={8} className='px-4 py-12 text-center text-gray-500'>
-                    No salary records yet
+                    No salary records for {monthLabel}
                   </td>
                 </tr>
               ) : (
-                salaries.map((s) => (
+                monthlySalaries.map((s) => (
                   <tr key={s._id} className='border-b hover:bg-gray-50'>
                     <td className='px-4 py-3 font-medium'>{s.employee?.name || '—'}</td>
                     <td className='px-4 py-3 font-semibold'>₹{Number(s.grossSalary || s.amount || 0).toLocaleString('en-IN')}</td>

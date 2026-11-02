@@ -29,7 +29,7 @@ export const itemTotals = (items, isGst) => items.reduce((sum, item) => {
 }, { base: 0, tax: 0, total: 0 })
 const money = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(n)
 
-export default function InvoiceItems({ items, isGst, onChange, received = 0 }) {
+export default function InvoiceItems({ items, isGst, onChange, received = 0, documentLabel = 'Invoice' }) {
   const editable = Boolean(onChange)
   const totals = itemTotals(items, isGst)
   const update = (index, field, value) => onChange(items.map((item, i) => i === index ? { ...item, [field]: value } : item))
@@ -65,6 +65,6 @@ export default function InvoiceItems({ items, isGst, onChange, received = 0 }) {
       </table>
     </div>
     {editable && <button type='button' onClick={() => onChange([...items, emptyItem()])} className='mt-3 rounded-lg border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700'>+ Add item</button>}
-    <InvoiceTaxSummary rows={items.map((item) => ({ ...item, ...itemAmounts(item, isGst) }))} totals={totals} isGst={isGst} received={received} />
+    <InvoiceTaxSummary rows={items.map((item) => ({ ...item, ...itemAmounts(item, isGst) }))} totals={totals} isGst={isGst} received={received} documentLabel={documentLabel} />
   </section>
 }

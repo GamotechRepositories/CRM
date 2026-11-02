@@ -7,7 +7,10 @@ import InvoiceItems, { emptyItem } from '../components/InvoiceItems'
 
 const MODES = ['Bank Transfer', 'UPI', 'Cheque', 'Cash', 'Other']
 
-const AddBilling = () => {
+const AddBilling = ({ isOrder = false }) => {
+  const resource = isOrder ? '/order' : '/billing'
+  const listPath = isOrder ? '/orders' : '/billings'
+  const documentLabel = isOrder ? 'Order' : 'Invoice'
   const { id } = useParams()
   const isEdit = Boolean(id)
   const [items, setItems] = useState(() => id ? [] : [emptyItem()])
@@ -155,8 +158,8 @@ const AddBilling = () => {
     if (!id) return
     const fetchBilling = async () => {
       try {
-        const res = await api.get(`/billing/${id}`)
-        const b = res.data
+        const res = await api.get(`${resource}/${id}`)
+        const b = isOrder ? { ...res.data, invoiceDate: res.data.orderDate } : res.data
         setItems(b.items || [])
         setItemMode(Boolean(b.items?.length))
         setInvoiceDate((b.invoiceDate || b.createdAt || '').slice(0, 10))
@@ -209,7 +212,7 @@ const AddBilling = () => {
       }
     }
     fetchBilling()
-  }, [id])
+  }, [id, resource, isOrder])
 
   const handleCompanyChange = (field, value) => {
     setCompany((c) => ({ ...c, [field]: value }))
@@ -257,13 +260,13 @@ const AddBilling = () => {
       setError('Please select a client')
       return
     }
-    if (itemMode && !items.length) { setError('Add at least one invoice item'); return }
+    if (itemMode && !items.length) { setError('Add at least one item'); return }
     setLoading(true)
     setError(null)
     try {
       const payload = {
         billType,
-        invoiceDate: invoiceDate || null,
+        [isOrder ? 'orderDate' : 'invoiceDate']: invoiceDate || null,
         placeOfSupply,
         items: itemMode ? items : [],
         companyLogo,
@@ -290,15 +293,15 @@ const AddBilling = () => {
         payload.clientGst = clientGst
       }
       if (isEdit) {
-        await api.put(`/billing/${id}`, payload)
-        navigate('/billings')
+        await api.put(`${resource}/${id}`, payload)
+        navigate(listPath)
       } else {
-        const res = await api.post('/billing', payload)
-        const createdId = res.data?.billing?._id
+        const res = await api.post(resource, payload)
+        const createdId = (isOrder ? res.data?.order?._id : res.data?.billing?._id)
         if (createdId) {
-          navigate(`/billings/${createdId}/invoice`)
+          navigate(`${listPath}/${createdId}/${isOrder ? 'order' : 'invoice'}`)
         } else {
-          navigate('/billings')
+          navigate(listPath)
         }
       }
     } catch (err) {
@@ -313,7 +316,7 @@ const AddBilling = () => {
   return (
     <div className='p-4 md:p-5 w-full w-full'>
       <h1 className='text-2xl font-bold text-gray-900 mb-4 md:mb-5 text-center w-full'>
-        {isEdit ? 'Edit Invoice' : 'Create Invoice'}
+        {isEdit ? `Edit ${documentLabel}` : `Create ${documentLabel}`}
       </h1>
 
       <form onSubmit={handleSubmit} className='w-full space-y-6'>
@@ -450,20 +453,20 @@ const AddBilling = () => {
         </div>
 
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-5 space-y-4'>
-          <h2 className='text-lg font-semibold text-gray-800'>Invoice details</h2>
+          <h2 className='text-lg font-semibold text-gray-800'>{documentLabel} details</h2>
           <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-            <label>Invoice date<input type='date' required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className={inputClass} /></label>
+            <label>{documentLabel} date<input type='date' required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className={inputClass} /></label>
             <label>Place of supply<input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} placeholder='27-Maharashtra' className={inputClass} /></label>
           </div>
-          <label className='flex items-center gap-2'><input type='checkbox' checked={itemMode} onChange={(e) => { setItemMode(e.target.checked); if (!items.length) setItems([emptyItem()]) }} />Use itemized invoice</label>
-          {itemMode && <InvoiceItems items={items} isGst={billType === 'GST'} onChange={setItems} received={paymentDetails.amount} />}
+          <label className='flex items-center gap-2'><input type='checkbox' checked={itemMode} onChange={(e) => { setItemMode(e.target.checked); if (!items.length) setItems([emptyItem()]) }} />Use itemized {documentLabel.toLowerCase()}</label>
+          {itemMode && <InvoiceItems items={items} isGst={billType === 'GST'} onChange={setItems} received={paymentDetails.amount} documentLabel={documentLabel} />}
         </div>
 
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-5 space-y-4'>
           <h2 className='text-lg font-semibold text-gray-800 border-b pb-2'>
             Payment Details {billType === 'GST' ? '(GST)' : '(Non-GST)'}
           </h2>
-          <p className='text-xs text-gray-500'>Enter the amount received for this invoice. The tax summary calculates the remaining balance automatically.</p>
+          <p className='text-xs text-gray-500'>Enter the amount received for this {documentLabel.toLowerCase()}. The tax summary calculates the remaining balance automatically.</p>
           {billType === 'Non-GST' && companyPersonalAccounts.length > 1 && (
             <div>
               <label className='block text-sm font-medium text-gray-700'>Personal account</label>
@@ -560,9 +563,9 @@ const AddBilling = () => {
 
         <div className='flex gap-3'>
           <button type='submit' disabled={loading || signatureUploading} className='bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50'>
-            {loading ? 'Saving...' : isEdit ? 'Update Invoice' : 'Save Invoice'}
+            {loading ? 'Saving...' : isEdit ? `Update ${documentLabel}` : `Save ${documentLabel}`}
           </button>
-          <button type='button' onClick={() => navigate('/billings')} className='px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50'>
+          <button type='button' onClick={() => navigate(listPath)} className='px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50'>
             Cancel
           </button>
         </div>

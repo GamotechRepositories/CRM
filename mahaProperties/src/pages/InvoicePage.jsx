@@ -6,7 +6,10 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import companyLogoFallback from '../assets/log.png'
 
-const InvoicePage = () => {
+const InvoicePage = ({ isOrder = false }) => {
+  const resource = isOrder ? '/order' : '/billing'
+  const listPath = isOrder ? '/orders' : '/billings'
+  const documentLabel = isOrder ? 'Order' : 'Invoice'
   const { id } = useParams()
   const navigate = useNavigate()
   const printRef = useRef(null)
@@ -32,8 +35,8 @@ const InvoicePage = () => {
     if (!id) return
     const fetchBilling = async () => {
       try {
-        const res = await api.get(`/billing/${id}`)
-        setBilling(res.data)
+        const res = await api.get(`${resource}/${id}`)
+        setBilling(isOrder ? { ...res.data, invoiceDate: res.data.orderDate, invoiceNumber: res.data.orderNumber } : res.data)
       } catch (err) {
         setError(err.response?.data?.message || err.message || 'Failed to load billing')
       } finally {
@@ -41,7 +44,7 @@ const InvoicePage = () => {
       }
     }
     fetchBilling()
-  }, [id])
+  }, [id, resource, isOrder])
 
   useEffect(() => {
     let isMounted = true
@@ -278,7 +281,7 @@ const InvoicePage = () => {
         }
       }
 
-      const filename = `invoice-${(billing?.company?.name || 'bill').replace(/\s+/g, '-')}-${id}.pdf`
+      const filename = `${documentLabel.toLowerCase()}-${(billing?.company?.name || 'bill').replace(/\s+/g, '-')}-${id}.pdf`
       pdf.save(filename)
     } catch (err) {
       console.error('PDF download failed:', err)
@@ -309,7 +312,7 @@ const InvoicePage = () => {
     return `${startYear}-${String(endYear).slice(-2)}`
   }
 
-  if (loading) return <div className='p-8 text-center text-gray-600'>Loading invoice...</div>
+  if (loading) return <div className='p-8 text-center text-gray-600'>Loading {documentLabel.toLowerCase()}...</div>
   if (error) return <div className='p-8 text-center text-red-600'>{error}</div>
   if (!billing) return null
 
@@ -371,11 +374,11 @@ const InvoicePage = () => {
       {/* Non-printable header with actions */}
       <div className='print:hidden sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200 px-4 sm:px-8 py-3 flex items-center justify-between shadow-xs'>
         <button
-          onClick={() => navigate('/billings')}
+          onClick={() => navigate(listPath)}
           className='inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900 text-sm font-medium transition-colors'
         >
           <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M10 19l-7-7m0 0l7-7m-7 7h18' /></svg>
-          Back to Billing
+          Back to {isOrder ? 'Orders' : 'Billing'}
         </button>
         <div className='flex items-center gap-3'>
           <span className='hidden sm:inline-block text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200'>
@@ -430,14 +433,14 @@ const InvoicePage = () => {
             <div className='py-4 border-b' style={{ borderColor: '#e5e7eb' }}>
               <div className='flex flex-wrap items-baseline justify-between gap-4'>
                 <div>
-                  <h1 className='text-2xl font-bold tracking-tight' style={{ color: '#000000' }}>INVOICE</h1>
+                  <h1 className='text-2xl font-bold tracking-tight' style={{ color: '#000000' }}>{documentLabel.toUpperCase()}</h1>
                   <p className='text-sm mt-1 font-medium' style={{ color: '#374151' }}>
-                    {isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)'} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
+                    {isOrder ? (isGst ? 'Order (GST)' : 'Order (Non-GST)') : (isGst ? 'Tax Invoice (GST)' : 'Bill (Non-GST)')} • {billing.createdAt ? new Date(billing.createdAt).toLocaleDateString() : '—'}
                   </p>
                 </div>
                 <div className='text-right'>
                   <p className='text-sm' style={{ color: '#000000' }}>
-                    <span className='font-semibold' style={{ color: '#000000' }}>Invoice No:</span>{' '}
+                    <span className='font-semibold' style={{ color: '#000000' }}>{documentLabel} No:</span>{' '}
                     {billing.invoiceNumber ? billing.invoiceNumber.replace(/^Gamo-/, 'MHP-') : `MHP-${getFYDisplay(billing.createdAt)}-001`}
                   </p>
                   <p className='text-sm mt-1' style={{ color: '#000000' }}>
@@ -461,8 +464,8 @@ const InvoicePage = () => {
                 <div style={{ padding: 6, lineHeight: 1.7 }}><strong>{client.clientName || '—'}</strong><div>{billing.clientGst?.billingAddress || client.address}</div>{billing.clientGst?.gstin && <div>GSTIN: {billing.clientGst.gstin}</div>}<div>State: <strong>{billing.clientGst?.state || '—'}</strong></div></div>
               </section>
               <section>
-                <h2 style={{ background: '#f4f4f5', borderBottom: '1px solid #646779', padding: 6, fontWeight: 700 }}>Invoice Details:</h2>
-                <div style={{ padding: 6, lineHeight: 1.7 }}><div>Invoice No.: <strong>{billing.invoiceNumber || '—'}</strong></div><div>Date: <strong>{new Date(billing.invoiceDate || billing.createdAt).toLocaleDateString('en-GB')}</strong></div><div>Place Of Supply: <strong>{billing.placeOfSupply || billing.clientGst?.state || '—'}</strong></div></div>
+                <h2 style={{ background: '#f4f4f5', borderBottom: '1px solid #646779', padding: 6, fontWeight: 700 }}>{documentLabel} Details:</h2>
+                <div style={{ padding: 6, lineHeight: 1.7 }}><div>{documentLabel} No.: <strong>{billing.invoiceNumber || '—'}</strong></div><div>Date: <strong>{new Date(billing.invoiceDate || billing.createdAt).toLocaleDateString('en-GB')}</strong></div><div>Place Of Supply: <strong>{billing.placeOfSupply || billing.clientGst?.state || '—'}</strong></div></div>
               </section>
             </div>
           </> : <>
@@ -510,11 +513,11 @@ const InvoicePage = () => {
 
           </>}
           {hasItems ? <>
-            <InvoiceItems items={billing.items} isGst={isGst} received={payment.amount} />
+            <InvoiceItems items={billing.items} isGst={isGst} received={payment.amount} documentLabel={documentLabel} />
           </> : <>
           {/* Projects / Items table */}
           <div className='py-6'>
-            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Invoice Items</h2>
+            <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>{documentLabel} Items</h2>
             <table className='w-full text-sm border' style={{ borderColor: '#d1d5db' }}>
               <thead>
                 <tr className='border-b' style={{ backgroundColor: '#f8fafc', borderColor: '#d1d5db' }}>
