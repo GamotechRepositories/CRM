@@ -1,12 +1,6 @@
+import { nextInvoiceNumber } from '../../utils/invoiceNumber.js';
 import Billing from '../../models/adsResearchGlobal/adsResearchGlobal_billing.js';
 import { syncClientProfile } from '../../utils/adsResearchGlobal/adsResearchGlobal_clientProfileSync.js';
-
-/** Financial year (India: Apr–Mar). Returns ending year e.g. 2026 for FY 2025-26 */
-function getFinancialYearEnd(date = new Date()) {
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0-indexed: Jan=0, Apr=3
-  return month >= 3 ? year + 1 : year;
-}
 
 /** Distribute payment amount across projects (first first), return projects with dynamic remainingCost */
 export function withDynamicRemainingCost(billing) {
@@ -65,11 +59,7 @@ export function computeTracking(billings) {
 
 export const createBilling = async (req, res) => {
   try {
-    const fy = getFinancialYearEnd();
-    const prefix = `ARG-${fy}-`;
-    const count = await Billing.countDocuments({ invoiceNumber: new RegExp(`^(?:ARG|Gamo)-${fy}-`) });
-    const seq = count + 1;
-    const invoiceNumber = `${prefix}${String(seq).padStart(3, '0')}`;
+    const invoiceNumber = await nextInvoiceNumber('ARG');
     const billing = new Billing({ ...req.body, invoiceNumber });
     await billing.save();
     await syncClientProfile({ clientId: billing.client });
