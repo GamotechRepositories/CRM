@@ -53,13 +53,12 @@ export default function InvoiceTaxSummary({ rows, totals, isGst, received = 0, d
           <td style={{ ...cell, textAlign: 'left' }}>{group.code}</td><td style={cell}>{number(group.base)}</td>
           <td style={cell}>{group.rates.map((rate) => rate / 2).join(', ')}</td><td style={cell}>{number(group.cgst)}</td><td style={cell}>{group.rates.map((rate) => rate / 2).join(', ')}</td><td style={cell}>{number(group.sgst)}</td><td style={cell}>{number(group.tax)}</td>
         </tr>)}</tbody>
-        <tfoot><tr style={{ fontWeight: 700, background: '#f4f4f5' }}><th scope='row' style={cell}>TOTAL</th><td style={cell}>{number(totals.base)}</td><td style={cell} /><td style={cell}>{number(cgst)}</td><td style={cell} /><td style={cell}>{number(sgst)}</td><td style={cell}>{number(totals.tax)}</td></tr></tfoot>
+        <tfoot><tr style={{ fontWeight: 700, background: '#f4f4f5' }}><th scope='row' style={{ ...cell, textAlign: 'left' }}>TOTAL</th><td style={cell}>{number(totals.base)}</td><td style={cell} /><td style={cell}>{number(cgst)}</td><td style={cell} /><td style={cell}>{number(sgst)}</td><td style={cell}>{number(totals.tax)}</td></tr></tfoot>
       </table>
     </div>}
     <section aria-label='Invoice totals and balance' style={{ width: '100%', marginTop: 12, border: '1px solid #646779' }}>
-      <dl><div style={{ display: 'flex', justifyContent: 'space-between', padding: 6, fontWeight: 700 }}><dt>Total</dt><dd>₹ {number(totals.total)}</dd></div></dl>
-      <h3 style={{ borderTop: '1px solid #646779', borderBottom: '1px solid #646779', padding: 6, background: '#f4f4f5', fontWeight: 700 }}>{documentLabel} Amount in Words:</h3>
-      <p style={{ padding: 6, lineHeight: 1.6 }}>{amountInWords(totals.total)}</p>
+      <dl><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', padding: 6, fontWeight: 700 }}><dt style={{ textAlign: 'left' }}>Total</dt><dd style={{ flex: '1 1 180px', textAlign: 'right' }}>₹ {number(totals.total)}</dd></div></dl>
+      <div style={{ borderTop: '1px solid #646779', padding: 6, lineHeight: 1.6, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}><strong style={{ textAlign: 'left' }}>{documentLabel} Amount in Words:</strong><span style={{ flex: '1 1 180px', textAlign: 'right' }}>{amountInWords(totals.total)}</span></div>
       <dl style={{ borderTop: '1px solid #646779', padding: 6 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}><dt>Received</dt><dd>₹ {number(paid)}</dd></div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><dt>{balance < 0 ? 'Credit' : 'Balance'}</dt><dd>₹ {number(Math.abs(balance))}</dd></div>
