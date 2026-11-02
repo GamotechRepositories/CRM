@@ -3,13 +3,21 @@ import api from '../api/axios'
 import { uploadFile } from '../utils/uploadFile'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import InvoiceItems, { emptyItem } from '../components/InvoiceItems'
+
 const MODES = ['Bank Transfer', 'UPI', 'Cheque', 'Cash', 'Other']
 
 const AddBilling = () => {
   const { id } = useParams()
   const isEdit = Boolean(id)
+  const [items, setItems] = useState(() => id ? [] : [emptyItem()])
+  const [itemMode, setItemMode] = useState(!id)
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toLocaleDateString('en-CA'))
+  const [placeOfSupply, setPlaceOfSupply] = useState('')
   const [billType, setBillType] = useState('Non-GST')
   const [companyLogo, setCompanyLogo] = useState('')
+  const [signatureUploading, setSignatureUploading] = useState(false)
+  const [signatureError, setSignatureError] = useState('')
   const [authorizedSignature, setAuthorizedSignature] = useState('')
   const [company, setCompany] = useState({ name: '', address: '', email: '', phone: '', pan: '', website: '' })
   const [termsAndConditions, setTermsAndConditions] = useState('')
@@ -30,13 +38,10 @@ const AddBilling = () => {
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
   const [companyPersonalAccounts, setCompanyPersonalAccounts] = useState([])
   const [selectedPersonalAccountIndex, setSelectedPersonalAccountIndex] = useState(0)
-  const [clientProjects, setClientProjects] = useState([])
-  const [tracking, setTracking] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const fileInputRef = useRef(null)
   const signatureInputRef = useRef(null)
-  const skipClientProjectsRef = useRef(false)
   const skipClientGstRef = useRef(false)
 
   const navigate = useNavigate()
@@ -55,17 +60,28 @@ const AddBilling = () => {
   }, [])
 
   useEffect(() => {
+    let active = true
     const fetchCompanies = async () => {
       try {
-        const res = await api.get('/companies')
+        const [res, profile] = await Promise.all([
+          api.get('/companies'),
+          isEdit ? Promise.resolve(null) : api.get('/company-profile').catch(() => null),
+        ])
+        if (!active) return
         const list = Array.isArray(res.data) ? res.data : res.data?.data || []
         setCompanies(list)
+        if (!isEdit) {
+          // Use the same primary company as Company Profile settings.
+          const defaultId = profile?.data?._id || (list.length === 1 ? list[0]._id : '')
+          setSelectedCompanyId((current) => current || defaultId)
+        }
       } catch (err) {
         console.error('Failed to fetch companies:', err)
       }
     }
     fetchCompanies()
-  }, [])
+    return () => { active = false }
+  }, [isEdit])
 
   useEffect(() => {
     if (!selectedCompanyId) return
@@ -114,45 +130,6 @@ const AddBilling = () => {
   }, [selectedCompanyId, billType])
 
   useEffect(() => {
-    if (!clientId) {
-      setClientProjects([])
-      setProjects([])
-      setTracking([])
-      return
-    }
-    if (skipClientProjectsRef.current) {
-      skipClientProjectsRef.current = false
-      return
-    }
-    const fetchProjects = async () => {
-      try {
-        const res = await api.get('/projects')
-        const list = Array.isArray(res.data) ? res.data : res.data?.data || []
-        const forClient = list.filter((p) => (p.client?._id || p.client) === clientId)
-        setClientProjects(forClient)
-        setProjects(forClient.map((p) => ({ project: p._id, projectCost: p.budget || 0, amountPaid: 0 })))
-      } catch (err) {
-        console.error('Failed to fetch projects:', err)
-      }
-    }
-    fetchProjects()
-  }, [clientId])
-
-  useEffect(() => {
-    if (!clientId) return
-    const fetchTracking = async () => {
-      try {
-        const res = await api.get(`/billing/tracking/${clientId}`)
-        setTracking(res.data?.tracking || [])
-      // eslint-disable-next-line no-unused-vars
-      } catch (err) {
-        setTracking([])
-      }
-    }
-    fetchTracking()
-  }, [clientId])
-
-  useEffect(() => {
     if (!clientId) return
     if (skipClientGstRef.current) {
       skipClientGstRef.current = false
@@ -180,6 +157,10 @@ const AddBilling = () => {
       try {
         const res = await api.get(`/billing/${id}`)
         const b = res.data
+        setItems(b.items || [])
+        setItemMode(Boolean(b.items?.length))
+        setInvoiceDate((b.invoiceDate || b.createdAt || '').slice(0, 10))
+        setPlaceOfSupply(b.placeOfSupply || '')
         setBillType(b.billType || 'Non-GST')
         setCompanyLogo(b.companyLogo || '')
         setAuthorizedSignature(b.authorizedSignature || '')
@@ -204,9 +185,7 @@ const AddBilling = () => {
           state: b.clientGst?.state ?? '',
           billingAddress: b.clientGst?.billingAddress ?? '',
         })
-        if (Array.isArray(b.projects) && b.projects.length) {
-          skipClientProjectsRef.current = true
-          setClientProjects(b.projects.map((p) => p.project).filter(Boolean))
+        if (Array.isArray(b.projects)) {
           setProjects(b.projects.map((p) => {
             const cost = Number(p.projectCost) || 0
             const rem = Number(p.remainingCost) || 0
@@ -236,32 +215,6 @@ const AddBilling = () => {
     setCompany((c) => ({ ...c, [field]: value }))
   }
 
-  const handleProjectChange = (index, field, value) => {
-    setProjects((prev) => {
-      const next = [...prev]
-      next[index] = { ...next[index], [field]: Number(value) || 0 }
-      return next
-    })
-  }
-
-  /** Distribute payment amount across projects (first project first); amount paid is subtracted from project cost to get remaining */
-  useEffect(() => {
-    const paymentAmount = Number(paymentDetails.amount) || 0
-    setProjects((prev) => {
-      if (prev.length === 0) return prev
-      if (paymentAmount <= 0) {
-        return prev.map((p) => ({ ...p, amountPaid: 0 }))
-      }
-      let remainingToDistribute = paymentAmount
-      return prev.map((p) => {
-        const cost = Number(p.projectCost) || 0
-        const paid = Math.min(cost, Math.max(0, remainingToDistribute))
-        remainingToDistribute -= paid
-        return { ...p, amountPaid: paid }
-      })
-    })
-  }, [paymentDetails.amount, projects.length])
-
   const handleLogoFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -276,31 +229,45 @@ const AddBilling = () => {
   }
 
   const handleSignatureFile = async (e) => {
-    const file = e.target.files?.[0]
+    const input = e.target
+    const file = input.files?.[0]
     if (!file) return
+    setSignatureError('')
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      setSignatureError('Choose a PNG, JPEG, or WebP signature image.')
+      input.value = ''
+      return
+    }
+    setSignatureUploading(true)
     try {
-      setError(null)
-      const uploaded = await uploadFile(file, { folder: 'signatures' })
+      const uploaded = await uploadFile(file, { folder: 'signatures', proxyFallback: true })
       setAuthorizedSignature(uploaded.url)
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to upload signature')
-      e.target.value = ''
+      setSignatureError(err.response?.data?.message || err.message || 'Failed to upload signature')
+    } finally {
+      setSignatureUploading(false)
+      input.value = ''
     }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (signatureUploading) return
     if (!clientId) {
       setError('Please select a client')
       return
     }
+    if (itemMode && !items.length) { setError('Add at least one invoice item'); return }
     setLoading(true)
     setError(null)
     try {
       const payload = {
         billType,
+        invoiceDate: invoiceDate || null,
+        placeOfSupply,
+        items: itemMode ? items : [],
         companyLogo,
-        authorizedSignature: authorizedSignature || undefined,
+        authorizedSignature,
         company,
         termsAndConditions: termsAndConditions.trim() || undefined,
         client: clientId,
@@ -346,7 +313,7 @@ const AddBilling = () => {
   return (
     <div className='p-4 md:p-5 w-full w-full'>
       <h1 className='text-2xl font-bold text-gray-900 mb-4 md:mb-5 text-center w-full'>
-        {isEdit ? 'Edit Billing' : 'Add Billing'}
+        {isEdit ? 'Edit Invoice' : 'Create Invoice'}
       </h1>
 
       <form onSubmit={handleSubmit} className='w-full space-y-6'>
@@ -381,7 +348,7 @@ const AddBilling = () => {
           <div>
             <label className='block text-sm font-medium text-gray-700'>Select Company (auto-fill details)</label>
             <select
-              value={selectedCompanyId}
+              value={selectedCompanyId || (isEdit ? companies.find((c) => c.companyName?.trim().toLowerCase() === company.name.trim().toLowerCase())?._id || '' : '')}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
               className={inputClass}
             >
@@ -453,7 +420,7 @@ const AddBilling = () => {
           <h2 className='text-lg font-semibold text-gray-800 border-b pb-2'>Client</h2>
           <div>
             <label className='block text-sm font-medium text-gray-700'>Select Client</label>
-            <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={inputClass} required>
+            <select value={clientId} onChange={(e) => { setProjects([]); setClientId(e.target.value) }} className={inputClass} required>
               <option value=''>— Select client —</option>
               {clients.map((c) => (
                 <option key={c._id} value={c._id}>{c.clientName}</option>
@@ -483,88 +450,20 @@ const AddBilling = () => {
         </div>
 
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-5 space-y-4'>
-          <h2 className='text-lg font-semibold text-gray-800 border-b pb-2'>Projects & Cost</h2>
-          {clientProjects.length === 0 ? (
-            <p className='text-sm text-gray-500'>Select a client to load projects.</p>
-          ) : (
-            <div className='space-y-3'>
-              {projects.map((p, i) => {
-                const cost = Number(p.projectCost) || 0
-                const paidThisBill = Number(p.amountPaid) || 0
-                const projectId = (p.project || clientProjects[i]?._id)?.toString?.() || p.project || clientProjects[i]?._id
-                const trackingEntry = tracking.find((t) => (t.project?._id || t.project)?.toString?.() === projectId?.toString?.())
-                let totalPaidDisplay, remainingDisplay
-                if (trackingEntry) {
-                  if (isEdit) {
-                    totalPaidDisplay = Number(trackingEntry.totalPaid) || 0
-                    // eslint-disable-next-line no-constant-binary-expression
-                    remainingDisplay = Number(trackingEntry.remaining) ?? Math.max(0, cost - totalPaidDisplay)
-                  } else {
-                    totalPaidDisplay = (Number(trackingEntry.totalPaid) || 0) + paidThisBill
-                    remainingDisplay = Math.max(0, cost - totalPaidDisplay)
-                  }
-                } else {
-                  totalPaidDisplay = paidThisBill
-                  remainingDisplay = Math.max(0, cost - paidThisBill)
-                }
-                return (
-                  <div key={clientProjects[i]?._id || i} className='flex flex-wrap items-end gap-3 p-3 bg-gray-50 rounded-lg'>
-                    <span className='font-medium text-gray-700 flex-1 min-w-[120px]'>{clientProjects[i]?.projectName || 'Project'}</span>
-                    <div className='flex flex-wrap items-end gap-3'>
-                      <div>
-                        <label className='block text-xs font-medium text-gray-500'>Project Cost</label>
-                        <input type='number' value={p.projectCost} onChange={(e) => handleProjectChange(i, 'projectCost', e.target.value)} className='w-28 border border-gray-300 rounded px-2 py-1.5 text-sm' />
-                      </div>
-                      <div>
-                        <label className='block text-xs font-medium text-gray-500'>Amount Paid {trackingEntry && !isEdit ? '(incl. this bill)' : '(total so far)'}</label>
-                        <div className='w-28 border border-gray-200 rounded px-2 py-1.5 text-sm bg-gray-100 text-gray-700' title={isEdit ? 'Total paid across all bills' : 'Previous bills + this payment'}>
-                          {totalPaidDisplay.toLocaleString('en-IN')}
-                        </div>
-                      </div>
-                      <div>
-                        <label className='block text-xs font-medium text-gray-500'>Remaining</label>
-                        <div className='w-28 border border-gray-200 rounded px-2 py-1.5 text-sm bg-gray-100 text-gray-700 font-medium'>
-                          {remainingDisplay.toLocaleString('en-IN')}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          {projects.length > 0 && (() => {
-            const totalCost = projects.reduce((s, p) => s + (Number(p.projectCost) || 0), 0)
-            const totalRemaining = projects.reduce((s, p, i) => {
-              const cost = Number(p.projectCost) || 0
-              const paidThisBill = Number(p.amountPaid) || 0
-              const projectId = (p.project || clientProjects[i]?._id)?.toString?.() || p.project || clientProjects[i]?._id
-              const trackingEntry = tracking.find((t) => (t.project?._id || t.project)?.toString?.() === projectId?.toString?.())
-              let rem
-              if (trackingEntry) {
-                // eslint-disable-next-line no-constant-binary-expression
-                if (isEdit) rem = Number(trackingEntry.remaining) ?? Math.max(0, cost - (Number(trackingEntry.totalPaid) || 0))
-                else rem = Math.max(0, cost - (Number(trackingEntry.totalPaid) || 0) - paidThisBill)
-              } else {
-                rem = Math.max(0, cost - paidThisBill)
-              }
-              return s + rem
-            }, 0)
-            return (
-              <div className='mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-4 text-sm'>
-                <span className='font-medium text-gray-700'>Total Project Cost: ₹{totalCost.toLocaleString('en-IN')}</span>
-                <span className='text-gray-600'>Amount (this payment): ₹{(Number(paymentDetails.amount) || 0).toLocaleString('en-IN')}</span>
-                <span className='font-medium text-gray-800'>Remaining: ₹{totalRemaining.toLocaleString('en-IN')}</span>
-              </div>
-            )
-          })()}
+          <h2 className='text-lg font-semibold text-gray-800'>Invoice details</h2>
+          <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+            <label>Invoice date<input type='date' required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className={inputClass} /></label>
+            <label>Place of supply<input value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)} placeholder='27-Maharashtra' className={inputClass} /></label>
+          </div>
+          <label className='flex items-center gap-2'><input type='checkbox' checked={itemMode} onChange={(e) => { setItemMode(e.target.checked); if (!items.length) setItems([emptyItem()]) }} />Use itemized invoice</label>
+          {itemMode && <InvoiceItems items={items} isGst={billType === 'GST'} onChange={setItems} received={paymentDetails.amount} />}
         </div>
 
         <div className='bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-5 space-y-4'>
           <h2 className='text-lg font-semibold text-gray-800 border-b pb-2'>
             Payment Details {billType === 'GST' ? '(GST)' : '(Non-GST)'}
           </h2>
-          <p className='text-xs text-gray-500'>Amount below is the amount to be paid for this bill; it is distributed across projects and remaining cost is calculated automatically.</p>
+          <p className='text-xs text-gray-500'>Enter the amount received for this invoice. The tax summary calculates the remaining balance automatically.</p>
           {billType === 'Non-GST' && companyPersonalAccounts.length > 1 && (
             <div>
               <label className='block text-sm font-medium text-gray-700'>Personal account</label>
@@ -631,14 +530,16 @@ const AddBilling = () => {
           <h2 className='text-lg font-semibold text-gray-800 border-b pb-2'>Authorized Signature (optional)</h2>
           <div>
             <label className='block text-sm font-medium text-gray-700'>Upload signature image</label>
-            <input type='file' ref={signatureInputRef} accept='image/*' onChange={handleSignatureFile} className='hidden' />
-            <button type='button' onClick={() => signatureInputRef.current?.click()} className='mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'>
-              Choose signature image
+            <input type='file' ref={signatureInputRef} disabled={signatureUploading} accept='image/png,image/jpeg,image/webp' onChange={handleSignatureFile} className='hidden' />
+            <button type='button' disabled={signatureUploading} onClick={() => signatureInputRef.current?.click()} className='mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm hover:bg-gray-50'>
+              {signatureUploading ? 'Uploading signature...' : 'Choose signature image'}
             </button>
+            <p role='status' className='mt-2 text-sm text-gray-600'>{signatureUploading ? 'Uploading signature. Please wait before saving.' : ''}</p>
+            {signatureError && <p role='alert' className='mt-2 text-sm text-red-600'>{signatureError}</p>}
             {authorizedSignature && (
               <div className='mt-2 flex items-center gap-3'>
                 <img src={authorizedSignature} alt='Signature' className='h-14 max-w-[200px] object-contain border rounded' />
-                <button type='button' onClick={() => setAuthorizedSignature('')} className='text-sm text-red-600 hover:underline'>Remove</button>
+                <button type='button' disabled={signatureUploading} onClick={() => setAuthorizedSignature('')} className='text-sm text-red-600 hover:underline'>Remove</button>
               </div>
             )}
           </div>
@@ -658,8 +559,8 @@ const AddBilling = () => {
         {error && <p className='text-red-600 text-sm'>{error}</p>}
 
         <div className='flex gap-3'>
-          <button type='submit' disabled={loading} className='bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50'>
-            {loading ? 'Saving...' : isEdit ? 'Update' : 'Save'}
+          <button type='submit' disabled={loading || signatureUploading} className='bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50'>
+            {loading ? 'Saving...' : isEdit ? 'Update Invoice' : 'Save Invoice'}
           </button>
           <button type='button' onClick={() => navigate('/billings')} className='px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50'>
             Cancel

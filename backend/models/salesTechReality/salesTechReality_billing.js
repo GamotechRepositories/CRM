@@ -10,6 +10,18 @@ const billingSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  invoiceDate: { type: Date, default: null },
+  placeOfSupply: { type: String, default: '' },
+  items: [{
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: '' },
+    hsnSac: { type: String, default: '' },
+    serviceName: { type: String, default: '' },
+    quantity: { type: Number, required: true, min: 0.001 },
+    unit: { type: String, default: 'Nos' },
+    price: { type: Number, required: true, min: 0 },
+    gstRate: { type: Number, default: 18, min: 0, max: 100 },
+  }],
   invoiceNumber: { type: String, default: '' },
   company: {
     name: { type: String, default: '' },

@@ -1,3 +1,4 @@
+import InvoiceItems from '../components/InvoiceItems'
 import React, { useEffect, useState, useRef } from 'react'
 import api from '../api/axios'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -260,7 +261,7 @@ const InvoicePage = () => {
 
       if (contentHeight <= pageHeight + 5) {
         // Fits on a single A4 page: fill exact 210mm x 297mm A4 sheet
-        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight)
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, Math.min(contentHeight, pageHeight))
       } else {
         // Multi-page handling with full A4 width
         let heightLeft = contentHeight
@@ -317,6 +318,7 @@ const InvoicePage = () => {
   const client = billing.client || {}
   const payment = billing.paymentDetails || {}
   const projects = billing.projects || []
+  const hasItems = Boolean(billing.items?.length)
 
   const invoiceAmount = payment.amount != null ? Number(payment.amount) : null
   const taxableValue = invoiceAmount != null && isGst ? invoiceAmount / 1.18 : null
@@ -446,6 +448,24 @@ const InvoicePage = () => {
               </div>
             </div>
 
+          {hasItems ? <>
+            <div style={{ padding: '12px 0', fontSize: 12, color: '#404359' }}>
+              <strong>{company.name}</strong>
+              <div>{company.address}</div>
+              <div>{company.email}{company.phone ? ` • ${company.phone}` : ''}</div>
+              {isGst && billing.companyGst?.gstin && <div>GSTIN: {billing.companyGst.gstin}</div>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #646779', color: '#404359', fontSize: 12, marginBottom: 12 }}>
+              <section style={{ borderRight: '1px solid #646779' }}>
+                <h2 style={{ background: '#f4f4f5', borderBottom: '1px solid #646779', padding: 6, fontWeight: 700 }}>Bill To:</h2>
+                <div style={{ padding: 6, lineHeight: 1.7 }}><strong>{client.clientName || '—'}</strong><div>{billing.clientGst?.billingAddress || client.address}</div>{billing.clientGst?.gstin && <div>GSTIN: {billing.clientGst.gstin}</div>}<div>State: <strong>{billing.clientGst?.state || '—'}</strong></div></div>
+              </section>
+              <section>
+                <h2 style={{ background: '#f4f4f5', borderBottom: '1px solid #646779', padding: 6, fontWeight: 700 }}>Invoice Details:</h2>
+                <div style={{ padding: 6, lineHeight: 1.7 }}><div>Invoice No.: <strong>{billing.invoiceNumber || '—'}</strong></div><div>Date: <strong>{new Date(billing.invoiceDate || billing.createdAt).toLocaleDateString('en-GB')}</strong></div><div>Place Of Supply: <strong>{billing.placeOfSupply || billing.clientGst?.state || '—'}</strong></div></div>
+              </section>
+            </div>
+          </> : <>
           {/* From & Bill To */}
           <div className='py-6 grid grid-cols-1 md:grid-cols-2 gap-8 border-b border-gray-200'>
             {/* From / Company */}
@@ -488,6 +508,10 @@ const InvoicePage = () => {
             </div>
           </div>
 
+          </>}
+          {hasItems ? <>
+            <InvoiceItems items={billing.items} isGst={isGst} received={payment.amount} />
+          </> : <>
           {/* Projects / Items table */}
           <div className='py-6'>
             <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-3'>Invoice Items</h2>
@@ -560,8 +584,9 @@ const InvoicePage = () => {
             )}
           </div>
 
+          </>}
           {/* GST breakdown (when GST bill) */}
-          {isGst && (taxableValue != null || invoiceAmount != null) && (
+          {!hasItems && isGst && (taxableValue != null || invoiceAmount != null) && (
             <div className='py-4'>
               <h2 className='text-xs font-semibold text-black uppercase tracking-wider mb-2'>GST Breakdown</h2>
               <table className='w-full max-w-xs text-sm border' style={{ borderColor: '#d1d5db' }}>

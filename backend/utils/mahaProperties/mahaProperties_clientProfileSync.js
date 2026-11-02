@@ -63,7 +63,8 @@ const calculateDeadlines = (projects) => {
 export const syncClientProfile = async ({ clientId, preferredProjectId = null }) => {
   if (!clientId) return null;
 
-  const clientObjId = clientId.toString();
+  // Billing updates may pass a populated client document rather than an ObjectId.
+  const clientObjId = (clientId._id ?? clientId).toString();
 
   const [projects, calendars, billings] = await Promise.all([
     Project.find({ client: clientObjId }).select('_id deadline endDate').lean(),
