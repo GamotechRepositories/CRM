@@ -17,6 +17,8 @@ const leadSchema = new mongoose.Schema({
   name: { type: String, required: true },
   businessName: { type: String, required: true },
   contactNumber: { type: String, required: true },
+  requirement: { type: String, default: '' },
+  clientBudget: { type: String, default: '' },
   address: { type: String },
   city: { type: String },
   state: { type: String },

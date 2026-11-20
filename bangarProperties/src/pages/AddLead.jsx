@@ -16,6 +16,9 @@ const STATUS_OPTIONS = [
   'Booking Token',
   'Incentive Earned',
   'Pending',
+  'Converted',
+  'Lost',
+  'Closed',
 ]
 
 const normalizeFollowUpsFromApi = (arr) =>
@@ -42,6 +45,8 @@ const AddLead = ({ readOnly = false }) => {
     name: '',
     businessName: '',
     contactNumber: '',
+    requirement: '',
+    clientBudget: '',
     address: '',
     city: '',
     state: '',
@@ -120,6 +125,8 @@ const AddLead = ({ readOnly = false }) => {
           name: l.name ?? '',
           businessName: l.businessName ?? '',
           contactNumber: l.contactNumber ?? '',
+          requirement: l.requirement ?? '',
+          clientBudget: l.clientBudget ?? '',
           address: l.address ?? '',
           city: l.city ?? '',
           state: l.state ?? '',
@@ -405,11 +412,11 @@ const AddLead = ({ readOnly = false }) => {
             <fieldset disabled={readOnly} className='contents'>
               <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
                 <div>
-                  <label className='block text-sm font-medium text-gray-700'>Name</label>
+                  <label className='block text-sm font-medium text-gray-700'>Client Name</label>
                   <input name='name' value={form.name} onChange={handleChange} required className={inputClass} />
                 </div>
                 <div>
-                  <label className='block text-sm font-medium text-gray-700'>Business Name</label>
+                  <label className='block text-sm font-medium text-gray-700'>Project Name</label>
                   <input name='businessName' value={form.businessName} onChange={handleChange} required className={inputClass} />
                 </div>
                 <div>
@@ -419,6 +426,29 @@ const AddLead = ({ readOnly = false }) => {
                 <div>
                   <label className='block text-sm font-medium text-gray-700'>Business Type</label>
                   <input name='businessType' value={form.businessType} onChange={handleChange} className={inputClass} />
+                </div>
+              </div>
+
+              <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-3 md:gap-x-4 gap-y-5 md:gap-y-6 py-1 md:py-2'>
+                <div className='lg:col-span-2'>
+                  <label className='block text-sm font-medium text-gray-700'>Requirement</label>
+                  <input
+                    name='requirement'
+                    value={form.requirement}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder='e.g. 2 BHK, Commercial Space, Plot'
+                  />
+                </div>
+                <div className='lg:col-span-2'>
+                  <label className='block text-sm font-medium text-gray-700'>Client Budget</label>
+                  <input
+                    name='clientBudget'
+                    value={form.clientBudget}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder='e.g. ₹50L - ₹60L'
+                  />
                 </div>
               </div>
 
@@ -512,7 +542,13 @@ const AddLead = ({ readOnly = false }) => {
 
               <div className='py-1 md:py-2'>
                 <label className='block text-sm font-medium text-gray-700'>Description</label>
-                <textarea name='description' value={form.description} onChange={handleChange} rows={3} className={inputClass} />
+                {readOnly ? (
+                  <div className='mt-1.5 w-full border border-gray-300 rounded-xl px-3 py-3 text-sm bg-gray-50 text-gray-900 whitespace-pre-wrap break-words min-h-[84px]'>
+                    {form.description || '—'}
+                  </div>
+                ) : (
+                  <textarea name='description' value={form.description} onChange={handleChange} rows={3} className={inputClass} />
+                )}
               </div>
 
               {form.status === 'Meeting Schedule' && (

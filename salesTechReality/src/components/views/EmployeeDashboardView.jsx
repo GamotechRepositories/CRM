@@ -43,7 +43,11 @@ const Panel = ({ title, actionLabel, onAction, children, className = '' }) => (
 )
 
 const leadStatusClass = (status) => {
-  if (status === 'Interested') return 'bg-orange-100 text-orange-700'
+  if (status === 'Interested') return 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+  if (status === 'Not Interested') return 'bg-red-100 text-red-800 border border-red-200'
+  if (status === 'Converted') return 'bg-yellow-100 text-yellow-900 border border-yellow-400'
+  if (status === 'Lost') return 'bg-rose-100 text-rose-800 border border-rose-200'
+  if (status === 'Closed') return 'bg-slate-200 text-slate-800 border border-slate-300'
   if (status === 'Meeting Schedule') return 'bg-blue-100 text-blue-700'
   if (status === 'Site Visit') return 'bg-cyan-100 text-cyan-700'
   if (status === 'Zoom Meeting') return 'bg-violet-100 text-violet-700'
@@ -52,9 +56,8 @@ const leadStatusClass = (status) => {
   if (status === 'Token Done') return 'bg-emerald-100 text-emerald-800'
   if (status === 'Booking Token') return 'bg-teal-100 text-teal-700'
   if (status === 'Incentive Earned') return 'bg-emerald-100 text-emerald-700'
-  if (status === 'Pending') return 'bg-yellow-100 text-yellow-800'
-  if (status === 'Call not Received') return 'bg-green-100 text-green-700'
-  if (status === 'Not Interested') return 'bg-gray-100 text-gray-600'
+  if (status === 'Pending') return 'bg-amber-100 text-amber-800'
+  if (status === 'Call not Received') return 'bg-blue-50 text-blue-700'
   return 'bg-purple-100 text-purple-700'
 }
 
@@ -72,6 +75,9 @@ const CLOSED_LEAD_STATUSES = [
   'Token Done',
   'Booking Token',
   'Incentive Earned',
+  'Converted',
+  'Lost',
+  'Closed',
 ]
 
 const getLatestFollowUpDate = (lead) => {

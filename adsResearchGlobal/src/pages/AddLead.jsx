@@ -10,6 +10,9 @@ const STATUS_OPTIONS = [
   'Interested',
   'Not Interested',
   'Meeting Schedule',
+  'Converted',
+  'Lost',
+  'Closed',
 ]
 
 const normalizeFollowUpsFromApi = (arr) =>
@@ -391,7 +394,13 @@ const AddLead = ({ readOnly = false }) => {
 
               <div className='py-1 md:py-2'>
                 <label className='block text-sm font-medium text-gray-700'>Description</label>
-                <textarea name='description' value={form.description} onChange={handleChange} rows={3} className={inputClass} />
+                {readOnly ? (
+                  <div className='mt-1.5 w-full border border-gray-300 rounded-xl px-3 py-3 text-sm bg-gray-50 text-gray-900 whitespace-pre-wrap break-words min-h-[84px]'>
+                    {form.description || '—'}
+                  </div>
+                ) : (
+                  <textarea name='description' value={form.description} onChange={handleChange} rows={3} className={inputClass} />
+                )}
               </div>
 
               {form.status === 'Meeting Schedule' && (

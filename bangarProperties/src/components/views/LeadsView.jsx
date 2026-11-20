@@ -15,12 +15,18 @@ const STATUS_OPTIONS = [
   'Booking Token',
   'Incentive Earned',
   'Pending',
+  'Converted',
+  'Lost',
+  'Closed',
 ]
+
+const LEADS_PER_PAGE = 100
 
 const LeadsView = () => {
   const { user, canManageLeads } = useAuth()
   const canManage = canManageLeads()
   const [leads, setLeads] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -46,6 +52,15 @@ const LeadsView = () => {
   const [showDistributeModal, setShowDistributeModal] = useState(false)
   const fileInputRef = useRef(null)
   const navigate = useNavigate()
+
+  const totalPages = Math.max(1, Math.ceil(leads.length / LEADS_PER_PAGE))
+  const safePage = Math.min(currentPage, totalPages)
+  const startIdx = (safePage - 1) * LEADS_PER_PAGE
+  const paginatedLeads = leads.slice(startIdx, startIdx + LEADS_PER_PAGE)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters])
 
   const salesEmployees = employees.filter((e) =>
     /sales/i.test(String(e.department || ''))
@@ -415,9 +430,11 @@ const LeadsView = () => {
           <table className='w-full table-auto text-sm'>
             <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
               <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Name</th>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Name</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project Name</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Contact</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Requirement</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Budget</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business Type</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Lead Source</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>City</th>
@@ -431,12 +448,12 @@ const LeadsView = () => {
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className='px-4 py-12 text-center text-gray-500'>
+                  <td colSpan={13} className='px-4 py-12 text-center text-gray-500'>
                     No leads found
                   </td>
                 </tr>
               ) : (
-                leads.map((l) => (
+                paginatedLeads.map((l) => (
                   <tr
                     key={l._id}
                     className='border-b hover:bg-gray-50 cursor-pointer transition-colors'
@@ -453,6 +470,8 @@ const LeadsView = () => {
                     <td className='px-4 py-3 font-medium text-indigo-700'>{l.name}</td>
                     <td className='px-4 py-3'>{l.businessName}</td>
                     <td className='px-4 py-3'>{l.contactNumber}</td>
+                    <td className='px-4 py-3'>{l.requirement || '—'}</td>
+                    <td className='px-4 py-3 whitespace-nowrap'>{l.clientBudget || '—'}</td>
                     <td className='px-4 py-3'>{l.businessType || '—'}</td>
                     <td className='px-4 py-3'>{l.leadSource || '—'}</td>
                     <td className='px-4 py-3'>{l.city || '—'}</td>
@@ -489,6 +508,50 @@ const LeadsView = () => {
               )}
             </tbody>
           </table>
+          {leads.length > 0 && (
+            <div className='px-4 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3 text-sm'>
+              <span className='text-gray-600'>
+                Showing <strong>{startIdx + 1}</strong>–<strong>{Math.min(startIdx + LEADS_PER_PAGE, leads.length)}</strong> of <strong>{leads.length}</strong> leads
+              </span>
+              <div className='flex items-center gap-1.5'>
+                <button
+                  type='button'
+                  disabled={safePage <= 1}
+                  onClick={() => { setCurrentPage(1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  First
+                </button>
+                <button
+                  type='button'
+                  disabled={safePage <= 1}
+                  onClick={() => { setCurrentPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Prev
+                </button>
+                <span className='px-3 py-1.5 text-xs font-semibold text-gray-700'>
+                  Page {safePage} of {totalPages}
+                </span>
+                <button
+                  type='button'
+                  disabled={safePage >= totalPages}
+                  onClick={() => { setCurrentPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Next
+                </button>
+                <button
+                  type='button'
+                  disabled={safePage >= totalPages}
+                  onClick={() => { setCurrentPage(totalPages); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

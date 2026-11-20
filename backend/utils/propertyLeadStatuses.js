@@ -10,6 +10,9 @@ export const PROPERTY_LEAD_STATUSES = [
   'Booking Token',
   'Incentive Earned',
   'Pending',
+  'Converted',
+  'Lost',
+  'Closed',
 ];
 
 /**
@@ -27,6 +30,9 @@ export const STR_LEAD_STATUSES = [
   'Booking Done',
   'Token Done',
   'Pending',
+  'Converted',
+  'Lost',
+  'Closed',
 ];
 
 /** Old STR values still accepted by mongoose so existing leads can be saved. */
@@ -49,6 +55,9 @@ export const leadStatusesForTenant = (tenantId) => {
       'Interested',
       'Not Interested',
       'Meeting Schedule',
+      'Converted',
+      'Lost',
+      'Closed',
     ];
   }
   return PROPERTY_LEAD_STATUSES;

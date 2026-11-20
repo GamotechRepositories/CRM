@@ -15,12 +15,74 @@ const STATUS_OPTIONS = [
   'Booking Done',
   'Token Done',
   'Pending',
+  'Converted',
+  'Lost',
+  'Closed',
 ]
+
+const LEADS_PER_PAGE = 100
+
+const getLeadStatusBadge = (status) => {
+  switch (status) {
+    case 'Interested':
+      return {
+        pill: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+        dot: 'bg-emerald-500',
+      }
+    case 'Not Interested':
+      return {
+        pill: 'bg-red-100 text-red-800 border border-red-200',
+        dot: 'bg-red-500',
+      }
+    case 'Converted':
+      return {
+        pill: 'bg-yellow-100 text-yellow-900 border border-yellow-400',
+        dot: 'bg-yellow-500',
+      }
+    case 'Booking Done':
+    case 'Token Done':
+      return {
+        pill: 'bg-green-100 text-green-800 border border-green-200',
+        dot: 'bg-green-500',
+      }
+    case 'Lost':
+      return {
+        pill: 'bg-rose-100 text-rose-800 border border-rose-200',
+        dot: 'bg-rose-500',
+      }
+    case 'Closed':
+      return {
+        pill: 'bg-slate-200 text-slate-800 border border-slate-300',
+        dot: 'bg-slate-600',
+      }
+    case 'Pending':
+    case 'Call You After Sometime':
+      return {
+        pill: 'bg-amber-100 text-amber-800 border border-amber-200',
+        dot: 'bg-amber-500',
+      }
+    default:
+      return {
+        pill: 'bg-blue-100 text-blue-800 border border-blue-200',
+        dot: 'bg-blue-500',
+      }
+  }
+}
+
+const getStatusOptionLabel = (status) => {
+  if (status === 'Interested') return '🟢 Interested'
+  if (status === 'Not Interested') return '🔴 Not Interested'
+  if (status === 'Converted') return '🟡 Converted'
+  if (status === 'Lost') return '🔴 Lost'
+  if (status === 'Closed') return '⚫ Closed'
+  return status
+}
 
 const LeadsView = () => {
   const { user, canManageLeads } = useAuth()
   const canManage = canManageLeads()
   const [leads, setLeads] = useState([])
+  const [currentPage, setCurrentPage] = useState(1)
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -46,6 +108,15 @@ const LeadsView = () => {
   const [showDistributeModal, setShowDistributeModal] = useState(false)
   const fileInputRef = useRef(null)
   const navigate = useNavigate()
+
+  const totalPages = Math.max(1, Math.ceil(leads.length / LEADS_PER_PAGE))
+  const safePage = Math.min(currentPage, totalPages)
+  const startIdx = (safePage - 1) * LEADS_PER_PAGE
+  const paginatedLeads = leads.slice(startIdx, startIdx + LEADS_PER_PAGE)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters])
 
   const salesEmployees = employees.filter((e) =>
     /sales/i.test(String(e.department || ''))
@@ -252,8 +323,11 @@ const LeadsView = () => {
           </p>
           <p className='text-xs text-gray-500 mt-1'>Based on current filters</p>
         </div>
-        <div className='bg-white rounded-lg shadow p-5 border-l-4 border-gray-400'>
-          <p className='text-sm font-medium text-gray-600'>Not Interested</p>
+        <div className='bg-white rounded-lg shadow p-5 border-l-4 border-red-500'>
+          <p className='text-sm font-medium text-red-700 flex items-center gap-1.5'>
+            <span className='w-2.5 h-2.5 rounded-full bg-red-500 inline-block' />
+            Not Interested
+          </p>
           <p className='text-2xl font-bold text-gray-900 mt-1'>
             {loading ? '—' : leads.filter((l) => l.status === 'Not Interested').length}
           </p>
@@ -262,7 +336,82 @@ const LeadsView = () => {
       </div>
 
       <div className='bg-white rounded-lg shadow p-4 mb-6'>
-        <h3 className='text-sm font-semibold text-gray-700 mb-3'>Filters</h3>
+        <div className='flex flex-wrap items-center justify-between gap-3 mb-3'>
+          <h3 className='text-sm font-semibold text-gray-700'>Filters</h3>
+          <div className='flex flex-wrap items-center gap-2'>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', '')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === ''
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              All Status
+            </button>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', filters.status === 'Interested' ? '' : 'Interested')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === 'Interested'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${filters.status === 'Interested' ? 'bg-white' : 'bg-emerald-500'}`} />
+              Interested
+            </button>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', filters.status === 'Not Interested' ? '' : 'Not Interested')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === 'Not Interested'
+                  ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                  : 'bg-red-50 text-red-800 border-red-200 hover:bg-red-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${filters.status === 'Not Interested' ? 'bg-white' : 'bg-red-500'}`} />
+              Not Interested
+            </button>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', filters.status === 'Converted' ? '' : 'Converted')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === 'Converted'
+                  ? 'bg-yellow-500 text-white border-yellow-600 shadow-sm'
+                  : 'bg-yellow-50 text-yellow-900 border-yellow-400 hover:bg-yellow-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${filters.status === 'Converted' ? 'bg-white' : 'bg-yellow-500'}`} />
+              Converted
+            </button>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', filters.status === 'Lost' ? '' : 'Lost')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === 'Lost'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                  : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${filters.status === 'Lost' ? 'bg-white' : 'bg-rose-500'}`} />
+              Lost
+            </button>
+            <button
+              type='button'
+              onClick={() => handleFilterChange('status', filters.status === 'Closed' ? '' : 'Closed')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                filters.status === 'Closed'
+                  ? 'bg-slate-700 text-white border-slate-700 shadow-sm'
+                  : 'bg-slate-100 text-slate-800 border-slate-300 hover:bg-slate-200'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${filters.status === 'Closed' ? 'bg-white' : 'bg-slate-600'}`} />
+              Closed
+            </button>
+          </div>
+        </div>
         <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4'>
           <div>
             <label className='block text-xs font-medium text-gray-600 mb-1'>Search</label>
@@ -270,7 +419,7 @@ const LeadsView = () => {
               type='text'
               value={filters.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
-              placeholder='Name, business, contact, lead source...'
+              placeholder='Client, project, contact, lead source...'
               className='w-full border border-gray-300 rounded-lg px-3 py-2 text-sm'
             />
           </div>
@@ -283,7 +432,7 @@ const LeadsView = () => {
             >
               <option value=''>All status</option>
               {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{getStatusOptionLabel(s)}</option>
               ))}
             </select>
           </div>
@@ -413,9 +562,11 @@ const LeadsView = () => {
           <table className='w-full table-auto text-sm'>
             <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
               <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Name</th>
-                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Name</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Project Name</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Contact</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Requirement</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client Budget</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Business Type</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Lead Source</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>City</th>
@@ -429,12 +580,12 @@ const LeadsView = () => {
             <tbody>
               {leads.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className='px-4 py-12 text-center text-gray-500'>
+                  <td colSpan={13} className='px-4 py-12 text-center text-gray-500'>
                     No leads found
                   </td>
                 </tr>
               ) : (
-                leads.map((l) => (
+                paginatedLeads.map((l) => (
                   <tr
                     key={l._id}
                     className='border-b hover:bg-gray-50 cursor-pointer transition-colors'
@@ -451,13 +602,21 @@ const LeadsView = () => {
                     <td className='px-4 py-3 font-medium text-indigo-700'>{l.name}</td>
                     <td className='px-4 py-3'>{l.businessName}</td>
                     <td className='px-4 py-3'>{l.contactNumber}</td>
+                    <td className='px-4 py-3'>{l.requirement || '—'}</td>
+                    <td className='px-4 py-3 whitespace-nowrap'>{l.clientBudget || '—'}</td>
                     <td className='px-4 py-3'>{l.businessType || '—'}</td>
                     <td className='px-4 py-3'>{l.leadSource || '—'}</td>
                     <td className='px-4 py-3'>{l.city || '—'}</td>
                     <td className='px-4 py-3 text-left align-middle whitespace-nowrap'>
-                      <span className='inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800'>
-                        {l.status}
-                      </span>
+                      {(() => {
+                        const badge = getLeadStatusBadge(l.status)
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-semibold ${badge.pill}`}>
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${badge.dot}`} />
+                            {l.status}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className='px-4 py-3'>{l.assignedTo?.name || '—'}</td>
                     <td className='px-4 py-3'>{l.siteCoordinator?.name || '—'}</td>
@@ -487,6 +646,50 @@ const LeadsView = () => {
               )}
             </tbody>
           </table>
+          {leads.length > 0 && (
+            <div className='px-4 py-3 border-t border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-3 text-sm'>
+              <span className='text-gray-600'>
+                Showing <strong>{startIdx + 1}</strong>–<strong>{Math.min(startIdx + LEADS_PER_PAGE, leads.length)}</strong> of <strong>{leads.length}</strong> leads
+              </span>
+              <div className='flex items-center gap-1.5'>
+                <button
+                  type='button'
+                  disabled={safePage <= 1}
+                  onClick={() => { setCurrentPage(1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  First
+                </button>
+                <button
+                  type='button'
+                  disabled={safePage <= 1}
+                  onClick={() => { setCurrentPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Prev
+                </button>
+                <span className='px-3 py-1.5 text-xs font-semibold text-gray-700'>
+                  Page {safePage} of {totalPages}
+                </span>
+                <button
+                  type='button'
+                  disabled={safePage >= totalPages}
+                  onClick={() => { setCurrentPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Next
+                </button>
+                <button
+                  type='button'
+                  disabled={safePage >= totalPages}
+                  onClick={() => { setCurrentPage(totalPages); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  className='px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-medium'
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

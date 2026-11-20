@@ -872,7 +872,19 @@ const CampaignsView = () => {
                           <p className='text-xs text-slate-500'>{lead.businessName}</p>
                         )}
                       </div>
-                      <span className='px-2.5 py-0.5 bg-blue-50 text-blue-700 font-semibold text-[11px] rounded-full'>
+                      <span className={`px-2.5 py-0.5 font-semibold text-[11px] rounded-full border ${
+                        lead.status === 'Interested'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : lead.status === 'Not Interested'
+                            ? 'bg-red-100 text-red-800 border-red-200'
+                            : lead.status === 'Converted'
+                              ? 'bg-yellow-100 text-yellow-900 border-yellow-400'
+                              : lead.status === 'Lost'
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : lead.status === 'Closed'
+                                  ? 'bg-slate-200 text-slate-800 border-slate-300'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                      }`}>
                         {lead.status || 'Call not Received'}
                       </span>
                     </div>
