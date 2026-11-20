@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import api from '../../api/axios'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
@@ -84,8 +84,6 @@ const matchesDueDateRange = (dueDateVal, filterDateFrom, filterDateTo) => {
   return inRange(localKey) || inRange(utcKey)
 }
 
-const matchesDueDateFilter = (dueDateVal, filterYmd) => matchesDueDateRange(dueDateVal, filterYmd, filterYmd)
-
 const TASK_RATING_FEEDBACK = {
   1: {
     score: 1,
@@ -133,12 +131,11 @@ const TasksView = ({ isMyTasks = false }) => {
   const navigate = useNavigate()
 
   // Sync filters when URL search params change (e.g. dashboard links with ?date=&status=)
-  useEffect(() => {
-    if (searchParams.has('status')) {
-      setFilterStatus(parseStatusParam(searchParams.get('status')) || 'All')
-    } else {
-      setFilterStatus('All')
-    }
+  const searchKey = searchParams.toString()
+  const [prevSearchKey, setPrevSearchKey] = useState(searchKey)
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey)
+    setFilterStatus(searchParams.has('status') ? parseStatusParam(searchParams.get('status')) || 'All' : 'All')
     if (searchParams.has('dateFrom') || searchParams.has('dateTo')) {
       setFilterDateFrom(searchParams.get('dateFrom') || '')
       setFilterDateTo(searchParams.get('dateTo') || '')
@@ -150,7 +147,7 @@ const TasksView = ({ isMyTasks = false }) => {
       setFilterDateFrom('')
       setFilterDateTo('')
     }
-  }, [searchParams])
+  }
 
   const clearAllFilters = () => {
     setFilterStatus('All')
@@ -166,16 +163,19 @@ const TasksView = ({ isMyTasks = false }) => {
     setSearchParams(next, { replace: true })
   }
 
-  const fetchTasks = async () => {
+  const canAssign = canAssignTask()
+  const currentUserId = user?._id
+
+  const fetchTasks = useCallback(async () => {
     try {
       const params = {}
-      if (isMyTasks && user?._id) {
-        params.employeeId = user._id
-      } else if (canAssignTask()) {
+      if (isMyTasks && currentUserId) {
+        params.employeeId = currentUserId
+      } else if (canAssign) {
         if (filterProject) params.projectId = filterProject
         if (filterAssignee) params.employeeId = filterAssignee
-      } else if (user?._id) {
-        params.employeeId = user._id
+      } else if (currentUserId) {
+        params.employeeId = currentUserId
       }
       const res = await api.get('/tasks', { params })
       setTasks(Array.isArray(res.data) ? res.data : [])
@@ -185,23 +185,18 @@ const TasksView = ({ isMyTasks = false }) => {
     } finally {
       setLoading(false)
     }
-  }
-
-  const fetchProjects = async () => {
-    try {
-      const res = await api.get('/projects')
-      const list = Array.isArray(res.data) ? res.data : res.data?.data || res.data?.projects || []
-      setProjects(Array.isArray(list) ? list : [])
-    } catch (err) {
-      console.error('Failed to fetch projects:', err)
-    }
-  }
-
-  const canAssign = canAssignTask()
+  }, [isMyTasks, currentUserId, canAssign, filterProject, filterAssignee])
 
   useEffect(() => {
-    if (canAssign || user?._id) fetchTasks()
-  }, [filterProject, filterAssignee, canAssign, user?._id, isMyTasks])
+    if (!canAssign && !currentUserId) return
+    let active = true
+      ; (async () => {
+        if (active) await fetchTasks()
+      })()
+    return () => {
+      active = false
+    }
+  }, [canAssign, currentUserId, fetchTasks])
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -213,21 +208,29 @@ const TasksView = ({ isMyTasks = false }) => {
       unsub?.()
       window.removeEventListener('crm:task-updated', handleUpdate)
     }
-  }, [])
+  }, [fetchTasks])
 
   useEffect(() => {
-    if (canAssign && !isMyTasks) {
-      fetchProjects()
-      const fetchEmployees = async () => {
-        try {
-          const res = await api.get('/employees')
-          const list = Array.isArray(res.data) ? res.data : res.data?.data || []
-          setEmployees(Array.isArray(list) ? list : [])
-        } catch (err) {
-          console.error('Failed to fetch employees:', err)
-        }
+    if (!canAssign || isMyTasks) return
+    let active = true
+    const loadMeta = async () => {
+      try {
+        const [projRes, empRes] = await Promise.all([
+          api.get('/projects').catch(() => ({ data: [] })),
+          api.get('/employees').catch(() => ({ data: [] })),
+        ])
+        if (!active) return
+        const projList = Array.isArray(projRes.data) ? projRes.data : projRes.data?.data || projRes.data?.projects || []
+        const empList = Array.isArray(empRes.data) ? empRes.data : empRes.data?.data || []
+        setProjects(Array.isArray(projList) ? projList : [])
+        setEmployees(Array.isArray(empList) ? empList : [])
+      } catch (err) {
+        console.error('Failed to fetch task filter metadata:', err)
       }
-      fetchEmployees()
+    }
+    loadMeta()
+    return () => {
+      active = false
     }
   }, [canAssign, isMyTasks])
 
@@ -397,7 +400,7 @@ const TasksView = ({ isMyTasks = false }) => {
     }
   }
 
-    const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
+  const SOCIAL_PLATFORMS = ['Instagram', 'Facebook', 'Twitter', 'LinkedIn', 'YouTube', 'Other']
 
   const handleAddUploadedLink = async () => {
     if (!viewTask?.source || viewTask.source !== 'social_media') return
@@ -421,9 +424,9 @@ const TasksView = ({ isMyTasks = false }) => {
       } else {
         setViewTask((prev) => (prev
           ? {
-              ...prev,
-              uploadedLinks: [...(prev.uploadedLinks || []), { platform: socialUpload.platform || '', url: socialUpload.url.trim() }],
-            }
+            ...prev,
+            uploadedLinks: [...(prev.uploadedLinks || []), { platform: socialUpload.platform || '', url: socialUpload.url.trim() }],
+          }
           : prev))
       }
       setSocialUpload({ platform: '', url: '' })
@@ -457,8 +460,8 @@ const TasksView = ({ isMyTasks = false }) => {
             {isMyTasks
               ? 'Tasks assigned to you by project managers and team leads.'
               : canAssignTask()
-              ? 'Manage team tasks and deadlines.'
-              : 'Tasks assigned to you by project managers and team leads.'}
+                ? 'Manage team tasks and deadlines.'
+                : 'Tasks assigned to you by project managers and team leads.'}
           </p>
         </div>
         {(canAssignTask() || isMyTasks || Boolean(user?._id)) && (
@@ -545,14 +548,14 @@ const TasksView = ({ isMyTasks = false }) => {
         </div>
         <div className='flex items-center gap-2'>
           <label className='text-sm font-medium text-gray-700'>Project</label>
-            <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
-              className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'>
-              <option value=''>All Projects</option>
-              {(canAssignTask() && !isMyTasks ? [{ _id: 'social-media', projectName: 'Social Media' }, ...projects] : uniqueProjectsFromTasks).map((p) => (
-                <option key={p._id} value={p._id}>{p.projectName}</option>
-              ))}
+          <select
+            value={filterProject}
+            onChange={(e) => setFilterProject(e.target.value)}
+            className='border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500'>
+            <option value=''>All Projects</option>
+            {(canAssignTask() && !isMyTasks ? [{ _id: 'social-media', projectName: 'Social Media' }, ...projects] : uniqueProjectsFromTasks).map((p) => (
+              <option key={p._id} value={p._id}>{p.projectName}</option>
+            ))}
           </select>
         </div>
         {canAssignTask() && !isMyTasks && (
@@ -929,9 +932,9 @@ const TasksView = ({ isMyTasks = false }) => {
                         viewTask.pausedByBreak
                           ? 'Cannot start task while on break — end your break first'
                           : String(viewTask.priority || '') !== 'Urgent'
-                          && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
-                          ? 'Complete the urgent task before accepting other tasks'
-                          : undefined
+                            && hasOpenUrgentTask(tasks, user?._id, viewTask._id)
+                            ? 'Complete the urgent task before accepting other tasks'
+                            : undefined
                       }
                     >
                       {updatingStatus ? 'Accepting...' : 'Accept Task'}
