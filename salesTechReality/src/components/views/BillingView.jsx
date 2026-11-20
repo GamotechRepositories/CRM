@@ -113,6 +113,13 @@ const BillingView = ({ isOrder = false }) => {
     return billingRemainingAfter
   }
 
+  const formatDate = (value) => {
+    if (!value) return '—'
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
   const cumulativeRemainingMap = getCumulativeRemainingByBilling()
 
   return (
@@ -195,6 +202,7 @@ const BillingView = ({ isOrder = false }) => {
             <thead className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
               <tr className='text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Type</th>
+                <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>{isOrder ? 'Order Date' : 'Invoice Date'}</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Company</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>Client</th>
                 <th className='px-4 py-3 text-left border-b bg-blue-600 text-white font-bold text-sm text-center'>{isOrder ? 'Received (this order)' : 'Paid (this bill)'}</th>
@@ -205,13 +213,14 @@ const BillingView = ({ isOrder = false }) => {
             <tbody>
               {billings.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className='px-4 py-10 text-center text-gray-500'>
+                  <td colSpan={7} className='px-4 py-10 text-center text-gray-500'>
                     No {isOrder ? 'orders' : 'billing records'}. Add one to get started.
                   </td>
                 </tr>
               ) : (
                 billings.map((b) => {
                   const totalRemaining = isOrder && b.items?.length ? Math.max(0, itemTotals(b.items, b.billType === 'GST').total - (Number(b.paymentDetails?.amount) || 0)) : cumulativeRemainingMap[b._id] ?? (b.projects || []).reduce((s, p) => s + (Number(p.remainingCost) || 0), 0)
+                  const billDate = isOrder ? (b.orderDate || b.createdAt) : (b.invoiceDate || b.createdAt)
                   return (
                   <tr key={b._id} className='border-b hover:bg-gray-50'>
                     <td className='px-4 py-3'>
@@ -219,6 +228,7 @@ const BillingView = ({ isOrder = false }) => {
                         {b.billType}
                       </span>
                     </td>
+                    <td className='px-4 py-3 whitespace-nowrap text-gray-700'>{formatDate(billDate)}</td>
                     <td className='px-4 py-3'>{b.company?.name || '—'}</td>
                     <td className='px-4 py-3'>{b.client?.clientName || '—'}</td>
                     <td className='px-4 py-3'>{b.paymentDetails?.amount != null ? `₹${Number(b.paymentDetails.amount).toLocaleString('en-IN')}` : '—'}</td>

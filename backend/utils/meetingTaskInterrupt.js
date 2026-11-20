@@ -1,6 +1,42 @@
+import mongoose from 'mongoose';
 import { buildResumeFromPausedPayload } from './urgentTaskInterrupt.js';
 import { emitTaskChanged } from '../services/realtimeNotification.service.js';
 import { invalidateTenantCache } from './cache.js';
+import SalesTechTask from '../models/salesTechReality/salesTechReality_task.js';
+import SalesTechAttendance from '../models/salesTechReality/salesTechReality_attendance.js';
+import AdsResearchTask from '../models/adsResearchGlobal/adsResearchGlobal_task.js';
+import AdsResearchAttendance from '../models/adsResearchGlobal/adsResearchGlobal_attendance.js';
+import BangarTask from '../models/bangarProperties/bangarProperties_task.js';
+import BangarAttendance from '../models/bangarProperties/bangarProperties_attendance.js';
+import MahaTask from '../models/mahaProperties/mahaProperties_task.js';
+import MahaAttendance from '../models/mahaProperties/mahaProperties_attendance.js';
+
+const TENANT_MODELS = {
+  salesTechReality: { Task: SalesTechTask, Attendance: SalesTechAttendance },
+  adsResearchGlobal: { Task: AdsResearchTask, Attendance: AdsResearchAttendance },
+  bangarProperties: { Task: BangarTask, Attendance: BangarAttendance },
+  mahaProperties: { Task: MahaTask, Attendance: MahaAttendance },
+};
+
+const resolveTenantTargets = (companyId) => {
+  const key = String(companyId || '').trim();
+  if (key && TENANT_MODELS[key]) {
+    return [[key, TENANT_MODELS[key]]];
+  }
+  return Object.entries(TENANT_MODELS);
+};
+
+const uniqueValidObjectIds = (ids = []) => {
+  const seen = new Set();
+  const out = [];
+  for (const raw of ids) {
+    const id = String(raw?._id || raw || '').trim();
+    if (!id || seen.has(id) || !mongoose.Types.ObjectId.isValid(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+};
 
 /**
  * Checks if the employee is currently in an active meeting.
@@ -104,4 +140,56 @@ export const resumeTasksPausedByMeeting = async ({
   }
 
   return resumed;
+};
+
+/**
+ * Pause in-progress tasks for all meeting participants across the target tenant (or all tenants if companyId is omitted).
+ */
+export const pauseInProgressTasksForMeetingParticipants = async ({
+  participantIds = [],
+  companyId = null,
+}) => {
+  const validIds = uniqueValidObjectIds(participantIds);
+  if (!validIds.length) return [];
+
+  const targets = resolveTenantTargets(companyId);
+  const pausedAll = [];
+  for (const [companyKey, { Task }] of targets) {
+    for (const empId of validIds) {
+      const paused = await pauseInProgressTasksForMeeting({
+        Task,
+        employeeId: empId,
+        companyKey,
+      });
+      if (paused.length) pausedAll.push(...paused);
+    }
+  }
+  return pausedAll;
+};
+
+/**
+ * Resume meeting-paused tasks for all participants who are not still in an active attendance meeting.
+ */
+export const resumeTasksPausedByMeetingParticipants = async ({
+  participantIds = [],
+  companyId = null,
+}) => {
+  const validIds = uniqueValidObjectIds(participantIds);
+  if (!validIds.length) return [];
+
+  const targets = resolveTenantTargets(companyId);
+  const resumedAll = [];
+  for (const [companyKey, { Task, Attendance }] of targets) {
+    for (const empId of validIds) {
+      const stillInAttendanceMeeting = await isEmployeeInMeeting({ Attendance, employeeId: empId });
+      if (stillInAttendanceMeeting) continue;
+      const resumed = await resumeTasksPausedByMeeting({
+        Task,
+        employeeId: empId,
+        companyKey,
+      });
+      if (resumed.length) resumedAll.push(...resumed);
+    }
+  }
+  return resumedAll;
 };

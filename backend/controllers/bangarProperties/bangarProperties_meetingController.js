@@ -1,8 +1,7 @@
 import Meeting from '../../models/bangarProperties/bangarProperties_meeting.js';
-import Task from '../../models/bangarProperties/bangarProperties_task.js';
 import {
-  pauseInProgressTasksForMeeting,
-  resumeTasksPausedByMeeting,
+  pauseInProgressTasksForMeetingParticipants,
+  resumeTasksPausedByMeetingParticipants,
 } from '../../utils/meetingTaskInterrupt.js';
 
 const toApiMeeting = (doc) => {
@@ -104,9 +103,10 @@ export const createMeeting = async (req, res) => {
         meeting.organizerId,
         ...(meeting.participants || []).map((p) => p.userId),
       ].filter(Boolean);
-      for (const empId of participantIds) {
-        await pauseInProgressTasksForMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
-      }
+      await pauseInProgressTasksForMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId,
+      });
     }
 
     res.status(201).json({ message: 'Meeting created', meeting: toApiMeeting(meeting) });
@@ -136,16 +136,20 @@ export const updateMeeting = async (req, res) => {
     const participantIds = [
       existing.organizerId,
       ...(existing.participants || []).map((p) => p.userId),
+      meeting.organizerId,
+      ...(meeting.participants || []).map((p) => p.userId),
     ].filter(Boolean);
 
     if (previousStatus !== 'ongoing' && nextStatus === 'ongoing') {
-      for (const empId of participantIds) {
-        await pauseInProgressTasksForMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
-      }
+      await pauseInProgressTasksForMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId || existing.companyId,
+      });
     } else if (previousStatus === 'ongoing' && ['completed', 'cancelled', 'scheduled'].includes(nextStatus)) {
-      for (const empId of participantIds) {
-        await resumeTasksPausedByMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
-      }
+      await resumeTasksPausedByMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId || existing.companyId,
+      });
     }
 
     res.status(200).json({ message: 'Meeting updated', meeting: toApiMeeting(meeting) });
@@ -164,9 +168,10 @@ export const deleteMeeting = async (req, res) => {
         meeting.organizerId,
         ...(meeting.participants || []).map((p) => p.userId),
       ].filter(Boolean);
-      for (const empId of participantIds) {
-        await resumeTasksPausedByMeeting({ Task, employeeId: empId, companyKey: 'bangarProperties' });
-      }
+      await resumeTasksPausedByMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId,
+      });
     }
 
     res.status(200).json({ message: 'Meeting deleted' });

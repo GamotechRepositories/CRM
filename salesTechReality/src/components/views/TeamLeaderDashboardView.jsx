@@ -16,6 +16,7 @@ import {
 } from 'recharts'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import EmployeeTimeUtilizationCard from '../EmployeeTimeUtilizationCard'
 import { getAllReporteeIds, isInReporteeTree, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const TASK_COLORS = {
@@ -907,6 +908,12 @@ const TeamLeaderDashboardView = () => {
           </button>
         </div>
       </div>
+
+      <EmployeeTimeUtilizationCard
+        employees={employees}
+        title='Team Daily Activity & Time Utilization'
+        subtitle='Working hours, break time, and meeting time for your team'
+      />
     </div>
   )
 }

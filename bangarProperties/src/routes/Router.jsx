@@ -21,6 +21,7 @@ import AddProject from '../pages/AddProject'
 import ModulePage from '../pages/ModulePage'
 import MyProfilePage from '../pages/MyProfilePage'
 import SalarySlipPage from '../pages/SalarySlipPage'
+import DailyTaskReportPage from '../pages/DailyTaskReportPage'
 import SalariesView from '../components/views/SalariesView'
 import AddSalary from '../pages/AddSalary'
 import AttendanceView from '../components/views/AttendanceView'
@@ -155,6 +156,7 @@ const router = createBrowserRouter([
             { path: 'lead-management', element: <LeadsView /> },
             { path: 'my-profile', element: <MyProfilePage /> },
             { path: 'salary-slips', element: <SalarySlipPage /> },
+            { path: 'daily-task-report', element: <DailyTaskReportPage /> },
             { path: 'module/:slug', element: <ModulePage /> },
             { path: 'settings', element: <Settings /> },
         ],

@@ -213,6 +213,16 @@ const LocationDisplay = ({ address, latitude, longitude, compact = false }) => {
   )
 }
 
+const formatMinutesCompact = (minutes) => {
+  const mins = Math.max(0, Math.round(Number(minutes) || 0))
+  if (mins === 0) return '0m'
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
 function DurationCell({ row }) {
   const [now, setNow] = useState(() => Date.now())
   const isOpen = Boolean(row?.checkIn && !row.checkOut)
@@ -227,6 +237,34 @@ function DurationCell({ row }) {
   const ms = durationMsFromRow(row, now)
   if (ms == null) return <span className='text-gray-400'>—</span>
   return <span className='font-mono tabular-nums text-sm'>{formatTime(ms)}</span>
+}
+
+function TrackedTimeCell({ row, startedAtKey, totalMinutesKey, activeClassName = 'text-amber-700 font-semibold' }) {
+  const [now, setNow] = useState(() => Date.now())
+  const isActive = Boolean(row?.[startedAtKey] && !row?.checkOut)
+
+  useEffect(() => {
+    if (!isActive) return undefined
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isActive])
+
+  if (!row?.checkIn && !row?.[totalMinutesKey] && !row?.[startedAtKey]) {
+    return <span className='text-gray-400'>—</span>
+  }
+  const mins = trackedMinutesFromRow(row, startedAtKey, totalMinutesKey, now)
+  if (isActive) {
+    return (
+      <span className={`font-mono tabular-nums text-sm whitespace-nowrap ${activeClassName}`}>
+        {formatTime(mins * 60 * 1000)}
+      </span>
+    )
+  }
+  return (
+    <span className='font-mono tabular-nums text-sm text-gray-800 whitespace-nowrap'>
+      {formatMinutesCompact(mins)}
+    </span>
+  )
 }
 
 const AttendanceView = () => {
@@ -1036,6 +1074,8 @@ const AttendanceView = () => {
       'Check In',
       'Check Out',
       'Duration (hrs)',
+      'Break Time',
+      'Meeting Time',
       'Status',
       'Check In Location',
       'Check Out Location',
@@ -1043,6 +1083,8 @@ const AttendanceView = () => {
     const lines = fullMonthRows.map(({ dateKey, att, status, isFuture }) => {
       const dayName = new Date(`${dateKey}T12:00:00`).toLocaleDateString('en-IN', { weekday: 'short' })
       const rowStatus = isFuture ? 'Upcoming' : status
+      const breakMins = att ? trackedMinutesFromRow(att, 'breakStartedAt', 'breakDurationMinutes') : 0
+      const meetingMins = att ? trackedMinutesFromRow(att, 'meetingStartedAt', 'meetingDurationMinutes') : 0
       return [
         dateKey,
         dayName,
@@ -1051,6 +1093,8 @@ const AttendanceView = () => {
         att?.checkIn ? new Date(att.checkIn).toLocaleString('en-IN') : '',
         att?.checkOut ? new Date(att.checkOut).toLocaleString('en-IN') : '',
         att ? formatDurationHours(att) : '',
+        att ? formatMinutesCompact(breakMins) : '',
+        att ? formatMinutesCompact(meetingMins) : '',
         rowStatus,
         att?.checkInAddress || '',
         att?.checkOutAddress || '',
@@ -1201,12 +1245,14 @@ const AttendanceView = () => {
                         <th className='px-5 py-3'>Check Out Location</th>
                         <th className='px-5 py-3'>Status</th>
                         <th className='px-5 py-3'>Duration</th>
+                        <th className='px-5 py-3'>Break Time</th>
+                        <th className='px-5 py-3'>Meeting Time</th>
                       </tr>
                     </thead>
                     <tbody className='divide-y divide-gray-100'>
                       {paginatedRows.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className='px-5 py-12 text-center text-gray-500'>
+                          <td colSpan={9} className='px-5 py-12 text-center text-gray-500'>
                             No attendance records for {formatDateLabel(selectedDate)}
                           </td>
                         </tr>
@@ -1246,6 +1292,22 @@ const AttendanceView = () => {
                             </td>
                             <td className='px-5 py-3'><StatusBadge status={status} /></td>
                             <td className='px-5 py-3'><DurationCell row={att} /></td>
+                            <td className='px-5 py-3'>
+                              <TrackedTimeCell
+                                row={att}
+                                startedAtKey='breakStartedAt'
+                                totalMinutesKey='breakDurationMinutes'
+                                activeClassName='text-amber-700 font-semibold'
+                              />
+                            </td>
+                            <td className='px-5 py-3'>
+                              <TrackedTimeCell
+                                row={att}
+                                startedAtKey='meetingStartedAt'
+                                totalMinutesKey='meetingDurationMinutes'
+                                activeClassName='text-violet-700 font-semibold'
+                              />
+                            </td>
                           </tr>
                         ))
                       )}
@@ -1344,9 +1406,29 @@ const AttendanceView = () => {
                         </div>
                       </div>
                     </div>
-                    <div className='mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm'>
-                      <span className='text-gray-500'>Duration</span>
-                      <DurationCell row={myDayAttendance} />
+                    <div className='mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-3 text-sm'>
+                      <div>
+                        <span className='block text-xs text-gray-500'>Duration</span>
+                        <DurationCell row={myDayAttendance} />
+                      </div>
+                      <div>
+                        <span className='block text-xs text-gray-500'>Break Time</span>
+                        <TrackedTimeCell
+                          row={myDayAttendance}
+                          startedAtKey='breakStartedAt'
+                          totalMinutesKey='breakDurationMinutes'
+                          activeClassName='text-amber-700 font-semibold'
+                        />
+                      </div>
+                      <div>
+                        <span className='block text-xs text-gray-500'>Meeting Time</span>
+                        <TrackedTimeCell
+                          row={myDayAttendance}
+                          startedAtKey='meetingStartedAt'
+                          totalMinutesKey='meetingDurationMinutes'
+                          activeClassName='text-violet-700 font-semibold'
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1589,12 +1671,14 @@ const AttendanceView = () => {
                     <th className='px-5 py-3'>Check In Location</th>
                     <th className='px-5 py-3'>Check Out Location</th>
                     <th className='px-5 py-3'>Duration</th>
+                    <th className='px-5 py-3'>Break Time</th>
+                    <th className='px-5 py-3'>Meeting Time</th>
                     <th className='px-5 py-3'>Status</th>
                   </tr>
                 </thead>
                 <tbody className='divide-y divide-gray-100'>
                   {fullMonthRows.length === 0 ? (
-                    <tr><td colSpan={8} className='px-5 py-12 text-center text-gray-500'>No records for {monthLabel}</td></tr>
+                    <tr><td colSpan={10} className='px-5 py-12 text-center text-gray-500'>No records for {monthLabel}</td></tr>
                   ) : (
                     fullMonthRows.map(({ dateKey, att, status, isFuture }) => (
                       <tr key={dateKey} className={`hover:bg-gray-50/80 ${isFuture ? 'opacity-50' : ''}`}>
@@ -1623,6 +1707,22 @@ const AttendanceView = () => {
                           />
                         </td>
                         <td className='px-5 py-3'><DurationCell row={att} /></td>
+                        <td className='px-5 py-3'>
+                          <TrackedTimeCell
+                            row={att}
+                            startedAtKey='breakStartedAt'
+                            totalMinutesKey='breakDurationMinutes'
+                            activeClassName='text-amber-700 font-semibold'
+                          />
+                        </td>
+                        <td className='px-5 py-3'>
+                          <TrackedTimeCell
+                            row={att}
+                            startedAtKey='meetingStartedAt'
+                            totalMinutesKey='meetingDurationMinutes'
+                            activeClassName='text-violet-700 font-semibold'
+                          />
+                        </td>
                         <td className='px-5 py-3'>
                           {isFuture ? <span className='text-gray-400'>—</span> : <StatusBadge status={status} />}
                         </td>

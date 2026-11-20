@@ -8,6 +8,10 @@ import {
   notifyMeetingBossResponse,
 } from './notification.controller.js';
 import { emitMeetingChange } from '../services/realtimeNotification.service.js';
+import {
+  pauseInProgressTasksForMeetingParticipants,
+  resumeTasksPausedByMeetingParticipants,
+} from '../utils/meetingTaskInterrupt.js';
 
 const isBossAuth = (auth) =>
   Boolean(auth?.isRoot) || String(auth?.role || '').toUpperCase() === 'CEO';
@@ -267,6 +271,12 @@ export const createMeeting = async (req, res) => {
     } else {
       notifyMeetingPendingApproval(meeting);
     }
+    if (meeting.status === 'ongoing') {
+      await pauseInProgressTasksForMeetingParticipants({
+        participantIds: [meeting.organizerId, meeting.bossId],
+        companyId: meeting.companyId,
+      });
+    }
     emitRealtimeMeetingChange('created', meeting);
 
     return res.status(201).json({
@@ -428,6 +438,21 @@ export const updateMeeting = async (req, res) => {
     } else if (meeting.coordinatorApproval === 'approved' && scheduleActuallyChanged) {
       notifyMeetingUpdated(meeting, req.auth?.sub, previous);
     }
+    const prevStatus = previous.status;
+    const nextStatus = meeting.status;
+    const participantIds = [previous.organizerId, previous.bossId, meeting.organizerId, meeting.bossId].filter(Boolean);
+    if (prevStatus !== 'ongoing' && nextStatus === 'ongoing') {
+      await pauseInProgressTasksForMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId || previous.companyId,
+      });
+    } else if (prevStatus === 'ongoing' && ['completed', 'cancelled', 'scheduled', 'rescheduled'].includes(nextStatus)) {
+      await resumeTasksPausedByMeetingParticipants({
+        participantIds,
+        companyId: meeting.companyId || previous.companyId,
+      });
+    }
+
     emitRealtimeMeetingChange('updated', meeting);
 
     return res.status(200).json({ message: 'Meeting updated', meeting: toApi(meeting) });
@@ -440,6 +465,12 @@ export const deleteMeeting = async (req, res) => {
   try {
     const meeting = await CentralMeeting.findByIdAndDelete(req.params.id);
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+    if (meeting.status === 'ongoing') {
+      await resumeTasksPausedByMeetingParticipants({
+        participantIds: [meeting.organizerId, meeting.bossId].filter(Boolean),
+        companyId: meeting.companyId,
+      });
+    }
     emitRealtimeMeetingChange('deleted', meeting);
     return res.status(200).json({ message: 'Meeting deleted' });
   } catch (error) {
