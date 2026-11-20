@@ -372,6 +372,10 @@ class _PayslipCard extends StatelessWidget {
     final payroll = employee['salaryPayroll'] is Map
         ? Map<String, dynamic>.from(employee['salaryPayroll'] as Map)
         : const <String, dynamic>{};
+    final empFixedMonthlyCTC = _num(payroll['monthlyCTC'] ?? payroll['ctc'] ?? employee['salary']);
+    final displayMonthlyCTC = empFixedMonthlyCTC > 0 ? empFixedMonthlyCTC : structure.monthlyCTC;
+    final displayAnnualCTC =
+        empFixedMonthlyCTC > 0 ? (empFixedMonthlyCTC * 12).roundToDouble() : structure.annualCTC;
     final companyName = (company['companyName'] ?? 'Organization').toString();
     final month = _monthLabel(salary['month']);
     final year = salary['year'] ?? '';
@@ -542,9 +546,9 @@ class _PayslipCard extends StatelessWidget {
                 children: [
                   Expanded(child: _summaryChip('Net Salary', structure.netSalary, const Color(0xFFF0FDF4), const Color(0xFF15803D))),
                   const SizedBox(width: 6),
-                  Expanded(child: _summaryChip('Monthly CTC', structure.monthlyCTC, const Color(0xFFEFF6FF), const Color(0xFF1D4ED8))),
+                  Expanded(child: _summaryChip('Monthly CTC', displayMonthlyCTC, const Color(0xFFEFF6FF), const Color(0xFF1D4ED8))),
                   const SizedBox(width: 6),
-                  Expanded(child: _summaryChip('Annual CTC', structure.annualCTC, const Color(0xFFFAF5FF), const Color(0xFF7E22CE))),
+                  Expanded(child: _summaryChip('Annual CTC', displayAnnualCTC, const Color(0xFFFAF5FF), const Color(0xFF7E22CE))),
                 ],
               ),
               const SizedBox(height: 14),

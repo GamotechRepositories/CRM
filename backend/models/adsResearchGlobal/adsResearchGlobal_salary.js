@@ -68,6 +68,14 @@ const salarySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  unpaidLeaves: {
+    type: Number,
+    default: 0,
+  },
+  leaveDeduction: {
+    type: Number,
+    default: 0,
+  },
   netSalary: {
     type: Number,
     default: 0,

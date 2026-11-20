@@ -130,7 +130,7 @@ const SalariesView = () => {
                     <td className='px-4 py-3 font-medium'>{s.employee?.name || '—'}</td>
                     <td className='px-4 py-3 font-semibold'>₹{Number(s.grossSalary || s.amount || 0).toLocaleString('en-IN')}</td>
                     <td className='px-4 py-3 text-green-700 font-medium'>₹{Number(s.netSalary || (s.amount ? s.amount - 2000 : 0)).toLocaleString('en-IN')}</td>
-                    <td className='px-4 py-3 text-blue-700 font-medium'>₹{Number(s.monthlyCTC || (s.amount ? s.amount + 1800 : 0)).toLocaleString('en-IN')}</td>
+                    <td className='px-4 py-3 text-blue-700 font-medium'>₹{Number(s.employee?.salaryPayroll?.monthlyCTC || s.employee?.salaryPayroll?.ctc || s.employee?.salary || s.monthlyCTC || (s.amount ? s.amount + 1800 : 0)).toLocaleString('en-IN')}</td>
                     <td className='px-4 py-3'>{s.month ? MONTH_NAMES[s.month] : '—'}</td>
                     <td className='px-4 py-3'>{s.year ?? '—'}</td>
                     <td className='px-4 py-3'>

@@ -418,6 +418,12 @@ const SalarySlipPage = () => {
   const emp = selectedSalary?.employee || user || {}
   const isPaid = selectedSalary?.status === 'Paid'
   const structure = getSalaryStructure(selectedSalary)
+  const empFixedMonthlyCTC = Number(
+    emp.salaryPayroll?.monthlyCTC || emp.salaryPayroll?.ctc || emp.salary || 0
+  )
+  const displayMonthlyCTC = empFixedMonthlyCTC > 0 ? empFixedMonthlyCTC : structure.monthlyCTC
+  const displayAnnualCTC =
+    empFixedMonthlyCTC > 0 ? Math.round(empFixedMonthlyCTC * 12) : structure.annualCTC
 
   return (
     <div className='p-4 md:p-8 bg-gray-50 min-h-full'>
@@ -786,14 +792,14 @@ const SalarySlipPage = () => {
                         style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}
                       >
                         <span className='text-[10px] font-bold uppercase tracking-wide block' style={{ color: '#1e40af' }}>Monthly CTC</span>
-                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#1d4ed8' }}>{formatINR(structure.monthlyCTC)}</span>
+                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#1d4ed8' }}>{formatINR(displayMonthlyCTC)}</span>
                       </div>
                       <div
                         className='rounded-lg p-2.5 text-center'
                         style={{ backgroundColor: '#faf5ff', border: '1px solid #e9d5ff' }}
                       >
                         <span className='text-[10px] font-bold uppercase tracking-wide block' style={{ color: '#6b21a8' }}>Annual CTC</span>
-                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#7e22ce' }}>{formatINR(structure.annualCTC)}</span>
+                        <span className='text-base font-extrabold block mt-0.5' style={{ color: '#7e22ce' }}>{formatINR(displayAnnualCTC)}</span>
                       </div>
                     </div>
 

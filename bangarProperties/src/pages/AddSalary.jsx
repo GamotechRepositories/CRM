@@ -25,6 +25,8 @@ const AddSalary = () => {
     employeePf: '',
     pt: '',
     tds: '',
+    unpaidLeaves: '',
+    leaveDeduction: '',
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
     status: 'Unpaid',
@@ -65,6 +67,14 @@ const AddSalary = () => {
 
   const selectedEmployee = employees.find((e) => e._id === form.employee)
 
+  const calcLeaveDeduction = (ctc, leaveDays, month, year) => {
+    const days = Number(leaveDays || 0)
+    const monthly = Number(ctc || 0)
+    if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(monthly) || monthly <= 0) return 0
+    const daysInMonth = new Date(Number(year) || new Date().getFullYear(), Number(month) || 1, 0).getDate() || 30
+    return Math.round((monthly / daysInMonth) * days)
+  }
+
   const handleEmployeeSelect = (emp) => {
     const payroll = emp.salaryPayroll || {}
     const struct = getSalaryStructure({
@@ -77,6 +87,8 @@ const AddSalary = () => {
       employee: emp._id,
       amount: fields.ctc,
       ...fields,
+      unpaidLeaves: '',
+      leaveDeduction: '',
     }))
     setEmployeeSearch(emp.name || '')
     setEmployeeOpen(false)
@@ -86,7 +98,15 @@ const AddSalary = () => {
     const { name, value } = e.target
     setForm((f) => {
       if (name === 'amount' || name === 'ctc') {
-        const struct = getSalaryStructure({ monthlyCTC: Number(value || 0), tds: f.tds })
+        const nextLeaveDed =
+          Number(f.unpaidLeaves || 0) > 0
+            ? calcLeaveDeduction(value, f.unpaidLeaves, f.month, f.year)
+            : f.leaveDeduction
+        const struct = getSalaryStructure({
+          monthlyCTC: Number(value || 0),
+          tds: f.tds,
+          leaveDeduction: nextLeaveDed,
+        })
         const fields = salaryFormFromStructure(struct)
         return {
           ...f,
@@ -94,15 +114,29 @@ const AddSalary = () => {
           amount: value,
           ctc: value,
           tds: f.tds,
+          unpaidLeaves: f.unpaidLeaves,
+          leaveDeduction: nextLeaveDed,
           month: f.month,
           year: f.year,
           status: f.status,
           employee: f.employee,
         }
       }
+      if (name === 'unpaidLeaves') {
+        const nextLeaveDed =
+          value === '' ? '' : calcLeaveDeduction(f.ctc || f.amount, value, f.month, f.year)
+        return {
+          ...f,
+          unpaidLeaves: value,
+          leaveDeduction: nextLeaveDed,
+        }
+      }
       const next = {
         ...f,
         [name]: name === 'month' || name === 'year' ? Number(value) : value,
+      }
+      if ((name === 'month' || name === 'year') && Number(next.unpaidLeaves || 0) > 0) {
+        next.leaveDeduction = calcLeaveDeduction(next.ctc || next.amount, next.unpaidLeaves, next.month, next.year)
       }
       const earningKeys = ['basicSalary', 'da', 'hra', 'conveyance', 'medicalAllowance', 'employerPf']
       if (earningKeys.includes(name)) {
@@ -241,8 +275,34 @@ const AddSalary = () => {
                     <input name={name} type='number' min='0' value={form[name]} onChange={handleChange} className={inputClass} />
                   </div>
                 ))}
+                <div>
+                  <label className='block text-xs font-medium text-gray-700 mb-1'>Unpaid Leaves (Days)</label>
+                  <input
+                    name='unpaidLeaves'
+                    type='number'
+                    min='0'
+                    max='31'
+                    step='0.5'
+                    value={form.unpaidLeaves}
+                    onChange={handleChange}
+                    placeholder='e.g. 2'
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className='block text-xs font-medium text-gray-700 mb-1'>Leave Deduction (LOP)</label>
+                  <input
+                    name='leaveDeduction'
+                    type='number'
+                    min='0'
+                    value={form.leaveDeduction}
+                    onChange={handleChange}
+                    placeholder='Auto or custom ₹'
+                    className={inputClass}
+                  />
+                </div>
               </div>
-              <div className='grid grid-cols-3 gap-2 pt-1 border-t border-gray-200'>
+              <div className='grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-gray-200'>
                 <div className='p-2 bg-green-50 rounded-lg border border-green-200'>
                   <span className='text-green-700 block font-medium'>Net Salary</span>
                   <span className='font-bold text-green-900 text-sm'>{money(preview.netSalary)}</span>
@@ -250,6 +310,10 @@ const AddSalary = () => {
                 <div className='p-2 bg-blue-50 rounded-lg border border-blue-200'>
                   <span className='text-blue-700 block font-medium'>Gross Salary</span>
                   <span className='font-bold text-blue-900 text-sm'>{money(preview.grossSalary)}</span>
+                </div>
+                <div className='p-2 bg-indigo-50 rounded-lg border border-indigo-200'>
+                  <span className='text-indigo-700 block font-medium'>Monthly CTC</span>
+                  <span className='font-bold text-indigo-900 text-sm'>{money(preview.monthlyCTC)}</span>
                 </div>
                 <div className='p-2 bg-purple-50 rounded-lg border border-purple-200'>
                   <span className='text-purple-700 block font-medium'>Annual CTC</span>

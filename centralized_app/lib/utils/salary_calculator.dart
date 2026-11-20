@@ -107,10 +107,15 @@ SalaryStructure getSalaryStructure(dynamic salaryRecordOrCtc) {
         ? _round(src['pt'] ?? src['ptAmount'] ?? src['professionalTax'])
         : (grossSalary > 15000 ? 200.0 : 0.0);
     final tds = _explicit(src['tds'] ?? src['incomeTax']) ? _round(src['tds'] ?? src['incomeTax']) : 0.0;
+    final leaveDeduction = _explicit(src['leaveDeduction'] ?? src['lopDeduction'] ?? src['lop'])
+        ? _round(src['leaveDeduction'] ?? src['lopDeduction'] ?? src['lop']).clamp(0, double.infinity).toDouble()
+        : 0.0;
     deductions = [
       SalaryLine(code: 'PF', name: 'Employee PF', amount: employeePf),
       SalaryLine(code: 'PT', name: 'Professional Tax', amount: pt),
       SalaryLine(code: 'TDS', name: 'Income Tax (TDS)', amount: tds),
+      if (leaveDeduction > 0)
+        SalaryLine(code: 'LOP', name: 'Leave Deduction (LOP)', amount: leaveDeduction),
     ];
   }
 

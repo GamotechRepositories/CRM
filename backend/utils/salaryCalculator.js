@@ -93,11 +93,17 @@ export const calculateSalaryStructure = (data = {}) => {
         ? 200
         : 0;
     const tds = hasExplicit(src.tds ?? src.incomeTax) ? roundRupee(src.tds ?? src.incomeTax) : 0;
+    const leaveDeduction = hasExplicit(src.leaveDeduction ?? src.lopDeduction ?? src.lop)
+      ? Math.max(0, roundRupee(src.leaveDeduction ?? src.lopDeduction ?? src.lop))
+      : 0;
 
     deductions = [
       { code: 'PF', name: 'Employee PF', amount: employeePf },
       { code: 'PT', name: 'Professional Tax', amount: pt },
       { code: 'TDS', name: 'Income Tax (TDS)', amount: tds },
+      ...(leaveDeduction > 0
+        ? [{ code: 'LOP', name: 'Leave Deduction (LOP)', amount: leaveDeduction }]
+        : []),
     ];
   }
 
@@ -135,6 +141,7 @@ export const salaryFormFromStructure = (struct) => {
     employeePf: pickAmt(struct.deductions, 'PF'),
     pt: pickAmt(struct.deductions, 'PT'),
     tds: pickAmt(struct.deductions, 'TDS'),
+    leaveDeduction: pickAmt(struct.deductions, 'LOP'),
     ctc: struct.monthlyCTC,
     salary: struct.monthlyCTC,
   };
@@ -152,4 +159,6 @@ export const salaryInputFromForm = (form = {}) => ({
   employeePf: form.employeePf,
   pt: form.pt,
   tds: form.tds,
+  leaveDeduction: form.leaveDeduction,
+  unpaidLeaves: form.unpaidLeaves,
 });

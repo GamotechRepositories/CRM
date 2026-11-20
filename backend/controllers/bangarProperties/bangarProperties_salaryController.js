@@ -6,9 +6,10 @@ const EMP_POPULATE = { path: 'employee', populate: { path: 'designation', select
 // Create a new salary record
 export const createSalary = async (req, res) => {
   try {
-    const { employee, month, year, status, bonus, paymentDate, paymentMode } = req.body;
+    const { employee, month, year, status, bonus, paymentDate, paymentMode, unpaidLeaves } = req.body;
 
     const calculated = calculateSalaryStructure(req.body);
+    const leaveDeductionAmt = calculated.deductions.find((d) => d.code === 'LOP')?.amount || 0;
     const newSalary = new Salary({
       employee,
       amount: calculated.grossSalary,
@@ -24,6 +25,8 @@ export const createSalary = async (req, res) => {
       deductionsList: calculated.deductions,
       deductions: calculated.totalDeductions,
       totalDeductions: calculated.totalDeductions,
+      unpaidLeaves: Number(unpaidLeaves) || 0,
+      leaveDeduction: leaveDeductionAmt,
       netSalary: calculated.netSalary,
       employerContributions: calculated.employerContributions,
       monthlyCTC: calculated.monthlyCTC,
@@ -90,6 +93,7 @@ export const updateSalary = async (req, res) => {
       attendanceIncentive: calculated.components.find((c) => c.code === 'ATTENDANCE_INCENTIVE')?.amount || 0,
       deductionsList: calculated.deductions,
       deductions: calculated.totalDeductions,
+      leaveDeduction: calculated.deductions.find((d) => d.code === 'LOP')?.amount || 0,
     };
     if (payload.status === 'Paid' && !payload.paymentDate) {
       payload.paymentDate = new Date();
