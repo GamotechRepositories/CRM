@@ -15,11 +15,13 @@ const InvoicePage = ({ isOrder = false }) => {
   const printRef = useRef(null)
   const invoiceRef = useRef(null)
   const [billing, setBilling] = useState(null)
+  const [companyProfile, setCompanyProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState(null)
   const [logoSrc, setLogoSrc] = useState(companyLogoFallback)
+  const [signatureSrc, setSignatureSrc] = useState('')
 
   const getBackendOrigin = () => {
     const base = api.defaults.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:5014'
@@ -31,12 +33,54 @@ const InvoicePage = ({ isOrder = false }) => {
     }
   }
 
+  const toBase64 = async (url) => {
+    if (!url || typeof url !== 'string') return ''
+    if (url.startsWith('data:image')) return url
+
+    let targetUrl = url
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      targetUrl = `${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(url)}`
+    }
+
+    try {
+      const res = await fetch(targetUrl)
+      if (res.ok) {
+        const blob = await res.blob()
+        return await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result || '')
+          reader.readAsDataURL(blob)
+        })
+      }
+    } catch (err) {
+      console.warn('Failed proxy image fetch for:', url, err)
+    }
+
+    try {
+      const res = await fetch(url)
+      if (res.ok) {
+        const blob = await res.blob()
+        return await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result || '')
+          reader.readAsDataURL(blob)
+        })
+      }
+    } catch {}
+
+    return ''
+  }
+
   useEffect(() => {
     if (!id) return
     const fetchBilling = async () => {
       try {
-        const res = await api.get(`${resource}/${id}`)
+        const [res, profileRes] = await Promise.all([
+          api.get(`${resource}/${id}`),
+          api.get('/company-profile').catch(() => ({ data: null })),
+        ])
         setBilling(isOrder ? { ...res.data, invoiceDate: res.data.orderDate, invoiceNumber: res.data.orderNumber } : res.data)
+        setCompanyProfile(profileRes.data || null)
       } catch (err) {
         setError(err.response?.data?.message || err.message || 'Failed to load billing')
       } finally {
@@ -49,61 +93,27 @@ const InvoicePage = ({ isOrder = false }) => {
   useEffect(() => {
     let isMounted = true
 
-    const loadLogo = async () => {
-      const raw = billing?.companyLogo || billing?.company?.companyLogo || companyLogoFallback
-      if (!raw) return
-
-      if (typeof raw === 'string' && raw.startsWith('data:image')) {
-        if (isMounted) setLogoSrc(raw)
-        return
+    const loadAssets = async () => {
+      const rawLogo = billing?.companyLogo || billing?.company?.companyLogo || companyProfile?.companyLogo || companyLogoFallback
+      if (rawLogo) {
+        const b64 = (await toBase64(rawLogo)) || (await toBase64(companyLogoFallback))
+        if (isMounted && b64) setLogoSrc(b64)
       }
 
-      // If remote URL, fetch via backend proxy to guarantee CORS headers
-      let targetUrl = raw
-      if (typeof raw === 'string' && raw.startsWith('http')) {
-        targetUrl = `${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(raw)}`
-      }
-
-      try {
-        const res = await fetch(targetUrl)
-        if (res.ok) {
-          const blob = await res.blob()
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            if (isMounted && reader.result) {
-              setLogoSrc(reader.result)
-            }
-          }
-          reader.readAsDataURL(blob)
-          return
-        }
-      } catch (err) {
-        console.warn('Failed to load logo via proxy, trying fallback:', err)
-      }
-
-      // Try local fallback logo as base64
-      try {
-        const res = await fetch(companyLogoFallback)
-        if (res.ok) {
-          const blob = await res.blob()
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            if (isMounted && reader.result) {
-              setLogoSrc(reader.result)
-            }
-          }
-          reader.readAsDataURL(blob)
-        }
-      } catch (e) {
-        if (isMounted) setLogoSrc(companyLogoFallback)
+      const rawSig = billing?.authorizedSignature || billing?.company?.authorizedSignature || companyProfile?.authorizedSignature || ''
+      if (rawSig) {
+        const b64 = await toBase64(rawSig)
+        if (isMounted) setSignatureSrc(b64 || rawSig)
+      } else if (isMounted) {
+        setSignatureSrc('')
       }
     }
 
-    loadLogo()
+    loadAssets()
     return () => {
       isMounted = false
     }
-  }, [billing])
+  }, [billing, companyProfile])
 
   const handlePrint = () => {
     window.print()
@@ -142,36 +152,16 @@ const InvoicePage = ({ isOrder = false }) => {
     setDownloading(true)
     setDownloadError(null)
     try {
-      // Ensure logo is base64 before capturing so html2canvas never drops it
+      // Ensure logo and signature are base64 before capturing so html2canvas never drops them
       let activeLogo = logoSrc
       if (!activeLogo || !activeLogo.startsWith('data:image')) {
-        const raw = billing?.companyLogo || billing?.company?.companyLogo || companyLogoFallback
-        if (raw && typeof raw === 'string' && raw.startsWith('http')) {
-          try {
-            const res = await fetch(`${getBackendOrigin()}/api/proxy-image?url=${encodeURIComponent(raw)}`)
-            if (res.ok) {
-              const blob = await res.blob()
-              activeLogo = await new Promise((resolve) => {
-                const r = new FileReader()
-                r.onloadend = () => resolve(r.result)
-                r.readAsDataURL(blob)
-              })
-            }
-          } catch {}
-        }
-        if (!activeLogo || !activeLogo.startsWith('data:image')) {
-          try {
-            const res = await fetch(companyLogoFallback)
-            if (res.ok) {
-              const blob = await res.blob()
-              activeLogo = await new Promise((resolve) => {
-                const r = new FileReader()
-                r.onloadend = () => resolve(r.result)
-                r.readAsDataURL(blob)
-              })
-            }
-          } catch {}
-        }
+        const raw = billing?.companyLogo || billing?.company?.companyLogo || companyProfile?.companyLogo || companyLogoFallback
+        activeLogo = (await toBase64(raw)) || (await toBase64(companyLogoFallback))
+      }
+      const rawSig = billing?.authorizedSignature || billing?.company?.authorizedSignature || companyProfile?.authorizedSignature || ''
+      let activeSig = signatureSrc
+      if (rawSig && (!activeSig || !activeSig.startsWith('data:image'))) {
+        activeSig = (await toBase64(rawSig)) || rawSig
       }
 
       let strippedLinkedCss = ''
@@ -183,6 +173,9 @@ const InvoicePage = ({ isOrder = false }) => {
         )
         strippedLinkedCss = texts.map(stripUnsupportedColors).join('\n')
       }
+
+      let avoidRanges = []
+      let clonedWidthPx = 794
 
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -209,10 +202,10 @@ const InvoicePage = ({ isOrder = false }) => {
             }
           })
 
-          // Configure exact A4 sheet proportions for clone (794px x 1123px = 210mm x 297mm at 96 DPI)
+          // Configure A4 sheet width with room for bottom page spacing (794px x 1047px = 210mm x 277mm at 96 DPI)
           clonedElement.style.width = '794px'
           clonedElement.style.maxWidth = '794px'
-          clonedElement.style.minHeight = '1123px'
+          clonedElement.style.minHeight = '1047px'
           clonedElement.style.boxSizing = 'border-box'
           clonedElement.style.display = 'flex'
           clonedElement.style.flexDirection = 'column'
@@ -221,13 +214,19 @@ const InvoicePage = ({ isOrder = false }) => {
           clonedElement.style.boxShadow = 'none'
           clonedElement.style.borderRadius = '0px'
           clonedElement.style.border = 'none'
-          clonedElement.style.padding = '36px 44px'
+          clonedElement.style.padding = '36px 44px 48px 44px'
           clonedElement.style.backgroundColor = '#ffffff'
 
           // Ensure logo uses base64 data url
           const logoEl = clonedElement.querySelector('.company-logo-img')
           if (logoEl && activeLogo) {
             logoEl.src = activeLogo
+          }
+
+          // Ensure authorized signature uses base64 data url
+          const sigEl = clonedElement.querySelector('.authorized-signature-img')
+          if (sigEl && activeSig) {
+            sigEl.src = activeSig
           }
 
           // Ensure all text elements have opaque non-transparent color
@@ -245,39 +244,112 @@ const InvoicePage = ({ isOrder = false }) => {
               }
             }
           })
+
+          // Measure indivisible rows/blocks so multi-page PDF slicing never cuts through a row or footer
+          const rootRect = clonedElement.getBoundingClientRect()
+          clonedWidthPx = rootRect.width || 794
+          const blocks = clonedElement.querySelectorAll('tr, thead, .invoice-footer-content, p, h1, h2, h3, h4')
+          avoidRanges = Array.from(blocks)
+            .map((el) => {
+              const r = el.getBoundingClientRect()
+              return { top: r.top - rootRect.top, bottom: r.bottom - rootRect.top }
+            })
+            .filter((r) => r.bottom > r.top && r.bottom - r.top < 1000)
         },
       })
 
       // Standard A4 dimensions in mm: 210 x 297
       const pageWidth = 210
       const pageHeight = 297
+      const bottomMargin = 20
+      const nextPageTopMargin = 12
 
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       })
-      const imgData = canvas.toDataURL('image/jpeg', 0.98)
 
       // Calculate rendered content height in mm for a 210mm width
       const contentHeight = (canvas.height * pageWidth) / canvas.width
+      const firstPageUsableHeight = pageHeight - bottomMargin
 
-      if (contentHeight <= pageHeight + 5) {
-        // Fits on a single A4 page: fill exact 210mm x 297mm A4 sheet
-        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, Math.min(contentHeight, pageHeight))
+      if (contentHeight <= firstPageUsableHeight + 2) {
+        // Fits on a single A4 page with bottom spacing preserved
+        const imgData = canvas.toDataURL('image/jpeg', 0.98)
+        pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, Math.min(contentHeight, firstPageUsableHeight))
       } else {
-        // Multi-page handling with full A4 width
-        let heightLeft = contentHeight
-        let position = 0
+        // Multi-page slicing with clean spacing at each page end without cutting through rows
+        const pxPerMm = canvas.width / pageWidth
+        const cssToCanvas = canvas.width / clonedWidthPx
+        const avoidCanvasRanges = avoidRanges.map((r) => ({
+          top: r.top * cssToCanvas,
+          bottom: r.bottom * cssToCanvas,
+        }))
+        const minSliverPx = Math.ceil(2 * pxPerMm)
+        const minProgressPx = Math.ceil(20 * pxPerMm)
+        let sourceY = 0
+        let pageIndex = 0
 
-        pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
-        heightLeft -= pageHeight
+        while (sourceY < canvas.height) {
+          const remainingPx = canvas.height - sourceY
+          if (pageIndex > 0 && remainingPx < minSliverPx) break
 
-        while (heightLeft > 0) {
-          position = -(contentHeight - heightLeft)
-          pdf.addPage()
-          pdf.addImage(imgData, 'JPEG', 0, position, pageWidth, contentHeight)
-          heightLeft -= pageHeight
+          const pageTopMm = pageIndex === 0 ? 0 : nextPageTopMargin
+          const usableHeightMm = pageHeight - pageTopMm - bottomMargin
+          const maxSlicePx = Math.floor(usableHeightMm * pxPerMm)
+          let cutY = Math.min(sourceY + maxSlicePx, canvas.height)
+
+          if (cutY < canvas.height) {
+            let adjusted = true
+            while (adjusted) {
+              adjusted = false
+              let earliestTop = cutY
+              for (const range of avoidCanvasRanges) {
+                if (range.top < cutY && range.bottom > cutY && range.top < earliestTop) {
+                  earliestTop = range.top
+                }
+              }
+              if (earliestTop < cutY && earliestTop > sourceY + minProgressPx) {
+                cutY = Math.floor(earliestTop)
+                adjusted = true
+              }
+            }
+          }
+
+          const sliceHeightPx = Math.max(1, cutY - sourceY)
+
+          const pageCanvas = document.createElement('canvas')
+          pageCanvas.width = canvas.width
+          pageCanvas.height = sliceHeightPx
+          const ctx = pageCanvas.getContext('2d')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
+          ctx.drawImage(
+            canvas,
+            0,
+            sourceY,
+            canvas.width,
+            sliceHeightPx,
+            0,
+            0,
+            canvas.width,
+            sliceHeightPx
+          )
+
+          if (pageIndex > 0) pdf.addPage()
+          const sliceHeightMm = sliceHeightPx / pxPerMm
+          pdf.addImage(
+            pageCanvas.toDataURL('image/jpeg', 0.98),
+            'JPEG',
+            0,
+            pageTopMm,
+            pageWidth,
+            sliceHeightMm
+          )
+
+          sourceY += sliceHeightPx
+          pageIndex++
         }
       }
 
@@ -625,9 +697,13 @@ const InvoicePage = ({ isOrder = false }) => {
             {/* Authorized Signature */}
             <div className='flex justify-end'>
               <div className='text-center'>
-                {billing.authorizedSignature ? (
+                {signatureSrc || billing.authorizedSignature || billing.company?.authorizedSignature || companyProfile?.authorizedSignature ? (
                   <>
-                    <img src={billing.authorizedSignature} alt='Authorized Signature' crossOrigin='anonymous' className='h-16 max-w-[220px] object-contain mx-auto' />
+                    <img
+                      src={signatureSrc || billing.authorizedSignature || billing.company?.authorizedSignature || companyProfile?.authorizedSignature}
+                      alt='Authorized Signature'
+                      className='authorized-signature-img h-16 max-w-[220px] object-contain mx-auto'
+                    />
                     <p className='text-sm font-semibold text-black mt-1'>Authorized Signature</p>
                   </>
                 ) : (

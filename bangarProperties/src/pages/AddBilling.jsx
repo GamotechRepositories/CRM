@@ -93,6 +93,7 @@ const AddBilling = ({ isOrder = false }) => {
         const res = await api.get(`/companies/${selectedCompanyId}`)
         const c = res.data
         setCompanyLogo(c.companyLogo || '')
+        setAuthorizedSignature((prev) => prev || c.authorizedSignature || '')
         setCompany({
           name: c.companyName ?? '',
           address: c.address ?? '',
