@@ -16,10 +16,14 @@ const {
   getTravelTimeline,
   getTravelHistory,
   allocateTravelExpense,
+  getTravelRate,
+  updateTravelRate,
 } = siteVisitHandlers;
 
 router.get('/site-visits', getSiteVisits);
 router.post('/site-visits', createSiteVisit);
+router.get('/site-visits/travel-rate', getTravelRate);
+router.put('/site-visits/travel-rate', updateTravelRate);
 router.get('/site-visits/travel-timeline', getTravelTimeline);
 router.get('/site-visits/travel-history', getTravelHistory);
 router.post('/site-visits/start-journey', startTravelJourney);

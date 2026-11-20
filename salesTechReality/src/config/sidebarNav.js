@@ -79,6 +79,14 @@ export const getSidebarNav = ({
       ],
     },
     {
+      id: 'travel-map',
+      label: 'Travel Map',
+      icon: '🗺️',
+      type: 'link',
+      path: '/travel-map',
+      requiresFullAccess: true,
+    },
+    {
       id: 'projects',
       label: 'Projects',
       icon: '📁',

@@ -1,4 +1,5 @@
 import { SITE_VISIT_STATUSES, SITE_VISIT_TYPES } from './siteVisitFields.js';
+import TravelConfig from '../models/travelConfig.js';
 import {
   buildGoogleMapsDirectionsUrl,
   getTravelRatePerKm,
@@ -423,6 +424,50 @@ const serializeTrackPoints = (trackPoints = []) =>
   }));
 
 export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourney = null }) => {
+  const tenantKey = SiteVisit?.modelName || 'default';
+
+  const resolveTenantRatePerKm = async () => {
+    try {
+      const cfg = await TravelConfig.findOne({ tenantKey }).lean();
+      const val = Number(cfg?.ratePerKm);
+      if (Number.isFinite(val) && val > 0) return val;
+    } catch {
+      /* fallback to default rate */
+    }
+    return getTravelRatePerKm();
+  };
+
+  const getTravelRate = async (_req, res) => {
+    try {
+      const ratePerKm = await resolveTenantRatePerKm();
+      return res.status(200).json({ ratePerKm, currency: 'INR' });
+    } catch (error) {
+      return res.status(500).json({ message: 'Error fetching travel rate', error: error?.message || error });
+    }
+  };
+
+  const updateTravelRate = async (req, res) => {
+    try {
+      const raw = Number(req.body?.ratePerKm);
+      if (!Number.isFinite(raw) || raw <= 0 || raw > 10000) {
+        return res.status(400).json({ message: 'Please enter a valid per-km rate between 0.1 and 10000' });
+      }
+      const ratePerKm = Math.round(raw * 100) / 100;
+      await TravelConfig.findOneAndUpdate(
+        { tenantKey },
+        { $set: { tenantKey, ratePerKm } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      return res.status(200).json({
+        message: `Travel allowance rate updated to ₹${ratePerKm}/km`,
+        ratePerKm,
+        currency: 'INR',
+      });
+    } catch (error) {
+      return res.status(500).json({ message: 'Error updating travel rate', error: error?.message || error });
+    }
+  };
+
   const createSiteVisit = async (req, res) => {
     try {
       const payload = buildPayload(req.body);
@@ -965,7 +1010,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
       const dayStart = startOfBusinessDay(date);
       const dayEnd = endOfBusinessDay(date);
-      const ratePerKm = getTravelRatePerKm();
+      const ratePerKm = await resolveTenantRatePerKm();
       const journeys = await findJourneysForDay(TravelJourney, employeeId, dayStart);
       const activeJourney = journeys.find((j) => j.status === 'active') || null;
       const journeyStarted = journeys.length > 0;
@@ -1071,7 +1116,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
 
       const dayStart = startOfBusinessDay(date);
       const dayEnd = endOfBusinessDay(date);
-      const ratePerKm = toNumberOrNull(req.body.ratePerKm) || getTravelRatePerKm();
+      const ratePerKm = toNumberOrNull(req.body.ratePerKm) || (await resolveTenantRatePerKm());
       const journeys = await findJourneysForDay(TravelJourney, employeeId, dayStart);
 
       if (!journeys.length) {
@@ -1203,7 +1248,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
       }
 
       const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
-      const ratePerKm = getTravelRatePerKm();
+      const ratePerKm = await resolveTenantRatePerKm();
 
       const journeys = await TravelJourney.find({
         employee: employeeId,
@@ -1320,5 +1365,7 @@ export const createSiteVisitHandlers = ({ SiteVisit, Expense = null, TravelJourn
     getTravelTimeline,
     getTravelHistory,
     allocateTravelExpense,
+    getTravelRate,
+    updateTravelRate,
   };
 };

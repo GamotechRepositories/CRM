@@ -57,6 +57,7 @@ import PropertyListingsView from '../components/views/PropertyListingsView'
 import AddProperty from '../pages/AddProperty'
 import SiteVisitsView from '../components/views/SiteVisitsView'
 import ScheduleSiteVisit from '../pages/ScheduleSiteVisit'
+import TravelMapPage from '../pages/TravelMapPage'
 
 const router = createBrowserRouter([
     {
@@ -96,6 +97,7 @@ const router = createBrowserRouter([
             { path: 'site-visits', element: <SiteVisitsView /> },
             { path: 'schedule-site-visit', element: <ScheduleSiteVisit /> },
             { path: 'site-visits/edit/:id', element: <ScheduleSiteVisit /> },
+            { path: 'travel-map', element: <TravelMapPage /> },
             { path: 'add-lead', element: <AddLead /> },
             { path: 'leads/view/:id', element: <AddLead readOnly /> },
             { path: 'leads/edit/:id', element: <AddLead /> },
