@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import RoleGuard from './components/RoleGuard'
 import LocationPromptModal from './components/LocationPromptModal'
 import CheckInModal from './components/CheckInModal'
+import FollowUpReminderPopup from './components/FollowUpReminderPopup'
 import { Outlet, useLocation } from 'react-router-dom'
 
 const App = () => {
@@ -13,6 +14,7 @@ const App = () => {
     <div className='flex h-screen bg-gray-50 print:block print:h-auto print:bg-white'>
       <CheckInModal />
       <LocationPromptModal />
+      <FollowUpReminderPopup />
       <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen((v) => !v)} />
       <main className='flex-1 overflow-auto min-w-0 w-full print:block print:overflow-visible print:w-full print:p-0'>
         <RoleGuard>

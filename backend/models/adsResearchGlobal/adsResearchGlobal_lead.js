@@ -6,6 +6,8 @@ const followUpSchema = new mongoose.Schema({
   comments: { type: String, default: '' },
   /** @deprecated prefer comments — kept for older records */
   text: { type: String },
+  completed: { type: Boolean, default: false },
+  completedAt: { type: Date, default: null },
 });
 
 const leadSchema = new mongoose.Schema({

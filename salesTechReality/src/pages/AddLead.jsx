@@ -21,11 +21,20 @@ const STATUS_OPTIONS = [
   'Closed',
 ]
 
+const toLocalDateTimeInput = (dateVal = new Date()) => {
+  const d = new Date(dateVal)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const normalizeFollowUpsFromApi = (arr) =>
   (Array.isArray(arr) ? arr : []).map((fu) => ({
     _id: fu._id,
-    date: fu.date ? new Date(fu.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    date: fu.date ? toLocalDateTimeInput(fu.date) : toLocalDateTimeInput(),
     comments: fu.comments ?? fu.text ?? '',
+    completed: Boolean(fu.completed),
+    completedAt: fu.completedAt || null,
   }))
 
 const followUpDateToDisplay = (dateVal) => {
@@ -33,7 +42,16 @@ const followUpDateToDisplay = (dateVal) => {
   const s = typeof dateVal === 'string' ? dateVal : ''
   const d =
     s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T12:00:00`) : new Date(dateVal)
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
 }
 
 const AddLead = ({ readOnly = false }) => {
@@ -70,7 +88,7 @@ const AddLead = ({ readOnly = false }) => {
   const [employeeOpen, setEmployeeOpen] = useState(false)
   const [meetingPersonSearch, setMeetingPersonSearch] = useState('')
   const [meetingPersonOpen, setMeetingPersonOpen] = useState(false)
-  const [followUpDate, setFollowUpDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [followUpDate, setFollowUpDate] = useState(() => toLocalDateTimeInput())
   const [followUpComments, setFollowUpComments] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -372,6 +390,8 @@ const AddLead = ({ readOnly = false }) => {
         followUps: [...form.followUps, ...pendingFollowUp].map((fu) => {
           const piece = {
             comments: (fu.comments ?? fu.text ?? '').trim(),
+            completed: Boolean(fu.completed),
+            completedAt: fu.completedAt || null,
             date:
               typeof fu.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fu.date)
                 ? new Date(`${fu.date}T12:00:00`)
@@ -759,19 +779,19 @@ const AddLead = ({ readOnly = false }) => {
                   {!readOnly && (
                     <div className='p-4 bg-gray-50 border-t border-gray-200 space-y-3'>
                       <div className='grid grid-cols-1 sm:grid-cols-12 gap-3 items-end'>
-                        <div className='sm:col-span-3'>
+                        <div className='sm:col-span-4'>
                           <label htmlFor='follow-up-date' className='block text-xs font-medium text-gray-600 mb-1'>
-                            Follow-up date
+                            Follow-up date & time
                           </label>
                           <input
                             id='follow-up-date'
-                            type='date'
+                            type='datetime-local'
                             value={followUpDate}
                             onChange={(e) => setFollowUpDate(e.target.value)}
                             className={inputClass}
                           />
                         </div>
-                        <div className='sm:col-span-7'>
+                        <div className='sm:col-span-6'>
                           <label htmlFor='follow-up-comments' className='block text-xs font-medium text-gray-600 mb-1'>
                             Comments (what was discussed)
                           </label>

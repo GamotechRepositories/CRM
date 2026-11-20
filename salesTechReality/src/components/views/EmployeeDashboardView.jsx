@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
+import FollowUpRemindersCard from '../FollowUpRemindersCard'
 import {
   formatTaskDuration,
   getTaskRemainingMinutes,
@@ -643,6 +644,8 @@ const EmployeeDashboardView = () => {
           </div>
         </Panel>
       </div>
+
+      <FollowUpRemindersCard title='My Follow-Up Reminders' />
     </div>
   )
 }

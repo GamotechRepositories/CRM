@@ -17,6 +17,7 @@ import {
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import EmployeeTimeUtilizationCard from '../EmployeeTimeUtilizationCard'
+import FollowUpRemindersCard from '../FollowUpRemindersCard'
 
 const TASK_COLORS = {
   Completed: '#10b981',
@@ -913,6 +914,8 @@ const TeamLeaderDashboardView = () => {
           </button>
         </div>
       </div>
+
+      <FollowUpRemindersCard leads={leads} title='Team Follow-Up Reminders' />
 
       <EmployeeTimeUtilizationCard
         employees={employees}

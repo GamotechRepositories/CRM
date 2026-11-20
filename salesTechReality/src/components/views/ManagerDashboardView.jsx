@@ -15,6 +15,7 @@ import {
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import EmployeeTimeUtilizationCard from '../EmployeeTimeUtilizationCard'
+import FollowUpRemindersCard from '../FollowUpRemindersCard'
 import { getAllReporteeIds, refEmployeeId } from '../../utils/reportingHierarchy'
 
 const PROJECT_COLORS = {
@@ -578,6 +579,8 @@ const ManagerDashboardView = () => {
           </div>
         </Panel>
       </div>
+
+      <FollowUpRemindersCard leads={leads} />
 
       <EmployeeTimeUtilizationCard employees={employees} />
     </div>
