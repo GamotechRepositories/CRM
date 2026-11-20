@@ -16,6 +16,7 @@ import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import EmployeeTimeUtilizationCard from '../EmployeeTimeUtilizationCard'
 import FollowUpRemindersCard from '../FollowUpRemindersCard'
+import AdminTravelAllowanceCard from '../AdminTravelAllowanceCard'
 
 const CHART_COLORS = ['#2563EB', '#7C3AED', '#0891B2', '#D97706', '#059669', '#DB2777', '#4F46E5']
 const TASK_COLORS = { Completed: '#059669', 'In Progress': '#2563EB', Pending: '#D97706', Cancelled: '#94A3B8' }
@@ -578,6 +579,8 @@ const AdminDashboardView = () => {
       <FollowUpRemindersCard leads={leads} />
 
       <EmployeeTimeUtilizationCard employees={employees} />
+
+      <AdminTravelAllowanceCard employees={employees} />
     </div>
   )
 }
